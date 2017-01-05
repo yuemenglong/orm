@@ -424,6 +424,13 @@ fn parse_input(input: Input,
     }
 }
 
+fn create_parse_session() ->ParseSess{
+    let codemap = Rc::new(CodeMap::new());
+    let tty_handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(codemap.clone()));
+    let parse_session = ParseSess::with_span_handler(tty_handler, codemap.clone());
+    parse_session
+}
+
 pub fn format_input<T: Write>(input: Input,
                               config: &Config,
                               mut out: Option<&mut T>)
@@ -776,6 +783,12 @@ fn execute(opts: &Options) -> FmtResult<Summary> {
 }
 
 fn main() {
+    let mut parse_session = create_parse_session();
+    let krate = parse::parse_crate_from_source_str("stdin".to_string(), "fn main(){}".to_string(), &parse_session).unwrap();
+    println!("{:?}", krate.module.items);
+    println!("{:?}", krate.module.items.len());
+    std::process::exit(0);
+
     let _ = env_logger::init();
 
     let opts = make_opts();
