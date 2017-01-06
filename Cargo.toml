@@ -1,0 +1,9 @@
+[package]
+name = "ast"
+version = "0.1.0"
+authors = ["yml <yuemenglong@126.com>"]
+
+[dependencies]
+syntex = "*"
+syntex_syntax = "*"
+syntex_errors = "*"
