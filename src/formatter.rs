@@ -49,14 +49,12 @@ impl Formatter {
             .collect::<Vec<_>>()
             .join("\n")
     }
-
     fn format_item(&self, item: &syntax::ast::Item) -> String {
         match item.node {
             Struct(_, _) => self.format_struct(item),
             _ => unreachable!(),
         }
     }
-
     fn format_struct(&self, item: &syntax::ast::Item) -> String {
         if let Struct(ref variant_data, ref _generics) = item.node {
             if let &VariantData::Struct(ref vec, _id) = variant_data {
@@ -78,7 +76,6 @@ impl Formatter {
             unreachable!()
         }
     }
-
     fn format_struct_field(&self, field: &syntax::ast::StructField) -> String {
         let ident = ident_to_string(field.ident.unwrap());
         let ty = ty_to_string(field.ty.deref());
@@ -89,7 +86,6 @@ impl Formatter {
             _ => format!("{}{}\n{}{}: {},", indent_str, attrs, indent_str, ident, ty),
         }
     }
-
     fn format_attrs(&self, attrs: &Vec<syntax::ast::Attribute>) -> String {
         attrs.iter().map(attr_to_string).collect::<Vec<_>>().join("\n")
     }

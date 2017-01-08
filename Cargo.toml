@@ -7,3 +7,4 @@ authors = ["yml <yuemenglong@126.com>"]
 syntex = "*"
 syntex_syntax = "*"
 syntex_errors = "*"
+mysql = "*"
