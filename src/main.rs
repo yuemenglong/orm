@@ -1,18 +1,21 @@
 extern crate syntex_syntax as syntax;
 extern crate syntex_errors as errors;
 
+mod formatter;
+pub use formatter::Formatter;
+
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
 use errors::emitter::ColorConfig;
 use errors::Handler;
 use syntax::ast::ItemKind::*;
-use syntax::print::pprust::*;
 use syntax::ast::VariantData;
 use syntax::ast::MetaItemKind;
 use syntax::ast::NestedMetaItemKind;
 use syntax::ast::LitKind;
 
 use std::rc::Rc;
+use std::ops::Deref;
 
 fn create_parse_session() -> ParseSess {
     let codemap = Rc::new(CodeMap::new());
@@ -25,15 +28,28 @@ fn create_parse_session() -> ParseSess {
 static SRC: &'static str = "
 struct Name {
     #[derive(Debug, asdf=\"123\")]
-    field: i32
+    field: i32,
+    id:i64,
 }
 ";
 
-// fn visit_struct(variantData: &syntax::ast::VariantData, generics: &syntax::ast::Generics) {
+fn visit_krate(krate: &syntax::ast::Crate) {
+    for item in krate.module.items.iter(){
+        visit_item(item.deref());
+    }
+}
+
+fn visit_item(item: &syntax::ast::Item) {
+    match item.node {
+        Struct(_, _) => visit_struct(item),
+        _ => unreachable!(),
+    }
+}
+
 fn visit_struct(item: &syntax::ast::Item) {
-    if let Struct(ref variantData, ref generics) = item.node {
+    if let Struct(ref variant_data, ref _generics) = item.node {
         println!("Struct Name: {:?}", item.ident.name.as_str());
-        if let &VariantData::Struct(ref vec, id) = variantData {
+        if let &VariantData::Struct(ref vec, _id) = variant_data {
             // println!("{:?}", vec);
             for field in vec {
                 visit_struct_field(field);
@@ -79,16 +95,16 @@ fn visit_meta_item(item: &syntax::ast::MetaItem) {
 }
 
 fn visit_lit_meta_item(lit: &syntax::ast::Lit) {
-    match (lit.node) {
-        LitKind::Str(ref symbol, ref strStyle) => {
-            println!("{:?}", symbol.as_str());
+    match lit.node {
+        LitKind::Str(ref symbol, ref _str_style) => {
+            println!("Lit Value: {:?}", symbol.as_str());
         }
         _ => {}
     }
 }
 
 fn visit_nest_meta_item(item: &syntax::ast::NestedMetaItem) {
-    match (item.node) {
+    match item.node {
         NestedMetaItemKind::MetaItem(ref item) => {
             visit_meta_item(&item);
         }
@@ -97,30 +113,15 @@ fn visit_nest_meta_item(item: &syntax::ast::NestedMetaItem) {
     }
 }
 
-fn print_struct() {}
-
 fn main() {
     let parse_session = create_parse_session();
     let krate =
         parse::parse_crate_from_source_str("stdin".to_string(), SRC.to_string(), &parse_session)
             .unwrap();
     // println!("{:?}", krate.module.items);
-    println!("{:?}", krate.module.items.len());
-    for item in krate.module.items {
-        // println!("{:?}", item.node);
-        match item.node {
-            Fn(ref decl, unsafety, constness, _, ref generics, ref block) => {
-                // println!("{:?}", (decl, unsafety, constness, abi, generics, block));
-                // let s = fn_block_to_string(decl);
-                let s = fun_to_string(decl, unsafety, constness.node, item.ident, generics);
-                println!("{:?}", s);
-                let s = block_to_string(block);
-                println!("{:?}", s);
-            }
-            Struct(_, _) => {
-                visit_struct(&item);
-            }
-            _ => {}
-        }
-    }
+    // println!("{:?}", krate.module.items.len());
+    visit_krate(&krate);
+    let formatter = Formatter::new();
+    let ret = formatter.format_krate(&krate);
+    println!("{}", ret);
 }
