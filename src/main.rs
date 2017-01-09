@@ -38,8 +38,6 @@ struct T {
 
 
 fn main() {
-    let a = T { a: 1, b: 2 };
-    let (a.a, a.b) = (100, 200);
     let parse_session = create_parse_session();
     let krate =
         parse::parse_crate_from_source_str("stdin".to_string(), SRC.to_string(), &parse_session)

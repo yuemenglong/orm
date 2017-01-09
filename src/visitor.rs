@@ -173,23 +173,27 @@ impl Visitor {
     }
     fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
         let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();
-        match ty_pattern.captures(&field_meta.raw_ty) {
+        let attach = match ty_pattern.captures(&field_meta.raw_ty) {
             Some(captures) => {
                 match captures.get(3) {
                     Some(_) => {
-                        field_meta.ty = field_meta.raw_ty.clone();
-                        field_meta.nullable = false;
+                        // field_meta.ty = field_meta.raw_ty.clone();
+                        // field_meta.nullable = false;
+                        (field_meta.raw_ty.clone(), false)
                     }
                     None => {
-                        field_meta.ty = captures.get(2).unwrap().as_str().to_string();
-                        field_meta.nullable = true;
+                        // field_meta.ty = captures.get(2).unwrap().as_str().to_string();
+                        // field_meta.nullable = true;
+                        (captures.get(2).unwrap().as_str().to_string(), true)
                     }
                 }
             }
             None => {
                 panic!("Unsupport Type: {}", field_meta.raw_ty);
             }
-        }
+        };
+        field_meta.ty = attach.0;
+        field_meta.nullable = attach.1;
     }
     fn attach_db_type(field_meta: &mut RefMut<FieldMeta>) {
         let postfix = match field_meta.nullable {
