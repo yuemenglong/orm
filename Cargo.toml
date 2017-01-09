@@ -1,35 +1,11 @@
 [package]
-
-name = "rustfmt"
-version = "0.6.3"
-authors = ["Nicholas Cameron <ncameron@mozilla.com>", "Marcus Klaas <mail@marcusklaas.nl>", "The Rustfmt contributors"]
-description = "Tool to find and fix Rust formatting issues"
-repository = "https://github.com/rust-lang-nursery/rustfmt"
-readme = "README.md"
-license = "Apache-2.0/MIT"
+name = "ast"
+version = "0.1.0"
+authors = ["yml <yuemenglong@126.com>"]
 
 [dependencies]
-toml = "0.2.1"
-rustc-serialize = "0.3"
-unicode-segmentation = "1.0.0"
-regex = "0.1"
-term = "0.4"
-strings = "0.0.1"
-diff = "0.1"
-syntex_syntax = "0.52"
-syntex_errors = "0.52"
-log = "0.3"
-env_logger = "0.3"
-getopts = "0.2"
-itertools = "0.5.8"
-multimap = "0.3"
-
-[build-dependencies]
-walkdir = "1.0.3"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2.11"
-
-[target.'cfg(windows)'.dependencies]
-kernel32-sys = "0.2.2"
-winapi = "0.2.7"
+syntex = "*"
+syntex_syntax = "*"
+syntex_errors = "*"
+mysql = "*"
+regex = "0.2"
