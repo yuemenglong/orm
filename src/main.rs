@@ -1,5 +1,6 @@
 extern crate syntex_syntax as syntax;
 extern crate syntex_errors as errors;
+extern crate regex;
 
 mod formatter;
 mod visitor;
@@ -24,13 +25,21 @@ fn create_parse_session() -> ParseSess {
 static SRC: &'static str = "
 struct Name {
     // #[derive(Debug, asdf=\"123\")]
-    field: i32,
+    field: Option<i32>,
+    // invalid:Option<RefCell<i64>>,
     id:i64,
 }
 ";
 
+struct T {
+    a: i32,
+    b: i64,
+}
+
 
 fn main() {
+    let a = T { a: 1, b: 2 };
+    let (a.a, a.b) = (100, 200);
     let parse_session = create_parse_session();
     let krate =
         parse::parse_crate_from_source_str("stdin".to_string(), SRC.to_string(), &parse_session)

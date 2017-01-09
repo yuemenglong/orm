@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::cell::RefMut;
+
+use regex::Regex;
 
 use syntax;
 use syntax::ast::ItemKind::*;
@@ -16,6 +19,7 @@ pub struct FieldMeta {
     pub field_name: String,
     pub column_name: String,
     pub ty: String,
+    pub len: usize,
     pub db_ty: String,
     pub raw_ty: String,
     pub nullable: bool,
@@ -111,7 +115,14 @@ impl Visitor {
             let field_meta = entity_meta.new_field();
             let mut field_meta = field_meta.borrow_mut();
             field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-            field_meta.raw_ty = ty_to_string(field.ty.deref());
+            // 处理类型信息
+            // 1.raw_ty
+            let raw_ty = ty_to_string(field.ty.deref());
+            field_meta.raw_ty = raw_ty.clone();
+            // 2.ty
+            Self::attach_type(&mut field_meta);
+            // 3.db_ty
+            Self::attach_db_type(&mut field_meta);
         }
         for attr in field.attrs.iter() {
             self.visit_struct_field_attr(attr);
@@ -158,6 +169,40 @@ impl Visitor {
                 println!("Lit Value: {:?}", symbol.as_str());
             }
             _ => {}
+        }
+    }
+    fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
+        let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();
+        match ty_pattern.captures(&field_meta.raw_ty) {
+            Some(captures) => {
+                match captures.get(3) {
+                    Some(_) => {
+                        field_meta.ty = field_meta.raw_ty.clone();
+                        field_meta.nullable = false;
+                    }
+                    None => {
+                        field_meta.ty = captures.get(2).unwrap().as_str().to_string();
+                        field_meta.nullable = true;
+                    }
+                }
+            }
+            None => {
+                panic!("Unsupport Type: {}", field_meta.raw_ty);
+            }
+        }
+    }
+    fn attach_db_type(field_meta: &mut RefMut<FieldMeta>) {
+        let postfix = match field_meta.nullable {
+            true => "",
+            false => " NOT NULL",
+        };
+        field_meta.db_ty = match field_meta.ty.as_ref() {
+            "i32" => format!("INTEGER{}", postfix),
+            "i64" => format!("BIGINT{}", postfix),
+            "String" => format!("VARCHAR({}){}", field_meta.len, postfix),
+            _ => {
+                panic!("Unsupported Type: {}", field_meta.ty);
+            }
         }
     }
 }
