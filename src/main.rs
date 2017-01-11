@@ -27,15 +27,15 @@ struct Name {
     // #[derive(Debug, asdf=\"123\")]
     field: Option<i32>,
     // invalid:Option<RefCell<i64>>,
+    #[id(auto, len=20)]
     id:i64,
 }
 ";
 
 struct T {
     a: i32,
-    b: i64,
+    b: i32,
 }
-
 
 fn main() {
     let parse_session = create_parse_session();
@@ -48,6 +48,6 @@ fn main() {
     visitor.visit_krate(&krate);
     let formatter = Formatter::new();
     let ret = formatter.format_krate(&krate);
-    println!("{:?}", visitor.meta);
-    println!("{}", ret);
+    // println!("{:?}", visitor.meta);
+    // println!("{}", ret);
 }

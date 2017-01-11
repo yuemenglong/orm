@@ -19,10 +19,10 @@ pub struct FieldMeta {
     pub field_name: String,
     pub column_name: String,
     pub ty: String,
-    pub len: usize,
     pub db_ty: String,
     pub raw_ty: String,
     pub nullable: bool,
+    pub len: usize,
     pub pkey: bool,
     pub extend: bool, // 是否为系统自动扩展出的属性
 }
@@ -83,15 +83,14 @@ impl Visitor {
         for item in krate.module.items.iter() {
             self.visit_item(item.deref());
         }
+        self.fix_krate();
     }
-
     fn visit_item(&mut self, item: &syntax::ast::Item) {
         match item.node {
             Struct(_, _) => self.visit_struct(item),
             _ => unreachable!(),
         }
     }
-
     fn visit_struct(&mut self, item: &syntax::ast::Item) {
         if let Struct(ref variant_data, ref _generics) = item.node {
             let entity_meta = self.meta.new_entity();
@@ -107,7 +106,6 @@ impl Visitor {
             unreachable!();
         }
     }
-
     fn visit_struct_field(&mut self, field: &syntax::ast::StructField) {
         {
             let entity_meta = self.meta.cur_entity();
@@ -128,11 +126,9 @@ impl Visitor {
             self.visit_struct_field_attr(attr);
         }
     }
-
     fn visit_struct_field_attr(&mut self, attr: &syntax::ast::Attribute) {
         self.visit_meta_item(&attr.value);
     }
-
     fn visit_meta_item(&mut self, item: &syntax::ast::MetaItem) {
         println!("MetaItem Name: {:?}", item.name);
         match item.node {
@@ -142,7 +138,6 @@ impl Visitor {
             MetaItemKind::List(ref vec) => {
                 println!("MetaItemKind::List");
                 for item in vec {
-                    // println!("Item {:?}", item);
                     self.visit_nest_meta_item(&item);
                 }
             }
@@ -152,7 +147,6 @@ impl Visitor {
             }
         }
     }
-
     fn visit_nest_meta_item(&mut self, item: &syntax::ast::NestedMetaItem) {
         match item.node {
             NestedMetaItemKind::MetaItem(ref item) => {
@@ -162,7 +156,6 @@ impl Visitor {
 
         }
     }
-
     fn visit_lit_meta_item(&mut self, lit: &syntax::ast::Lit) {
         match lit.node {
             LitKind::Str(ref symbol, ref _str_style) => {
@@ -176,16 +169,8 @@ impl Visitor {
         let attach = match ty_pattern.captures(&field_meta.raw_ty) {
             Some(captures) => {
                 match captures.get(3) {
-                    Some(_) => {
-                        // field_meta.ty = field_meta.raw_ty.clone();
-                        // field_meta.nullable = false;
-                        (field_meta.raw_ty.clone(), false)
-                    }
-                    None => {
-                        // field_meta.ty = captures.get(2).unwrap().as_str().to_string();
-                        // field_meta.nullable = true;
-                        (captures.get(2).unwrap().as_str().to_string(), true)
-                    }
+                    Some(_) => (field_meta.raw_ty.clone(), false),
+                    None => (captures.get(2).unwrap().as_str().to_string(), true),
                 }
             }
             None => {
@@ -208,5 +193,58 @@ impl Visitor {
                 panic!("Unsupported Type: {}", field_meta.ty);
             }
         }
+    }
+    fn fix_krate(&mut self) {
+        for entity_meta_rc in self.meta.entities.iter() {
+            // fix table_name
+            let mut entity_meta = entity_meta_rc.borrow_mut();
+            if entity_meta.table_name.len() == 0 {
+                entity_meta.table_name = entity_meta.entity_name.clone();
+            }
+            let mut pkey = None;
+            for field_meta_rc in entity_meta.fields.iter() {
+                // fix column_name
+                let mut field_meta = field_meta_rc.borrow_mut();
+                if field_meta.column_name.len() == 0 {
+                    field_meta.column_name = field_meta.field_name.clone();
+                }
+                // fix pkey
+                if field_meta.pkey {
+                    pkey = Some(field_meta_rc.clone());
+                }
+            }
+            match pkey {
+                Some(field_meta_rc) => entity_meta.pkey = field_meta_rc.clone(),
+                None => panic!("Entity {} Has No Pkey", entity_meta.entity_name),
+            }
+            // fix field map / column map
+            entity_meta.field_map = entity_meta.fields
+                .iter()
+                .map(|field_meta_rc| {
+                    (field_meta_rc.borrow().field_name.clone(), field_meta_rc.clone())
+                })
+                .collect();
+            entity_meta.column_map = entity_meta.fields
+                .iter()
+                .map(|field_meta_rc| {
+                    (field_meta_rc.borrow().column_name.clone(), field_meta_rc.clone())
+                })
+                .collect();
+        }
+        // fix entity_map / table_map
+        self.meta.entity_map = self.meta
+            .entities
+            .iter()
+            .map(|entity_meta_rc| {
+                (entity_meta_rc.borrow().entity_name.clone(), entity_meta_rc.clone())
+            })
+            .collect();
+        self.meta.table_map = self.meta
+            .entities
+            .iter()
+            .map(|entity_meta_rc| {
+                (entity_meta_rc.borrow().table_name.clone(), entity_meta_rc.clone())
+            })
+            .collect();
     }
 }
