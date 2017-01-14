@@ -39,6 +39,8 @@ fn create_parse_session() -> ParseSess {
 
 static SRC: &'static str = "
 struct Person{
+    #[len(32)]
+    name:String,
     age: i32,
 }
 ";

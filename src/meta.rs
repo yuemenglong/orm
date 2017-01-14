@@ -11,7 +11,7 @@ pub struct FieldMeta {
     pub db_ty: String,
     pub raw_ty: String,
     pub nullable: bool,
-    pub len: usize,
+    pub len: u64,
     pub pkey: bool,
     pub extend: bool, // 是否为系统自动扩展出的属性
 }

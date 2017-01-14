@@ -53,27 +53,32 @@ impl Visitor {
         unreachable!();
     }
     fn visit_struct_field(&mut self, field: &syntax::ast::StructField) {
-            let entity_meta = self.meta.cur_entity();
-            let mut entity_meta = entity_meta.borrow_mut();
-            let field_meta = entity_meta.new_field();
-            let mut field_meta = field_meta.borrow_mut();
-            field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-            field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+        let entity_meta = self.meta.cur_entity();
+        let mut entity_meta = entity_meta.borrow_mut();
+        let field_meta = entity_meta.new_field();
+        let mut field_meta = field_meta.borrow_mut();
+        field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+        field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
-            // 检查 id
-            if field_meta.field_name == "id" {
-                panic!("Id Will Be Added To Entity Automatically");
-            }
-            // 处理类型信息
-            // 1.raw_ty
-            let raw_ty = ty_to_string(field.ty.deref());
-            field_meta.raw_ty = raw_ty.clone();
-            // 2.ty
-            Self::attach_type(&mut field_meta);
-            // 3.db_ty
-            Self::attach_db_type(&mut field_meta);
+        // 检查 id
+        if field_meta.field_name == "id" {
+            panic!("Id Will Be Added To Entity Automatically");
+        }
+        // 处理类型信息
+        // 1.raw_ty
+        let raw_ty = ty_to_string(field.ty.deref());
+        field_meta.raw_ty = raw_ty.clone();
+        // 2.ty
+        Self::attach_type(&mut field_meta);
+        // 3.db_ty
+        Self::attach_db_type(&mut field_meta);
         for attr in field.attrs.iter() {
-            //self.visit_struct_field_attr(attr);
+            match anno::visit_struct_field_attr(attr) {
+                Annotation::Len(len) => {
+                    field_meta.len = len;
+                }
+                _ => {}
+            }
         }
     }
     fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
@@ -101,7 +106,12 @@ impl Visitor {
             "i32" => format!("`{}` INTEGER{}", field_meta.column_name, postfix),
             "i64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
             "u64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
-            "String" => format!("`{}` VARCHAR({}){}", field_meta.column_name, field_meta.len, postfix),
+            "String" => {
+                format!("`{}` VARCHAR({}){}",
+                        field_meta.column_name,
+                        field_meta.len,
+                        postfix)
+            }
             _ => {
                 panic!("Unsupported Type: {}", field_meta.ty);
             }
