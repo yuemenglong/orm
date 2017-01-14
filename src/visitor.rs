@@ -72,7 +72,7 @@ impl Visitor {
             Self::attach_db_type(&mut field_meta);
         }
         for attr in field.attrs.iter() {
-            self.visit_struct_field_attr(attr);
+            //self.visit_struct_field_attr(attr);
         }
     }
     fn visit_struct_field_attr(&mut self, attr: &syntax::ast::Attribute) {

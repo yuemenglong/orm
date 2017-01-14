@@ -1,8 +1,9 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use rustc_serialize::json;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
 pub struct FieldMeta {
     pub field_name: String,
     pub column_name: String,
@@ -15,9 +16,9 @@ pub struct FieldMeta {
     pub extend: bool, // 是否为系统自动扩展出的属性
 }
 
-type FieldMetaPtr = Rc<RefCell<FieldMeta>>;
+pub type FieldMetaPtr = Rc<RefCell<FieldMeta>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
 pub struct EntityMeta {
     pub entity_name: String,
     pub table_name: String,
@@ -27,9 +28,9 @@ pub struct EntityMeta {
     pub column_map: HashMap<String, FieldMetaPtr>,
 }
 
-type EntityMetaPtr = Rc<RefCell<EntityMeta>>;
+pub type EntityMetaPtr = Rc<RefCell<EntityMeta>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
 pub struct OrmMeta {
     pub entities: Vec<EntityMetaPtr>,
     pub entity_map: HashMap<String, EntityMetaPtr>,
