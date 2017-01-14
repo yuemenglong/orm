@@ -64,14 +64,6 @@ impl Visitor {
         if field_meta.field_name == "id" {
             panic!("Id Will Be Added To Entity Automatically");
         }
-        // 处理类型信息
-        // 1.raw_ty
-        let raw_ty = ty_to_string(field.ty.deref());
-        field_meta.raw_ty = raw_ty.clone();
-        // 2.ty
-        Self::attach_type(&mut field_meta);
-        // 3.db_ty
-        Self::attach_db_type(&mut field_meta);
         for attr in field.attrs.iter() {
             match anno::visit_struct_field_attr(attr) {
                 Annotation::Len(len) => {
@@ -80,6 +72,14 @@ impl Visitor {
                 _ => {}
             }
         }
+        // 处理类型信息
+        // 1.raw_ty
+        let raw_ty = ty_to_string(field.ty.deref());
+        field_meta.raw_ty = raw_ty.clone();
+        // 2.ty
+        Self::attach_type(&mut field_meta);
+        // 3.db_ty
+        Self::attach_db_type(&mut field_meta);
     }
     fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
         let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();

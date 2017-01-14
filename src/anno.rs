@@ -41,15 +41,16 @@ fn visit_anno_id(attr: &syntax::ast::Attribute) -> Annotation {
 }
 
 fn visit_anno_len(attr: &syntax::ast::Attribute) -> Annotation {
-    match attr.value.node {
-        MetaItemKind::NameValue(ref lit) => {
-            match lit.node {
-                LitKind::Int(u, _) => Annotation::Len(u),
-                _ => unreachable!(),
+    if let MetaItemKind::List(ref vec) = attr.value.node {
+        if vec.len() == 1 {
+            if let NestedMetaItemKind::Literal(ref lit) = vec[0].node {
+                if let LitKind::Int(u, _) = lit.node{
+                    return Annotation::Len(u);
+                }
             }
         }
-        _ => unreachable!(),
     }
+    unreachable!()
 }
 
 
