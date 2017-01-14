@@ -1,7 +1,4 @@
-use std::collections::HashMap;
 use std::ops::Deref;
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::cell::RefMut;
 
 use regex::Regex;
@@ -14,65 +11,12 @@ use syntax::ast::NestedMetaItemKind;
 use syntax::ast::LitKind;
 use syntax::print::pprust::*;
 
-#[derive(Debug, Default)]
-pub struct FieldMeta {
-    pub field_name: String,
-    pub column_name: String,
-    pub ty: String,
-    pub db_ty: String,
-    pub raw_ty: String,
-    pub nullable: bool,
-    pub len: usize,
-    pub pkey: bool,
-    pub extend: bool, // 是否为系统自动扩展出的属性
-}
-
-type FieldMetaPtr = Rc<RefCell<FieldMeta>>;
-
-#[derive(Debug, Default)]
-pub struct EntityMeta {
-    pub entity_name: String,
-    pub table_name: String,
-    pub pkey: FieldMetaPtr,
-    pub fields: Vec<FieldMetaPtr>,
-    pub field_map: HashMap<String, FieldMetaPtr>,
-    pub column_map: HashMap<String, FieldMetaPtr>,
-}
-
-type EntityMetaPtr = Rc<RefCell<EntityMeta>>;
-
-#[derive(Debug, Default)]
-pub struct OrmMeta {
-    pub entities: Vec<EntityMetaPtr>,
-    pub entity_map: HashMap<String, EntityMetaPtr>,
-    pub table_map: HashMap<String, EntityMetaPtr>,
-}
-
-impl EntityMeta {
-    fn new_field(&mut self) -> FieldMetaPtr {
-        self.fields.push(FieldMetaPtr::default());
-        self.cur_field()
-    }
-    fn cur_field(&mut self) -> FieldMetaPtr {
-        self.fields.last().unwrap().clone()
-    }
-}
-
-impl OrmMeta {
-    fn new_entity(&mut self) -> EntityMetaPtr {
-        self.entities.push(EntityMetaPtr::default());
-        self.cur_entity()
-    }
-    fn cur_entity(&mut self) -> EntityMetaPtr {
-        self.entities.last().unwrap().clone()
-    }
-}
+use meta::*;
 
 #[derive(Debug)]
 pub struct Visitor {
     pub meta: OrmMeta,
 }
-
 
 impl Visitor {
     pub fn new() -> Visitor {
@@ -95,16 +39,15 @@ impl Visitor {
         if let Struct(ref variant_data, ref _generics) = item.node {
             let entity_meta = self.meta.new_entity();
             entity_meta.borrow_mut().entity_name = item.ident.name.as_str().to_string();
+            entity_meta.borrow_mut().table_name = item.ident.name.as_str().to_string();
             if let &VariantData::Struct(ref vec, _id) = variant_data {
                 for field in vec {
                     self.visit_struct_field(field);
                 }
-            } else {
-                unreachable!();
+                return;
             }
-        } else {
-            unreachable!();
         }
+        unreachable!();
     }
     fn visit_struct_field(&mut self, field: &syntax::ast::StructField) {
         {
@@ -113,6 +56,12 @@ impl Visitor {
             let field_meta = entity_meta.new_field();
             let mut field_meta = field_meta.borrow_mut();
             field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+            field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+
+            // 检查 id
+            if field_meta.field_name == "id" {
+                panic!("Id Will Be Added To Entity Automatically");
+            }
             // 处理类型信息
             // 1.raw_ty
             let raw_ty = ty_to_string(field.ty.deref());
@@ -186,9 +135,10 @@ impl Visitor {
             false => " NOT NULL",
         };
         field_meta.db_ty = match field_meta.ty.as_ref() {
-            "i32" => format!("INTEGER{}", postfix),
-            "i64" => format!("BIGINT{}", postfix),
-            "String" => format!("VARCHAR({}){}", field_meta.len, postfix),
+            "i32" => format!("`{}` INTEGER{}", field_meta.column_name, postfix),
+            "i64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
+            "u64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
+            "String" => format!("`{}` VARCHAR({}){}", field_meta.column_name, field_meta.len, postfix),
             _ => {
                 panic!("Unsupported Type: {}", field_meta.ty);
             }
@@ -196,27 +146,13 @@ impl Visitor {
     }
     fn fix_krate(&mut self) {
         for entity_meta_rc in self.meta.entities.iter() {
-            // fix table_name
             let mut entity_meta = entity_meta_rc.borrow_mut();
-            if entity_meta.table_name.len() == 0 {
-                entity_meta.table_name = entity_meta.entity_name.clone();
-            }
-            let mut pkey = None;
-            for field_meta_rc in entity_meta.fields.iter() {
-                // fix column_name
-                let mut field_meta = field_meta_rc.borrow_mut();
-                if field_meta.column_name.len() == 0 {
-                    field_meta.column_name = field_meta.field_name.clone();
-                }
-                // fix pkey
-                if field_meta.pkey {
-                    pkey = Some(field_meta_rc.clone());
-                }
-            }
-            match pkey {
-                Some(field_meta_rc) => entity_meta.pkey = field_meta_rc.clone(),
-                None => panic!("Entity {} Has No Pkey", entity_meta.entity_name),
-            }
+            
+            // fix pkey
+            let pkey_rc = FieldMeta::create_pkey();
+            entity_meta.pkey = pkey_rc.clone();
+            entity_meta.fields.insert(0, pkey_rc.clone());
+
             // fix field map / column map
             entity_meta.field_map = entity_meta.fields
                 .iter()

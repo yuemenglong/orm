@@ -1,11 +1,18 @@
 extern crate syntex_syntax as syntax;
 extern crate syntex_errors as errors;
 extern crate regex;
+extern crate mysql;
 
 mod formatter;
 mod visitor;
+mod db;
+mod cond;
+mod meta;
+mod entity;
+
 pub use formatter::Formatter;
 pub use visitor::Visitor;
+pub use db::DB;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -27,7 +34,7 @@ struct Name {
     // #[derive(Debug, asdf=\"123\")]
     field: Option<i32>,
     // invalid:Option<RefCell<i64>>,
-    #[id(auto, len=20)]
+    #[id(auto)]
     id:i64,
 }
 ";
