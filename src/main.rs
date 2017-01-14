@@ -1,15 +1,25 @@
 extern crate syntex_syntax as syntax;
 extern crate syntex_errors as errors;
 extern crate regex;
+extern crate mysql;
+extern crate rustc_serialize;
 
 mod formatter;
 mod visitor;
 mod anno;
 mod meta;
 mod types;
+mod db;
+mod cond;
+mod entity;
 
-use formatter::Formatter;
-use visitor::Visitor;
+#[macro_use]
+mod lazy_static_macro;
+
+pub use formatter::Formatter;
+pub use visitor::Visitor;
+pub use db::DB;
+
 use meta::*;
 
 use syntax::codemap::CodeMap;
@@ -28,18 +38,22 @@ fn create_parse_session() -> ParseSess {
 }
 
 static SRC: &'static str = "
-struct Name {
-    // #[derive(Debug, asdf=\"123\")]
-    field: Option<i32>,
-    // invalid:Option<RefCell<i64>>,
-    #[id(auto)]
-    id:i64,
+struct Person{
+    age: i32,
 }
 ";
 
-struct T {
-    a: i32,
-    b: i32,
+use std::collections::HashMap;
+
+lazy_static! {
+    static ref HASHMAP: HashMap<u32, &'static str> = {
+        let mut m = HashMap::new();
+        m.insert(0, "foo");
+        m.insert(1, "bar");
+        m.insert(2, "baz");
+        m
+    };
+    static ref COUNT: usize = HASHMAP.len();
 }
 
 fn main() {
@@ -52,7 +66,9 @@ fn main() {
     let mut visitor = Visitor::new();
     visitor.visit_krate(&krate);
     let formatter = Formatter::new();
-    let ret = formatter.format_krate(&krate);
+    let ret = formatter.format_meta(&visitor.meta);
+    println!("{}", ret);
+    // let ret = formatter.format_krate(&krate);
     // println!("{:?}", visitor.meta);
     // println!("{}", ret);
 }

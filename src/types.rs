@@ -1,5 +1,6 @@
 use meta::*;
 use std::cell::RefMut;
+use regex::Regex;
 
 fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
     let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();
