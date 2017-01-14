@@ -4,8 +4,13 @@ extern crate regex;
 
 mod formatter;
 mod visitor;
-pub use formatter::Formatter;
-pub use visitor::Visitor;
+mod anno;
+mod meta;
+mod types;
+
+use formatter::Formatter;
+use visitor::Visitor;
+use meta::*;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -27,7 +32,7 @@ struct Name {
     // #[derive(Debug, asdf=\"123\")]
     field: Option<i32>,
     // invalid:Option<RefCell<i64>>,
-    #[id(auto, len=20)]
+    #[id(auto)]
     id:i64,
 }
 ";
