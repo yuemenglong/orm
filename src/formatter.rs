@@ -109,7 +109,9 @@ impl Formatter {
             .map(|field| self.format_entity_field(field))
             .collect::<Vec<_>>()
             .join("\n");
-        format!("#[derive(Debug, Clone, Default)]\npub struct {} {{\n{}\n}}", meta.entity_name, content)
+        format!("#[derive(Debug, Clone, Default)]\npub struct {} {{\n{}\n}}",
+                meta.entity_name,
+                content)
     }
     fn format_entity_field(&self, meta: &FieldMeta) -> String {
         let indent_str = self.indent_str();

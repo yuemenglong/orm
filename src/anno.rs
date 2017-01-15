@@ -44,7 +44,7 @@ fn visit_anno_len(attr: &syntax::ast::Attribute) -> Annotation {
     if let MetaItemKind::List(ref vec) = attr.value.node {
         if vec.len() == 1 {
             if let NestedMetaItemKind::Literal(ref lit) = vec[0].node {
-                if let LitKind::Int(u, _) = lit.node{
+                if let LitKind::Int(u, _) = lit.node {
                     return Annotation::Len(u);
                 }
             }
