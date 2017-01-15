@@ -97,23 +97,21 @@ impl Formatter {
         println!("{}", json);
         let content = meta.entities
             .iter()
-            .map(|entity| self.format_entity(entity.clone()))
+            .map(|entity| self.format_entity(entity))
             .collect::<Vec<_>>()
             .join("\n\n");
         content
     }
-    fn format_entity(&self, meta: EntityMetaPtr) -> String {
+    fn format_entity(&self, meta: &EntityMeta) -> String {
         let _indent = Indent::new(self);
-        let meta = meta.borrow();
         let content = meta.fields
             .iter()
-            .map(|field| self.format_entity_field(field.clone()))
+            .map(|field| self.format_entity_field(field))
             .collect::<Vec<_>>()
             .join("\n");
         format!("#[derive(Debug, Clone, Default)]\npub struct {} {{\n{}\n}}", meta.entity_name, content)
     }
-    fn format_entity_field(&self, meta: FieldMetaPtr) -> String {
-        let meta = meta.borrow();
+    fn format_entity_field(&self, meta: &FieldMeta) -> String {
         let indent_str = self.indent_str();
         format!("{}pub {}: {},", indent_str, meta.field_name, meta.raw_ty)
     }

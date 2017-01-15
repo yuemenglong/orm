@@ -1,9 +1,7 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use rustc_serialize::json;
 
-#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct FieldMeta {
     pub field_name: String,
     pub column_name: String,
@@ -16,30 +14,26 @@ pub struct FieldMeta {
     pub extend: bool, // 是否为系统自动扩展出的属性
 }
 
-pub type FieldMetaPtr = Rc<RefCell<FieldMeta>>;
-
-#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct EntityMeta {
     pub entity_name: String,
     pub table_name: String,
-    pub pkey: FieldMetaPtr,
-    pub fields: Vec<FieldMetaPtr>,
-    pub field_map: HashMap<String, FieldMetaPtr>,
-    pub column_map: HashMap<String, FieldMetaPtr>,
+    pub pkey: FieldMeta,
+    pub fields: Vec<FieldMeta>,
+    pub field_map: HashMap<String, FieldMeta>,
+    pub column_map: HashMap<String, FieldMeta>,
 }
 
-pub type EntityMetaPtr = Rc<RefCell<EntityMeta>>;
-
-#[derive(Debug, Default, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct OrmMeta {
-    pub entities: Vec<EntityMetaPtr>,
-    pub entity_map: HashMap<String, EntityMetaPtr>,
-    pub table_map: HashMap<String, EntityMetaPtr>,
+    pub entities: Vec<EntityMeta>,
+    pub entity_map: HashMap<String, EntityMeta>,
+    pub table_map: HashMap<String, EntityMeta>,
 }
 
 impl FieldMeta {
-    pub fn create_pkey() -> FieldMetaPtr {
-        Rc::new(RefCell::new(FieldMeta {
+    pub fn create_pkey() -> FieldMeta {
+        FieldMeta {
             field_name: "id".to_string(),
             column_name: "id".to_string(),
             ty: "u64".to_string(),
@@ -49,26 +43,6 @@ impl FieldMeta {
             len: 0,
             pkey: true,
             extend: true,
-        }))
-    }
-}
-
-impl EntityMeta {
-    pub fn new_field(&mut self) -> FieldMetaPtr {
-        self.fields.push(FieldMetaPtr::default());
-        self.cur_field()
-    }
-    pub fn cur_field(&mut self) -> FieldMetaPtr {
-        self.fields.last().unwrap().clone()
-    }
-}
-
-impl OrmMeta {
-    pub fn new_entity(&mut self) -> EntityMetaPtr {
-        self.entities.push(EntityMetaPtr::default());
-        self.cur_entity()
-    }
-    pub fn cur_entity(&mut self) -> EntityMetaPtr {
-        self.entities.last().unwrap().clone()
+        }
     }
 }

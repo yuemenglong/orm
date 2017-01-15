@@ -33,30 +33,28 @@ impl Visitor {
         self.fix_krate();
     }
     fn visit_item(&mut self, item: &syntax::ast::Item) {
-        match item.node {
-            Struct(_, _) => self.visit_struct(item),
+        let entity_meta = match item.node {
+            Struct(_, _) => Self::visit_struct(item),
             _ => unreachable!(),
-        }
+        };
+        self.meta.entities.push(entity_meta);
     }
-    fn visit_struct(&mut self, item: &syntax::ast::Item) {
+    fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
         if let Struct(ref variant_data, ref _generics) = item.node {
-            let entity_meta = self.meta.new_entity();
-            entity_meta.borrow_mut().entity_name = item.ident.name.as_str().to_string();
-            entity_meta.borrow_mut().table_name = item.ident.name.as_str().to_string();
+            let mut entity_meta = EntityMeta::default();
+            entity_meta.entity_name = item.ident.name.as_str().to_string();
+            entity_meta.table_name = item.ident.name.as_str().to_string();
             if let &VariantData::Struct(ref vec, _id) = variant_data {
-                for field in vec {
-                    self.visit_struct_field(field);
-                }
-                return;
+                entity_meta.fields = vec.iter()
+                    .map(Self::visit_struct_field)
+                    .collect();
+                return entity_meta;
             }
         }
         unreachable!();
     }
-    fn visit_struct_field(&mut self, field: &syntax::ast::StructField) {
-        let entity_meta = self.meta.cur_entity();
-        let mut entity_meta = entity_meta.borrow_mut();
-        let field_meta = entity_meta.new_field();
-        let mut field_meta = field_meta.borrow_mut();
+    fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
+        let mut field_meta = FieldMeta::default();
         field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
         field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
@@ -64,14 +62,10 @@ impl Visitor {
         if field_meta.field_name == "id" {
             panic!("Id Will Be Added To Entity Automatically");
         }
-        for attr in field.attrs.iter() {
-            match anno::visit_struct_field_attr(attr) {
-                Annotation::Len(len) => {
-                    field_meta.len = len;
-                }
-                _ => {}
-            }
-        }
+
+        // 处理注解
+        Self::visit_struct_field_attrs(&mut field_meta, &field.attrs);
+
         // 处理类型信息
         // 1.raw_ty
         let raw_ty = ty_to_string(field.ty.deref());
@@ -80,8 +74,20 @@ impl Visitor {
         Self::attach_type(&mut field_meta);
         // 3.db_ty
         Self::attach_db_type(&mut field_meta);
+
+        field_meta
     }
-    fn attach_type(field_meta: &mut RefMut<FieldMeta>) {
+    fn visit_struct_field_attrs(field_meta: &mut FieldMeta, attrs: &Vec<syntax::ast::Attribute>) {
+        for attr in attrs.iter() {
+            match anno::visit_struct_field_attr(attr) {
+                Annotation::Len(len) => {
+                    field_meta.len = len;
+                }
+                _ => {}
+            }
+        }
+    }
+    fn attach_type(field_meta: &mut FieldMeta) {
         let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();
         let attach = match ty_pattern.captures(&field_meta.raw_ty) {
             Some(captures) => {
@@ -97,7 +103,7 @@ impl Visitor {
         field_meta.ty = attach.0;
         field_meta.nullable = attach.1;
     }
-    fn attach_db_type(field_meta: &mut RefMut<FieldMeta>) {
+    fn attach_db_type(field_meta: &mut FieldMeta) {
         let postfix = match field_meta.nullable {
             true => "",
             false => " NOT NULL",
@@ -118,9 +124,7 @@ impl Visitor {
         }
     }
     fn fix_krate(&mut self) {
-        for entity_meta_rc in self.meta.entities.iter() {
-            let mut entity_meta = entity_meta_rc.borrow_mut();
-
+        for entity_meta in self.meta.entities.iter_mut() {
             // fix pkey
             let pkey_rc = FieldMeta::create_pkey();
             entity_meta.pkey = pkey_rc.clone();
@@ -129,31 +133,23 @@ impl Visitor {
             // fix field map / column map
             entity_meta.field_map = entity_meta.fields
                 .iter()
-                .map(|field_meta_rc| {
-                    (field_meta_rc.borrow().field_name.clone(), field_meta_rc.clone())
-                })
+                .map(|field_meta_rc| (field_meta_rc.field_name.clone(), field_meta_rc.clone()))
                 .collect();
             entity_meta.column_map = entity_meta.fields
                 .iter()
-                .map(|field_meta_rc| {
-                    (field_meta_rc.borrow().column_name.clone(), field_meta_rc.clone())
-                })
+                .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
                 .collect();
         }
         // fix entity_map / table_map
         self.meta.entity_map = self.meta
             .entities
             .iter()
-            .map(|entity_meta_rc| {
-                (entity_meta_rc.borrow().entity_name.clone(), entity_meta_rc.clone())
-            })
+            .map(|entity_meta_rc| (entity_meta_rc.entity_name.clone(), entity_meta_rc.clone()))
             .collect();
         self.meta.table_map = self.meta
             .entities
             .iter()
-            .map(|entity_meta_rc| {
-                (entity_meta_rc.borrow().table_name.clone(), entity_meta_rc.clone())
-            })
+            .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
             .collect();
     }
 }
