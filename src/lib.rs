@@ -4,6 +4,8 @@ extern crate regex;
 extern crate mysql;
 extern crate rustc_serialize;
 
+pub use rustc_serialize::json as json;
+
 mod formatter;
 mod visitor;
 mod anno;
@@ -12,15 +14,14 @@ mod types;
 mod db;
 mod cond;
 mod entity;
+pub mod init;
 
-#[macro_use]
-mod lazy_static_macro;
+use formatter::Formatter;
+use visitor::Visitor;
 
-pub use formatter::Formatter;
-pub use visitor::Visitor;
-pub use db::DB;
-
-use meta::*;
+pub use meta::*;
+pub use entity::Entity;
+// pub use db::DB;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -37,21 +38,6 @@ fn create_parse_session() -> ParseSess {
     parse_session
 }
 
-static SRC: &'static str = "
-struct Person{
-    #[len(32)]
-    name:String,
-    age: i32,
-}
-";
-
-lazy_static! {
-    static ref META: OrmMeta = {
-        let json = r#"{"entities":[{"entity_name":"Person","table_name":"Person","pkey":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"fields":[{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false},{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false}],"field_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}},"column_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}}}],"entity_map":{"Person":{"entity_name":"Person","table_name":"Person","pkey":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"fields":[{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false},{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false}],"field_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}},"column_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}}}},"table_map":{"Person":{"entity_name":"Person","table_name":"Person","pkey":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"fields":[{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false},{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false}],"field_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}},"column_map":{"age":{"field_name":"age","column_name":"age","ty":"i32","db_ty":"`age` INTEGER NOT NULL","raw_ty":"i32","nullable":false,"len":0,"pkey":false,"extend":false},"id":{"field_name":"id","column_name":"id","ty":"u64","db_ty":"`id` BIGINT PRIMARY KEY AUTOINCREMENT","raw_ty":"Option<u64>","nullable":false,"len":0,"pkey":true,"extend":true},"name":{"field_name":"name","column_name":"name","ty":"String","db_ty":"`name` VARCHAR(32) NOT NULL","raw_ty":"String","nullable":false,"len":32,"pkey":false,"extend":false}}}}}"#;
-        rustc_serialize::json::decode(json).unwrap()
-    };
-}
-
 pub fn build(src: &str) -> String {
     let parse_session = create_parse_session();
     let krate =
@@ -63,8 +49,9 @@ pub fn build(src: &str) -> String {
     let formatter = Formatter::new();
     let ret = formatter.format_meta(&visitor.meta);
     ret
-    // println!("{}", ret);
-    // let ret = formatter.format_krate(&krate);
-    // println!("{:?}", visitor.meta);
-    // println!("{}", ret);
+}
+
+fn test(){
+    static T:i32 = 1;
+    println!("{:?}", T);
 }
