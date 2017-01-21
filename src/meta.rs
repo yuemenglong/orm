@@ -37,7 +37,7 @@ impl FieldMeta {
             field_name: "id".to_string(),
             column_name: "id".to_string(),
             ty: "u64".to_string(),
-            db_ty: "`id` BIGINT PRIMARY KEY AUTOINCREMENT".to_string(),
+            db_ty: "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
             raw_ty: "Option<u64>".to_string(),
             nullable: false,
             len: 0,

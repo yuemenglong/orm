@@ -6,7 +6,15 @@ use meta::EntityMeta;
 
 pub trait Entity {
     fn get_meta() -> &'static EntityMeta;
-    // fn get_create_table() -> String;
+    fn get_create_table() -> String {
+        let entity_meta = Self::get_meta();
+        let fields = entity_meta.fields
+            .iter()
+            .map(|field| field.db_ty.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("CREATE TABLE IF NOT EXISTS `{}`({})", entity_meta.table_name, fields)
+    }
 
     // fn set_id(&mut self, id: u64);
     // fn get_id(&self) -> Option<u64>;

@@ -149,9 +149,6 @@ impl Formatter {
         let treit = TPL_TRAIT.to_string()
             .replace("${ENTITY_NAME}", &meta.entity_name);
         format!("{}{}", entity, treit)
-        // format!("#[derive(Debug, Clone, Default)]\npub struct {} {{\n{}\n}}",
-        // meta.entity_name,
-        // content)
     }
     fn format_entity_field(&self, meta: &FieldMeta) -> String {
         let indent_str = self.indent_str();

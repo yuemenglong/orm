@@ -6,6 +6,8 @@ use std::path::Path;
 use std::fs::OpenOptions;
 use std::io::Write;
 
+use ast::Entity;
+
 mod entity;
 
 fn main() {
@@ -22,4 +24,6 @@ fn main() {
         .open(path)
         .unwrap();
     file.write_all(build.as_bytes()).unwrap();
+
+    println!("{:?}", entity::Person::get_create_table());
 }
