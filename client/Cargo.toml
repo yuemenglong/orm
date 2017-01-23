@@ -2,6 +2,10 @@
 name = "client"
 version = "0.1.0"
 authors = ["yml <yuemenglong@126.com>"]
+build = "build.rs"
+
+[build-dependencies.ast]
+path = ".."
 
 [dependencies]
 
