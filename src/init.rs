@@ -1,9 +1,11 @@
 use std::mem;
 use meta::OrmMeta;
+use visitor;
 use rustc_serialize::json;
 
 pub unsafe fn init_meta(json: &'static str) -> &'static OrmMeta {
-    let meta: OrmMeta = json::decode(json).unwrap();
+    let mut meta: OrmMeta = json::decode(json).unwrap();
+    visitor::fix_meta(&mut meta);
     leak(meta)
 }
 

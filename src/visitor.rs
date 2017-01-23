@@ -30,7 +30,6 @@ impl Visitor {
         for item in krate.module.items.iter() {
             self.visit_item(item.deref());
         }
-        self.fix_krate();
     }
     fn visit_item(&mut self, item: &syntax::ast::Item) {
         let entity_meta = match item.node {
@@ -123,33 +122,32 @@ impl Visitor {
             }
         }
     }
-    fn fix_krate(&mut self) {
-        for entity_meta in self.meta.entities.iter_mut() {
-            // fix pkey
-            let pkey_rc = FieldMeta::create_pkey();
-            entity_meta.pkey = pkey_rc.clone();
-            entity_meta.fields.insert(0, pkey_rc.clone());
+}
 
-            // fix field map / column map
-            entity_meta.field_map = entity_meta.fields
-                .iter()
-                .map(|field_meta_rc| (field_meta_rc.field_name.clone(), field_meta_rc.clone()))
-                .collect();
-            entity_meta.column_map = entity_meta.fields
-                .iter()
-                .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
-                .collect();
-        }
-        // fix entity_map / table_map
-        self.meta.entity_map = self.meta
-            .entities
+pub fn fix_meta(meta: &mut OrmMeta) {
+    for entity_meta in meta.entities.iter_mut() {
+        // fix pkey
+        let pkey_rc = FieldMeta::create_pkey();
+        entity_meta.pkey = pkey_rc.clone();
+        entity_meta.fields.insert(0, pkey_rc.clone());
+
+        // fix field map / column map
+        entity_meta.field_map = entity_meta.fields
             .iter()
-            .map(|entity_meta_rc| (entity_meta_rc.entity_name.clone(), entity_meta_rc.clone()))
+            .map(|field_meta_rc| (field_meta_rc.field_name.clone(), field_meta_rc.clone()))
             .collect();
-        self.meta.table_map = self.meta
-            .entities
+        entity_meta.column_map = entity_meta.fields
             .iter()
-            .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
+            .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
             .collect();
     }
+    // fix entity_map / table_map
+    meta.entity_map = meta.entities
+        .iter()
+        .map(|entity_meta_rc| (entity_meta_rc.entity_name.clone(), entity_meta_rc.clone()))
+        .collect();
+    meta.table_map = meta.entities
+        .iter()
+        .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
+        .collect();
 }
