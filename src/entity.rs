@@ -13,8 +13,11 @@ pub trait Entity {
             .map(|field| field.db_ty.to_string())
             .collect::<Vec<_>>()
             .join(", ");
-        format!("CREATE TABLE IF NOT EXISTS `{}`({})", entity_meta.table_name, fields)
+        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
+                entity_meta.table_name,
+                fields)
     }
+    fn get_values(&self) -> Vec<Value>;
 
     // fn set_id(&mut self, id: u64);
     // fn get_id(&self) -> Option<u64>;

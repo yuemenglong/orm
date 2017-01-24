@@ -39,8 +39,10 @@ impl ast::Entity for ${ENTITY_NAME} {
     fn get_meta() -> &'static ast::EntityMeta {
         get_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
+    fn get_values(&self) -> Vec<ast::Value> {
+        vec![${VALUES}]
+    }
 }
-
 "#;
 
 #[derive(Debug)]
@@ -146,8 +148,15 @@ impl Formatter {
         let entity = TPL_ENTITY.to_string()
             .replace("${ENTITY_NAME}", &meta.entity_name)
             .replace("${ENTITY_FIELDS}", &fields);
+        let values = meta.fields
+            .iter()
+            .filter(|field| !field.pkey)
+            .map(|field| format!("ast::Value::from(&self.{})", field.field_name))
+            .collect::<Vec<_>>()
+            .join(", ");
         let treit = TPL_TRAIT.to_string()
-            .replace("${ENTITY_NAME}", &meta.entity_name);
+            .replace("${ENTITY_NAME}", &meta.entity_name)
+            .replace("${VALUES}", &values);
         format!("{}{}", entity, treit)
     }
     fn format_entity_field(&self, meta: &FieldMeta) -> String {
