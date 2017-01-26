@@ -17,7 +17,18 @@ pub trait Entity {
                 entity_meta.table_name,
                 fields)
     }
+    fn get_columns() -> Vec<String> {
+        let entity_meta = Self::get_meta();
+        entity_meta.fields
+            .iter()
+            .filter(|field| !field.pkey)
+            .map(|field| field.field_name.clone())
+            .collect::<Vec<_>>()
+    }
     fn get_values(&self) -> Vec<Value>;
+    fn get_params(&self) -> Vec<(String, Value)> {
+        Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
+    }
 
     // fn set_id(&mut self, id: u64);
     // fn get_id(&self) -> Option<u64>;
