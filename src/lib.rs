@@ -15,7 +15,6 @@ mod cond;
 mod entity;
 pub mod init;
 
-use formatter::Formatter;
 use visitor::Visitor;
 
 pub use meta::*;
@@ -46,8 +45,7 @@ pub fn build(src: &str) -> String {
     // TODO 重构visitor全部用方法 不用类
     let mut visitor = Visitor::new();
     visitor.visit_krate(&krate);
-    let formatter = Formatter::new();
-    let ret = formatter.format_meta(&visitor.meta);
+    let ret = formatter::format_meta(&visitor.meta);
     ret
 }
 
