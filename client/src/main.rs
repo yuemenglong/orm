@@ -8,5 +8,6 @@ fn main(){
     println!("{:?}", entity::Person::get_create_table());
     let mut e = entity::Person::default();
     e.set_age(100);
+    e.set_id(10);
     println!("{:?}", e.get_params());
 }

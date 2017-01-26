@@ -47,6 +47,8 @@ impl Visitor {
                 entity_meta.fields = vec.iter()
                     .map(Self::visit_struct_field)
                     .collect();
+                // 加上pkey
+                entity_meta.fields.insert(0, FieldMeta::create_pkey());
                 return entity_meta;
             }
         }
@@ -81,7 +83,7 @@ impl Visitor {
                 Annotation::Len(len) => {
                     field_meta.len = len;
                 }
-                Annotation::Nullable(b)=>{
+                Annotation::Nullable(b) => {
                     field_meta.nullable = b;
                 }
                 _ => {}
@@ -112,10 +114,7 @@ impl Visitor {
 
 pub fn fix_meta(meta: &mut OrmMeta) {
     for entity_meta in meta.entities.iter_mut() {
-        // fix pkey
-        let pkey_rc = FieldMeta::create_pkey();
-        entity_meta.pkey = pkey_rc.clone();
-        entity_meta.fields.insert(0, pkey_rc.clone());
+
 
         // fix field map / column map
         entity_meta.field_map = entity_meta.fields

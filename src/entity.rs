@@ -6,17 +6,10 @@ use meta::EntityMeta;
 
 pub trait Entity {
     fn get_meta() -> &'static EntityMeta;
-    fn get_create_table() -> String {
-        let entity_meta = Self::get_meta();
-        let fields = entity_meta.fields
-            .iter()
-            .map(|field| field.db_ty.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
-                entity_meta.table_name,
-                fields)
-    }
+    fn set_id(&mut self, id: u64);
+    fn get_id(&self) -> u64;
+    fn has_id(&self) -> bool;
+    
     fn get_columns() -> Vec<String> {
         let entity_meta = Self::get_meta();
         entity_meta.fields
@@ -30,8 +23,17 @@ pub trait Entity {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
 
-    // fn set_id(&mut self, id: u64);
-    // fn get_id(&self) -> Option<u64>;
+    fn get_create_table() -> String {
+        let entity_meta = Self::get_meta();
+        let fields = entity_meta.fields
+            .iter()
+            .map(|field| field.db_ty.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
+                entity_meta.table_name,
+                fields)
+    }
     // fn get_name() -> String;
     // // fn get_field_meta() -> Vec<FieldMeta>;
     // fn get_params(&self) -> Vec<(String, Value)>;

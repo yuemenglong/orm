@@ -17,7 +17,6 @@ pub struct FieldMeta {
 pub struct EntityMeta {
     pub entity_name: String,
     pub table_name: String,
-    pub pkey: FieldMeta,
     pub fields: Vec<FieldMeta>,
     pub field_map: HashMap<String, FieldMeta>,
     pub column_map: HashMap<String, FieldMeta>,

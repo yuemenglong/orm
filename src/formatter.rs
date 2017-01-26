@@ -44,13 +44,13 @@ impl ${ENTITY_NAME} {${GETTER_SETTER}
 
 static TPL_GETTER: &'static str = r#"
     #[allow(dead_code)]
-    ${PUB}fn get_${FIELD}(&self) -> ${TYPE} {
+    pub fn get_${FIELD}(&self) -> ${TYPE} {
         self.${FIELD}.clone().unwrap()
     }"#;
 
 static TPL_SETTER: &'static str = r#"
     #[allow(dead_code)]
-    ${PUB}fn set_${FIELD}(&mut self, value: ${TYPE}) {
+    pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
         self.${FIELD} = Some(value);
     }"#;
 
@@ -61,6 +61,15 @@ impl ast::Entity for ${ENTITY_NAME} {
     }
     fn get_values(&self) -> Vec<ast::Value> {
         vec![${VALUES}]
+    }
+    fn get_id(&self) -> u64 {
+        self.id.unwrap()
+    }
+    fn set_id(&mut self, value: u64) {
+        self.id = Some(value);
+    }
+    fn has_id(&self) -> bool {
+        self.id.is_some()
     }
 }
 "#;
@@ -203,11 +212,9 @@ fn format_entity_field(meta: &FieldMeta) -> String {
 }
 fn format_entity_field_impl(meta: &FieldMeta) -> String {
     let getter = TPL_GETTER.to_string()
-        .replace("${PUB}", "pub ")
         .replace("${FIELD}", &meta.field_name)
         .replace("${TYPE}", &meta.ty);
     let setter = TPL_SETTER.to_string()
-        .replace("${PUB}", "pub ")
         .replace("${FIELD}", &meta.field_name)
         .replace("${TYPE}", &meta.ty);
     format!("{}{}", &setter, &getter)
