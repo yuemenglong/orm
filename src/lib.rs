@@ -9,18 +9,17 @@ pub use rustc_serialize::json as json;
 mod formatter;
 mod visitor;
 mod anno;
-mod meta;
 mod db;
 mod cond;
 mod entity;
 pub mod init;
+pub mod meta;
 
 use visitor::Visitor;
 
-pub use meta::*;
 pub use entity::Entity;
 pub use mysql::Value;
-// pub use db::DB;
+pub use db::DB;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -49,7 +48,10 @@ pub fn build(src: &str) -> String {
     ret
 }
 
-fn test(){
-    static T:i32 = 1;
-    println!("{:?}", T);
+pub fn open(user: &str, pwd: &str, host: &str, port: u16, db: &str) -> Result<DB, mysql::Error> {
+    let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
+    match mysql::Pool::new(conn_str.as_ref()) {
+        Ok(pool) => Ok(DB { pool: pool }),
+        Err(err) => Err(err),
+    }
 }

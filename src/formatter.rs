@@ -15,10 +15,10 @@ use ast;
 use std::sync::Once;
 use std::sync::ONCE_INIT;
 
-static mut META: Option<&'static ast::OrmMeta> = None;
+static mut META: Option<&'static ast::meta::OrmMeta> = None;
 static ONCE: Once = ONCE_INIT;
 
-fn get_meta() -> &'static ast::OrmMeta {
+fn get_meta() -> &'static ast::meta::OrmMeta {
     let json = r#${JSON}#;
     ONCE.call_once(|| unsafe { META = Some(ast::init::init_meta(json)) });
     unsafe { META.unwrap() }
@@ -56,7 +56,7 @@ static TPL_SETTER: &'static str = r#"
 
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
-    fn get_meta() -> &'static ast::EntityMeta {
+    fn get_meta() -> &'static ast::meta::EntityMeta {
         get_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
     fn get_values(&self) -> Vec<ast::Value> {

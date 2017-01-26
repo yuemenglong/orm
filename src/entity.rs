@@ -9,7 +9,10 @@ pub trait Entity {
     fn set_id(&mut self, id: u64);
     fn get_id(&self) -> u64;
     fn has_id(&self) -> bool;
-    
+
+    fn get_table_name() -> String {
+        Self::get_meta().table_name.clone()
+    }
     fn get_columns() -> Vec<String> {
         let entity_meta = Self::get_meta();
         entity_meta.fields
@@ -23,7 +26,7 @@ pub trait Entity {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
 
-    fn get_create_table() -> String {
+    fn sql_create_table() -> String {
         let entity_meta = Self::get_meta();
         let fields = entity_meta.fields
             .iter()
@@ -33,6 +36,16 @@ pub trait Entity {
         format!("CREATE TABLE IF NOT EXISTS `{}`({})",
                 entity_meta.table_name,
                 fields)
+    }
+    fn sql_drop_table() -> String{
+        format!("DROP TABLE IF EXISTS `{}`", Self::get_table_name())
+    }
+    fn sql_insert() -> String {
+        let table_name = Self::get_table_name();
+        let fields = Self::get_columns().join(", ");
+        let values =
+            Self::get_columns().iter().map(|column| format!(":{}", column)).collect::<Vec<_>>().join(", ");
+        format!("INSERT INTO `{}`({}) VALUES ({})", &table_name, &fields, &values)
     }
     // fn get_name() -> String;
     // // fn get_field_meta() -> Vec<FieldMeta>;
