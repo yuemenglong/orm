@@ -14,10 +14,7 @@ fn main() {
     let build = ast::build(&src);
 
     let path = Path::new(&dir).join("src/entity.rs");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(path)
-        .unwrap();
+    std::fs::remove_file(path.clone()).unwrap();
+    let mut file = File::create(path).unwrap();
     file.write_all(build.as_bytes()).unwrap();
 }
