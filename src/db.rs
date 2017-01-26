@@ -11,7 +11,6 @@ pub struct DB {
     pub pool: Pool,
 }
 
-
 impl DB {
     pub fn create_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
@@ -45,7 +44,7 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<E, Error> {
-        let sql = E::sql_insert();
+        let sql = sql_insert(E::get_meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, entity.get_params());
         match res {
