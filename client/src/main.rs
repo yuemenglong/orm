@@ -1,12 +1,13 @@
 extern crate ast;
 
 use ast::Entity;
+use ast::sql;
 
 mod entity;
 use entity::*;
 
 fn main(){
-    println!("{:?}", Person::sql_create_table());
+    println!("{:?}", sql::sql_create_table(Person::get_meta()));
     let mut p = Person::default();
     p.set_age(100);
     p.set_name("Tom".to_string());

@@ -26,20 +26,7 @@ pub trait Entity {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
 
-    fn sql_create_table() -> String {
-        let entity_meta = Self::get_meta();
-        let fields = entity_meta.fields
-            .iter()
-            .map(|field| field.db_ty.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
-                entity_meta.table_name,
-                fields)
-    }
-    fn sql_drop_table() -> String{
-        format!("DROP TABLE IF EXISTS `{}`", Self::get_table_name())
-    }
+
     fn sql_insert() -> String {
         let table_name = Self::get_table_name();
         let fields = Self::get_columns().join(", ");
