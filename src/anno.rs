@@ -7,6 +7,7 @@ use syntax::ast::NestedMetaItemKind;
 pub enum Annotation {
     Id(bool),
     Len(u64),
+    Nullable(bool),
     PointTo(String),
     HasOne(String),
     HasMany(String),
@@ -17,6 +18,7 @@ pub fn visit_struct_field_attr(attr: &syntax::ast::Attribute) -> Annotation {
     match attr.value.name.as_str().to_string().as_ref() {
         "id" => visit_anno_id(attr),
         "len" => visit_anno_len(attr),
+        "nullable" => visit_anno_nullable(attr),
         _ => unreachable!(),
     }
 }
@@ -53,7 +55,18 @@ fn visit_anno_len(attr: &syntax::ast::Attribute) -> Annotation {
     unreachable!()
 }
 
-
+fn visit_anno_nullable(attr: &syntax::ast::Attribute) -> Annotation {
+    if let MetaItemKind::List(ref vec) = attr.value.node {
+        if vec.len() == 1 {
+            if let NestedMetaItemKind::Literal(ref lit) = vec[0].node {
+                if let LitKind::Bool(b) = lit.node {
+                    return Annotation::Nullable(b);
+                }
+            }
+        }
+    }
+    unreachable!()
+}
 
 
 

@@ -10,7 +10,6 @@ mod formatter;
 mod visitor;
 mod anno;
 mod meta;
-mod types;
 mod db;
 mod cond;
 mod entity;

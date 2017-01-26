@@ -54,6 +54,7 @@ impl Visitor {
     }
     fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
         let mut field_meta = FieldMeta::default();
+        field_meta.nullable = true;
         field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
         field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
@@ -66,12 +67,10 @@ impl Visitor {
         Self::visit_struct_field_attrs(&mut field_meta, &field.attrs);
 
         // 处理类型信息
-        // 1.raw_ty
-        let raw_ty = ty_to_string(field.ty.deref());
-        field_meta.raw_ty = raw_ty.clone();
-        // 2.ty
-        Self::attach_type(&mut field_meta);
-        // 3.db_ty
+        // 1.ty
+        let ty = ty_to_string(field.ty.deref());
+        field_meta.ty = ty.clone();
+        // 2.db_ty
         Self::attach_db_type(&mut field_meta);
 
         field_meta
@@ -82,25 +81,12 @@ impl Visitor {
                 Annotation::Len(len) => {
                     field_meta.len = len;
                 }
+                Annotation::Nullable(b)=>{
+                    field_meta.nullable = b;
+                }
                 _ => {}
             }
         }
-    }
-    fn attach_type(field_meta: &mut FieldMeta) {
-        let ty_pattern = Regex::new(r"(^Option<([^<>]+)>$)|(^[^<>]+$)").unwrap();
-        let attach = match ty_pattern.captures(&field_meta.raw_ty) {
-            Some(captures) => {
-                match captures.get(3) {
-                    Some(_) => (field_meta.raw_ty.clone(), false),
-                    None => (captures.get(2).unwrap().as_str().to_string(), true),
-                }
-            }
-            None => {
-                panic!("Unsupport Type: {}", field_meta.raw_ty);
-            }
-        };
-        field_meta.ty = attach.0;
-        field_meta.nullable = attach.1;
     }
     fn attach_db_type(field_meta: &mut FieldMeta) {
         let postfix = match field_meta.nullable {

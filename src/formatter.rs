@@ -161,6 +161,6 @@ impl Formatter {
     }
     fn format_entity_field(&self, meta: &FieldMeta) -> String {
         let indent_str = self.indent_str();
-        format!("{}pub {}: {},", indent_str, meta.field_name, meta.raw_ty)
+        format!("{}pub {}: Option<{}>,", indent_str, meta.field_name, meta.ty)
     }
 }
