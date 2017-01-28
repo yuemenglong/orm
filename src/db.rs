@@ -17,6 +17,21 @@ impl DB {
         let mut ret = 0;
         for entity_meta in meta.entities.iter() {
             let sql = sql_create_table(entity_meta);
+            println!("{}", sql);
+            match self.pool.prep_exec(sql, ()) {
+                Ok(res) => ret += res.affected_rows(),
+                Err(err) => {
+                    return Err(err);
+                }
+            }
+        }
+        return Ok(ret);
+    }
+    pub fn drop_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
+        let mut ret = 0;
+        for entity_meta in meta.entities.iter() {
+            let sql = sql_drop_table(entity_meta);
+            println!("{}", sql);
             match self.pool.prep_exec(sql, ()) {
                 Ok(res) => ret += res.affected_rows(),
                 Err(err) => {
@@ -72,11 +87,11 @@ impl DB {
         let sql = sql_get(E::get_meta());
         println!("{}", sql);
         let res = self.pool.first_exec(sql, vec![("id", id)]);
-        if let Err(err) = res{
+        if let Err(err) = res {
             return Err(err);
         }
         let option = res.unwrap();
-        if let None = option{
+        if let None = option {
             return Ok(None);
         }
         let mut row = option.unwrap();

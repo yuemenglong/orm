@@ -114,8 +114,6 @@ impl Visitor {
 
 pub fn fix_meta(meta: &mut OrmMeta) {
     for entity_meta in meta.entities.iter_mut() {
-
-
         // fix field map / column map
         entity_meta.field_map = entity_meta.fields
             .iter()

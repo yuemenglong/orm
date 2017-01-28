@@ -8,7 +8,7 @@ pub enum Annotation {
     Id(bool),
     Len(u64),
     Nullable(bool),
-    PointTo(String),
+    Pointer,
     HasOne(String),
     HasMany(String),
     ManyToMany(String),
@@ -19,6 +19,7 @@ pub fn visit_struct_field_attr(attr: &syntax::ast::Attribute) -> Annotation {
         "id" => visit_anno_id(attr),
         "len" => visit_anno_len(attr),
         "nullable" => visit_anno_nullable(attr),
+        "pointer" => visit_anno_pointer(attr),
         _ => unreachable!(),
     }
 }
@@ -68,6 +69,12 @@ fn visit_anno_nullable(attr: &syntax::ast::Attribute) -> Annotation {
     unreachable!()
 }
 
+fn visit_anno_pointer(attr: &syntax::ast::Attribute) -> Annotation {
+    if let MetaItemKind::Word = attr.value.node{
+        return Annotation::Pointer;
+    }
+    unreachable!()
+}
 
 
 // fn visit_struct_field_attr(&mut self, attr: &syntax::ast::Attribute) {
