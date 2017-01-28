@@ -13,7 +13,7 @@ fn main() {
     let build = ast::build(&src);
 
     let path = Path::new(&dir).join("src/entity.rs");
-    std::fs::remove_file(path.clone()).unwrap();
+    std::fs::remove_file(path.clone());
     let mut file = File::create(path).unwrap();
     file.write_all(build.as_bytes()).unwrap();
 }

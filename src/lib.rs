@@ -20,6 +20,7 @@ use visitor::Visitor;
 
 pub use entity::Entity;
 pub use mysql::Value;
+pub use mysql::Row;
 pub use db::DB;
 
 use syntax::codemap::CodeMap;

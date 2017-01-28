@@ -54,6 +54,9 @@ static TPL_SETTER: &'static str = r#"
         self.${FIELD} = Some(value);
     }"#;
 
+static TPL_TRAIT_SET_VALUE: &'static str = r#"
+        self.${FIELD} = row.get(format!("{}${COLUMN}", prefix).as_ref());"#;
+
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn get_meta() -> &'static ast::meta::EntityMeta {
@@ -61,6 +64,8 @@ impl ast::Entity for ${ENTITY_NAME} {
     }
     fn get_values(&self) -> Vec<ast::Value> {
         vec![${VALUES}]
+    }
+    fn set_values(&mut self, row: &mut ast::Row, prefix: &str) {${SET_VALUES}
     }
     fn get_id(&self) -> u64 {
         self.id.unwrap()
@@ -203,9 +208,19 @@ fn format_entity_trait(meta: &EntityMeta) -> String {
         .map(|field| format!("ast::Value::from(&self.{})", field.field_name))
         .collect::<Vec<_>>()
         .join(", ");
+    let set_values = meta.fields
+        .iter()
+        .map(|field| {
+            let ret = TPL_TRAIT_SET_VALUE.to_string()
+                .replace("${FIELD}", &field.field_name)
+                .replace("${COLUMN}", &field.column_name);
+            ret
+        })
+        .collect::<String>();
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${VALUES}", &values)
+        .replace("${SET_VALUES}", &set_values)
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
     TPL_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)

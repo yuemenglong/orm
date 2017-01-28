@@ -58,10 +58,6 @@ impl DB {
         }
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
-        // let sql = format!("UPDATE `{}` SET {} WHERE `id` = {}",
-        //                   E::get_name(),
-        //                   E::get_prepare(),
-        //                   entity.get_id().unwrap());
         let sql = sql_update(E::get_meta());
         println!("{}", sql);
         let mut params = entity.get_params();
@@ -72,29 +68,31 @@ impl DB {
             Err(err) => Err(err),
         }
     }
-    //     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
-    //         let sql = format!("SELECT {} FROM `{}` WHERE `id` = {}",
-    //                           E::get_field_list(),
-    //                           E::get_name(),
-    //                           id);
-    //         println!("{}", sql);
-    //         let res = self.pool.first_exec(sql, ());
-    //         match res {
-    //             Ok(option) => Ok(option.map(|row| E::from_row(row))),
-    //             Err(err) => Err(err),
-    //         }
-    //     }
-    //     pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
-    //         let sql = format!("DELETE FROM `{}` WHERE `id` = {}",
-    //                           E::get_name(),
-    //                           entity.get_id().unwrap());
-    //         println!("{}", sql);
-    //         let res = self.pool.prep_exec(sql, ());
-    //         match res {
-    //             Ok(res) => Ok(res.affected_rows()),
-    //             Err(err) => Err(err),
-    //         }
-    //     }
+    pub fn get<E: Entity + Default>(&self, id: u64) -> Result<Option<E>, Error> {
+        let sql = sql_get(E::get_meta());
+        println!("{}", sql);
+        let res = self.pool.first_exec(sql, vec![("id", id)]);
+        if let Err(err) = res{
+            return Err(err);
+        }
+        let option = res.unwrap();
+        if let None = option{
+            return Ok(None);
+        }
+        let mut row = option.unwrap();
+        let mut entity = E::default();
+        entity.set_values(&mut row, "");
+        Ok(Some(entity))
+    }
+    pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
+        let sql = sql_delete(E::get_meta());
+        println!("{}", sql);
+        let res = self.pool.prep_exec(sql, vec![("id", entity.get_id())]);
+        match res {
+            Ok(res) => Ok(res.affected_rows()),
+            Err(err) => Err(err),
+        }
+    }
     //     // pub fn select<'a, E: Entity>(&'a self, conds: Vec<Cond>) -> SelectBuilder<'a, E> {
     //     //     SelectBuilder::<'a, E> {
     //     //         pool: &self.pool,

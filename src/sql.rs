@@ -43,3 +43,12 @@ pub fn sql_update(meta: &EntityMeta) -> String {
         .join(", ");
     format!("UPDATE `{}` SET {} where id = :id", &meta.table_name, &columns)
 }
+
+pub fn sql_get(meta: &EntityMeta) -> String {
+    format!("SELECT * FROM `{}` WHERE id = :id", &meta.table_name)
+}
+
+pub fn sql_delete(meta: &EntityMeta) -> String {
+    format!("DELETE FROM `{}` WHERE id = :id", &meta.table_name)
+}
+
