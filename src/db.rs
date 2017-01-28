@@ -1,7 +1,8 @@
 use mysql::Pool;
 use mysql::Error;
+use mysql::Value;
 use meta;
-// use std::cell::RefCell;
+use std::fmt::Debug;
 
 // use cond::Cond;
 use entity::Entity;
@@ -56,18 +57,21 @@ impl DB {
             Err(err) => Err(err),
         }
     }
-    //     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
-    //         let sql = format!("UPDATE `{}` SET {} WHERE `id` = {}",
-    //                           E::get_name(),
-    //                           E::get_prepare(),
-    //                           entity.get_id().unwrap());
-    //         println!("{}", sql);
-    //         let res = self.pool.prep_exec(sql, entity.get_params());
-    //         match res {
-    //             Ok(res) => Ok(res.affected_rows()),
-    //             Err(err) => Err(err),
-    //         }
-    //     }
+    pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
+        // let sql = format!("UPDATE `{}` SET {} WHERE `id` = {}",
+        //                   E::get_name(),
+        //                   E::get_prepare(),
+        //                   entity.get_id().unwrap());
+        let sql = sql_update(E::get_meta());
+        println!("{}", sql);
+        let mut params = entity.get_params();
+        params.push(("id".to_string(), Value::from(entity.get_id())));
+        let res = self.pool.prep_exec(sql, params);
+        match res {
+            Ok(res) => Ok(res.affected_rows()),
+            Err(err) => Err(err),
+        }
+    }
     //     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
     //         let sql = format!("SELECT {} FROM `{}` WHERE `id` = {}",
     //                           E::get_field_list(),

@@ -23,7 +23,7 @@ pub fn sql_drop_table(meta: &EntityMeta) -> String {
 }
 
 pub fn sql_insert(meta: &EntityMeta) -> String {
-    let fields = entity_get_columns(meta).join(", ");
+    let columns = entity_get_columns(meta).join(", ");
     let values = entity_get_columns(meta)
         .iter()
         .map(|column| format!(":{}", column))
@@ -31,6 +31,15 @@ pub fn sql_insert(meta: &EntityMeta) -> String {
         .join(", ");
     format!("INSERT INTO `{}`({}) VALUES ({})",
             &meta.table_name,
-            &fields,
+            &columns,
             &values)
+}
+
+pub fn sql_update(meta: &EntityMeta) -> String {
+    let columns = entity_get_columns(meta)
+        .iter()
+        .map(|column| format!("{} = :{}", column, column))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("UPDATE `{}` SET {} where id = :id", &meta.table_name, &columns)
 }
