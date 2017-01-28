@@ -9,20 +9,18 @@ pub use rustc_serialize::json as json;
 mod formatter;
 mod visitor;
 mod anno;
-mod meta;
-mod types;
 mod db;
 mod cond;
 mod entity;
+pub mod sql;
 pub mod init;
+pub mod meta;
 
-use formatter::Formatter;
 use visitor::Visitor;
 
-pub use meta::*;
 pub use entity::Entity;
 pub use mysql::Value;
-// pub use db::DB;
+pub use db::DB;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -47,12 +45,14 @@ pub fn build(src: &str) -> String {
     // TODO 重构visitor全部用方法 不用类
     let mut visitor = Visitor::new();
     visitor.visit_krate(&krate);
-    let formatter = Formatter::new();
-    let ret = formatter.format_meta(&visitor.meta);
+    let ret = formatter::format_meta(&visitor.meta);
     ret
 }
 
-fn test(){
-    static T:i32 = 1;
-    println!("{:?}", T);
+pub fn open(user: &str, pwd: &str, host: &str, port: u16, db: &str) -> Result<DB, mysql::Error> {
+    let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
+    match mysql::Pool::new(conn_str.as_ref()) {
+        Ok(pool) => Ok(DB { pool: pool }),
+        Err(err) => Err(err),
+    }
 }

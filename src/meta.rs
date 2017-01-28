@@ -7,7 +7,6 @@ pub struct FieldMeta {
     pub column_name: String,
     pub ty: String,
     pub db_ty: String,
-    pub raw_ty: String,
     pub nullable: bool,
     pub len: u64,
     pub pkey: bool,
@@ -18,7 +17,6 @@ pub struct FieldMeta {
 pub struct EntityMeta {
     pub entity_name: String,
     pub table_name: String,
-    pub pkey: FieldMeta,
     pub fields: Vec<FieldMeta>,
     pub field_map: HashMap<String, FieldMeta>,
     pub column_map: HashMap<String, FieldMeta>,
@@ -38,7 +36,6 @@ impl FieldMeta {
             column_name: "id".to_string(),
             ty: "u64".to_string(),
             db_ty: "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
-            raw_ty: "Option<u64>".to_string(),
             nullable: false,
             len: 0,
             pkey: true,
