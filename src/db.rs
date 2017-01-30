@@ -60,17 +60,7 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<E, Error> {
-        let sql = sql_insert(E::get_meta());
-        println!("{}", sql);
-        let res = self.pool.prep_exec(sql, entity.get_params());
-        match res {
-            Ok(res) => {
-                let mut ret = (*entity).clone();
-                ret.set_id(res.last_insert_id());
-                Ok(ret)
-            }
-            Err(err) => Err(err),
-        }
+        entity.do_insert(self.pool.get_conn().as_mut().unwrap())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
         let sql = sql_update(E::get_meta());

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use mysql::Value;
+use mysql::Error;
 use mysql::Row;
+use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
 use sql;
@@ -19,6 +21,23 @@ pub trait Entity {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
     fn set_values(&mut self, row: &mut Row, prefix: &str);
+
+    fn do_insert<C>(&self, conn: &mut C) ->Result<Self, Error>
+        where C: GenericConnection,
+              Self: Clone
+    {
+        let sql = sql::sql_insert(Self::get_meta());
+        println!("{}", sql);
+        let res = conn.prep_exec(sql, self.get_params());
+        match res {
+            Ok(res) => {
+                let mut ret = (*self).clone();
+                ret.set_id(res.last_insert_id());
+                Ok(ret)
+            }
+            Err(err) => Err(err),
+        }
+    }
 
     // fn get_name() -> String;
     // // fn get_field_meta() -> Vec<FieldMeta>;
