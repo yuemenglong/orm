@@ -55,7 +55,7 @@ static TPL_SETTER: &'static str = r#"
     }"#;
 
 static TPL_TRAIT_SET_VALUE: &'static str = r#"
-        self.${FIELD} = row.get(format!("{}${COLUMN}", prefix).as_ref());"#;
+        self.${FIELD} = row.get::<Option<${TYPE}>, &str>(format!("{}${COLUMN}", prefix).as_ref()).unwrap();"#;
 
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
@@ -204,17 +204,18 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
 fn format_entity_trait(meta: &EntityMeta) -> String {
     let values = meta.fields
         .iter()
-        .filter(|field| !field.pkey)
+        .filter(|field| !field.pkey && !field.refer)
         .map(|field| format!("ast::Value::from(&self.{})", field.field_name))
         .collect::<Vec<_>>()
         .join(", ");
     let set_values = meta.fields
         .iter()
+        .filter(|field| !field.refer)
         .map(|field| {
-            let ret = TPL_TRAIT_SET_VALUE.to_string()
+            TPL_TRAIT_SET_VALUE.to_string()
+                .replace("${TYPE}", &field.ty)
                 .replace("${FIELD}", &field.field_name)
-                .replace("${COLUMN}", &field.column_name);
-            ret
+                .replace("${COLUMN}", &field.column_name)
         })
         .collect::<String>();
     TPL_TRAIT.to_string()

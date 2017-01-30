@@ -17,6 +17,12 @@ use anno::Annotation;
 use meta::*;
 
 #[derive(Debug)]
+enum FieldType {
+    Normal,
+    Refer,
+}
+
+#[derive(Debug)]
 pub struct Visitor {
     pub meta: OrmMeta,
 }
@@ -47,6 +53,14 @@ impl Visitor {
                 entity_meta.fields = vec.iter()
                     .map(Self::visit_struct_field)
                     .collect();
+                // 为引用类型加上id
+                let refer_id_vec = entity_meta.fields
+                    .iter()
+                    .filter(|field| field.refer)
+                    .map(FieldMeta::create_refer_id)
+                    .collect::<Vec<_>>();
+                entity_meta.fields.extend(refer_id_vec);
+                // println!("{:?}", refer_id_vec);
                 // 加上pkey
                 entity_meta.fields.insert(0, FieldMeta::create_pkey());
                 return entity_meta;
@@ -66,18 +80,31 @@ impl Visitor {
         }
 
         // 处理注解
-        Self::visit_struct_field_attrs(&mut field_meta, &field.attrs);
+        match Self::visit_struct_field_attrs(&mut field_meta, &field.attrs) {
+            FieldType::Normal => {
+                // 处理类型信息
+                // 1.ty
+                let ty = ty_to_string(field.ty.deref());
+                field_meta.ty = ty.clone();
+                // 2.db_ty
+                Self::attach_db_type(&mut field_meta);
 
-        // 处理类型信息
-        // 1.ty
-        let ty = ty_to_string(field.ty.deref());
-        field_meta.ty = ty.clone();
-        // 2.db_ty
-        Self::attach_db_type(&mut field_meta);
+                field_meta
+            }
+            FieldType::Refer => {
+                // 处理引用类型信息
+                let ty = ty_to_string(field.ty.deref());
+                let field = &field_meta.field_name;
+                FieldMeta::create_refer(field, &ty)
+            }
+        }
 
-        field_meta
+
     }
-    fn visit_struct_field_attrs(field_meta: &mut FieldMeta, attrs: &Vec<syntax::ast::Attribute>) {
+    fn visit_struct_field_attrs(field_meta: &mut FieldMeta,
+                                attrs: &Vec<syntax::ast::Attribute>)
+                                -> FieldType {
+        let mut ret = FieldType::Normal;
         for attr in attrs.iter() {
             match anno::visit_struct_field_attr(attr) {
                 Annotation::Len(len) => {
@@ -86,9 +113,13 @@ impl Visitor {
                 Annotation::Nullable(b) => {
                     field_meta.nullable = b;
                 }
+                Annotation::Pointer => {
+                    ret = FieldType::Refer;
+                }
                 _ => {}
             }
         }
+        ret
     }
     fn attach_db_type(field_meta: &mut FieldMeta) {
         let postfix = match field_meta.nullable {

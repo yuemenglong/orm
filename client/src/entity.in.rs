@@ -1,13 +1,15 @@
-struct Person{
-    age:i32,
+struct Person {
+    age: i32,
     #[len(32)]
-    #[nullable(false)]
-    name:String,
+    // #[nullable(false)]
+    name: String,
     #[pointer]
-    addr:Address,
+    addr: Address,
+    // addr: Option<Address>, //refer
+    // addr_id: Option<u64>,
 }
 
-struct Address{
-	road: String,
-	no: u64,	
+struct Address {
+    // road: String,
+    no: u64,
 }

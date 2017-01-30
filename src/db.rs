@@ -96,6 +96,7 @@ impl DB {
         }
         let mut row = option.unwrap();
         let mut entity = E::default();
+        // println!("{:?}", row.get::<u64, &str>("attr_id"));
         entity.set_values(&mut row, "");
         Ok(Some(entity))
     }
