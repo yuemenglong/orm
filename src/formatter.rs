@@ -27,31 +27,33 @@ fn get_meta() -> &'static ast::meta::OrmMeta {
 ${ENTITIES}
 "#;
 
-static TPL_ENTITY: &'static str = r#"
+static TPL_STRUCT: &'static str = r#"
 #[derive(Debug, Clone, Default)]
-pub struct ${ENTITY_NAME} {${ENTITY_FIELDS}
+pub struct ${ENTITY_NAME} {${STRUCT_FIELDS}
 }
 "#;
 
-static TPL_FIELD: &'static str = r#"
+static TPL_STRUCT_FIELD: &'static str = r#"
     pub ${FIELD}: Option<${TYPE}>, "#;
 
 
 static TPL_IMPL: &'static str = r#"
-impl ${ENTITY_NAME} {${GETTER_SETTER}
+impl ${ENTITY_NAME} {${IMPL_FIELDS}
 }
 "#;
 
-static TPL_GETTER: &'static str = r#"
+static TPL_IMPL_FIELD: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
         self.${FIELD}.clone().unwrap()
-    }"#;
-
-static TPL_SETTER: &'static str = r#"
+    }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
         self.${FIELD} = Some(value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.${FIELD}.is_some()
     }"#;
 
 static TPL_TRAIT_SET_VALUE: &'static str = r#"
@@ -186,9 +188,9 @@ fn format_entity_define(meta: &EntityMeta) -> String {
         .map(format_entity_field)
         .collect::<Vec<_>>()
         .join("");
-    TPL_ENTITY.to_string()
+    TPL_STRUCT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-        .replace("${ENTITY_FIELDS}", &fields)
+        .replace("${STRUCT_FIELDS}", &fields)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let fields = meta.fields
@@ -199,7 +201,7 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .join("");
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-        .replace("${GETTER_SETTER}", &fields)
+        .replace("${IMPL_FIELDS}", &fields)
 }
 fn format_entity_trait(meta: &EntityMeta) -> String {
     let values = meta.fields
@@ -224,14 +226,10 @@ fn format_entity_trait(meta: &EntityMeta) -> String {
         .replace("${SET_VALUES}", &set_values)
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
-    TPL_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)
+    TPL_STRUCT_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)
 }
 fn format_entity_field_impl(meta: &FieldMeta) -> String {
-    let getter = TPL_GETTER.to_string()
+    TPL_IMPL_FIELD.to_string()
         .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty);
-    let setter = TPL_SETTER.to_string()
-        .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty);
-    format!("{}{}", &setter, &getter)
+        .replace("${TYPE}", &meta.ty)
 }
