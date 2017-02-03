@@ -3,7 +3,7 @@ use std::cell::Cell;
 use std::ops::Deref;
 
 use syntax;
-use syntax::ast::ItemKind::*;
+use syntax::ast::ItemKind;
 use syntax::print::pprust::*;
 use syntax::ast::VariantData;
 use rustc_serialize;
@@ -81,88 +81,31 @@ impl ast::Entity for ${ENTITY_NAME} {
 }
 "#;
 
-#[derive(Debug)]
-pub struct Formatter {
-    indent: Cell<usize>,
+fn do_id_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    meta.fields
+        .iter()
+        .filter(|field| field.pkey)
+        .map(cb)
+        .collect::<Vec<_>>()
+        .join(join)
 }
 
-struct Indent<'a> {
-    indent: usize,
-    formatter: &'a Formatter,
+fn do_normal_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    meta.fields
+        .iter()
+        .filter(|field| !field.pkey && !field.refer)
+        .map(cb)
+        .collect::<Vec<_>>()
+        .join(join)
 }
 
-impl<'a> Indent<'a> {
-    pub fn new(formatter: &'a Formatter) -> Indent<'a> {
-        let indent = formatter.indent.get();
-        formatter.indent.set(indent + 4);
-        Indent {
-            indent: indent,
-            formatter: formatter,
-        }
-    }
-}
-
-impl<'a> Drop for Indent<'a> {
-    fn drop(&mut self) {
-        self.formatter.indent.set(self.indent);
-    }
-}
-
-impl Formatter {
-    pub fn new() -> Formatter {
-        Formatter { indent: Cell::new(0) }
-    }
-    pub fn indent_str(&self) -> String {
-        std::iter::repeat(" ").take(self.indent.get()).collect::<String>()
-    }
-    pub fn format_krate(&self, krate: &syntax::ast::Crate) -> String {
-        krate.module
-            .items
-            .iter()
-            .map(|item| self.format_item(item.deref()))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-    fn format_item(&self, item: &syntax::ast::Item) -> String {
-        match item.node {
-            Struct(_, _) => self.format_struct(item),
-            _ => unreachable!(),
-        }
-    }
-    fn format_struct(&self, item: &syntax::ast::Item) -> String {
-        if let Struct(ref variant_data, ref _generics) = item.node {
-            if let &VariantData::Struct(ref vec, _id) = variant_data {
-                let indent_str = self.indent_str();
-                let _indent = Indent::new(self);
-                let content = vec.iter()
-                    .map(|field| self.format_struct_field(field))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!("{}struct {} {{\n{}\n{}}}",
-                        indent_str,
-                        item.ident.name.as_str(),
-                        content,
-                        indent_str)
-            } else {
-                unreachable!()
-            }
-        } else {
-            unreachable!()
-        }
-    }
-    fn format_struct_field(&self, field: &syntax::ast::StructField) -> String {
-        let ident = ident_to_string(field.ident.unwrap());
-        let ty = ty_to_string(field.ty.deref());
-        let attrs = self.format_attrs(&field.attrs);
-        let indent_str = self.indent_str();
-        match attrs.len() {
-            0 => format!("{}{}: {},", indent_str, ident, ty),
-            _ => format!("{}{}\n{}{}: {},", indent_str, attrs, indent_str, ident, ty),
-        }
-    }
-    fn format_attrs(&self, attrs: &Vec<syntax::ast::Attribute>) -> String {
-        attrs.iter().map(attr_to_string).collect::<Vec<_>>().join("\n")
-    }
+fn do_refer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    meta.fields
+        .iter()
+        .filter(|field| field.refer)
+        .map(cb)
+        .collect::<Vec<_>>()
+        .join(join)
 }
 
 pub fn format_meta(meta: &OrmMeta) -> String {
@@ -183,43 +126,36 @@ fn format_entity(meta: &EntityMeta) -> String {
     format!("{}{}{}", entity, implt, treit)
 }
 fn format_entity_define(meta: &EntityMeta) -> String {
-    let fields = meta.fields
-        .iter()
-        .map(format_entity_field)
-        .collect::<Vec<_>>()
-        .join("");
+    let id_fields = do_id_fields(meta, "", &format_entity_field);
+    let normal_fields = do_normal_fields(meta, "", &format_entity_field);
+    let refer_fields = do_refer_fields(meta, "", &format_entity_field);
+    let fields = format!("{}{}\n{}", id_fields, normal_fields, refer_fields);
     TPL_STRUCT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${STRUCT_FIELDS}", &fields)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
-    let fields = meta.fields
-        .iter()
-        .filter(|field| !field.pkey)
-        .map(format_entity_field_impl)
-        .collect::<Vec<_>>()
-        .join("");
+    let normal_fields = do_normal_fields(meta, "", &format_entity_field_impl);
+    let refer_fields = do_refer_fields(meta, "", &format_entity_field_impl);
+    let fields = format!("{}\n{}", normal_fields, refer_fields);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
 }
+fn format_entity_trait_get_value(meta: &FieldMeta) -> String {
+    format!("ast::Value::from(&self.{})", meta.field_name)
+}
+fn format_entity_trait_set_value(meta: &FieldMeta) -> String {
+    TPL_TRAIT_SET_VALUE.to_string()
+        .replace("${TYPE}", &meta.ty)
+        .replace("${FIELD}", &meta.field_name)
+        .replace("${COLUMN}", &meta.column_name)
+}
 fn format_entity_trait(meta: &EntityMeta) -> String {
-    let values = meta.fields
-        .iter()
-        .filter(|field| !field.pkey && !field.refer)
-        .map(|field| format!("ast::Value::from(&self.{})", field.field_name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let set_values = meta.fields
-        .iter()
-        .filter(|field| !field.refer)
-        .map(|field| {
-            TPL_TRAIT_SET_VALUE.to_string()
-                .replace("${TYPE}", &field.ty)
-                .replace("${FIELD}", &field.field_name)
-                .replace("${COLUMN}", &field.column_name)
-        })
-        .collect::<String>();
+    let values = do_normal_fields(meta, ", ", &format_entity_trait_get_value);
+    let set_id_values = do_id_fields(meta, "", &format_entity_trait_set_value);
+    let set_normal_values = do_normal_fields(meta, "", &format_entity_trait_set_value);
+    let set_values = format!("{}{}", set_id_values, set_normal_values);
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${VALUES}", &values)
