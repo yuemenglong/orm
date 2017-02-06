@@ -86,17 +86,22 @@ impl DB {
     pub fn get<E: Entity + Default>(&self, id: u64) -> Result<Option<E>, Error> {
         let sql = sql_get(E::get_meta());
         println!("{}", sql);
-        let res = self.pool.first_exec(sql, vec![("id", id)]);
+        let res = self.pool.prep_exec(sql, vec![("id", id)]);
         if let Err(err) = res {
             return Err(err);
         }
-        let option = res.unwrap();
+        let mut res = res.unwrap();
+        let option = res.next();
         if let None = option {
             return Ok(None);
         }
-        let mut row = option.unwrap();
+        let row_res = option.unwrap();
+        if let Err(err) = row_res{
+            return Err(err);
+        }
+        let mut row = row_res.unwrap();
         let mut entity = E::default();
-        entity.set_values(&mut row, "");
+        entity.set_values(&res, &mut row, "");
         Ok(Some(entity))
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {

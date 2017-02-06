@@ -10,6 +10,7 @@ pub struct FieldMeta {
     pub nullable: bool,
     pub len: u64,
     pub pkey: bool,
+    pub refer: bool,
     pub extend: bool, // 是否为系统自动扩展出的属性
 }
 
@@ -29,6 +30,12 @@ pub struct OrmMeta {
     pub table_map: HashMap<String, EntityMeta>,
 }
 
+impl EntityMeta {
+    pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
+        self.fields.iter().filter(|field| !field.refer).collect::<Vec<_>>()
+    }
+}
+
 impl FieldMeta {
     pub fn create_pkey() -> FieldMeta {
         FieldMeta {
@@ -39,6 +46,7 @@ impl FieldMeta {
             nullable: false,
             len: 0,
             pkey: true,
+            refer: false,
             extend: true,
         }
     }

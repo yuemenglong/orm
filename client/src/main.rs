@@ -16,7 +16,7 @@ fn main(){
     p.set_name("Tom".to_string());
     // p.set_id(10);
     // println!("{:?}", p.get_params());
-    let db = ast::open("root", "root", "10.35.15.61", 3306, "test").unwrap();
+    let db = ast::open("root", "root", "172.16.16.213", 3306, "test").unwrap();
     db.drop_table::<Person>().unwrap();
     let ret = db.create_table::<Person>().unwrap();
     let mut p = db.insert(&p).unwrap();

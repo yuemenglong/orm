@@ -29,7 +29,8 @@ ${ENTITIES}
 
 static TPL_ENTITY: &'static str = r#"
 #[derive(Debug, Clone, Default)]
-pub struct ${ENTITY_NAME} {${ENTITY_FIELDS}
+pub struct ${ENTITY_NAME} {
+    inner: ast::EntityInner,
 }
 "#;
 
@@ -45,36 +46,25 @@ impl ${ENTITY_NAME} {${GETTER_SETTER}
 static TPL_GETTER: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.${FIELD}.clone().unwrap()
+        self.inner.get("${FIELD}").unwrap()
     }"#;
 
 static TPL_SETTER: &'static str = r#"
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
-        self.${FIELD} = Some(value);
+        self.inner.set("${FIELD}", Some(value));
     }"#;
-
-static TPL_TRAIT_SET_VALUE: &'static str = r#"
-        self.${FIELD} = row.get(format!("{}${COLUMN}", prefix).as_ref());"#;
 
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn get_meta() -> &'static ast::meta::EntityMeta {
         get_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
-    fn get_values(&self) -> Vec<ast::Value> {
-        vec![${VALUES}]
+    fn get_inner(&self) -> &ast::EntityInner {
+        &self.inner
     }
-    fn set_values(&mut self, row: &mut ast::Row, prefix: &str) {${SET_VALUES}
-    }
-    fn get_id(&self) -> u64 {
-        self.id.unwrap()
-    }
-    fn set_id(&mut self, value: u64) {
-        self.id = Some(value);
-    }
-    fn has_id(&self) -> bool {
-        self.id.is_some()
+    fn get_inner_mut(&mut self) -> &mut ast::EntityInner {
+        &mut self.inner
     }
 }
 "#;
@@ -202,25 +192,8 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .replace("${GETTER_SETTER}", &fields)
 }
 fn format_entity_trait(meta: &EntityMeta) -> String {
-    let values = meta.fields
-        .iter()
-        .filter(|field| !field.pkey)
-        .map(|field| format!("ast::Value::from(&self.{})", field.field_name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let set_values = meta.fields
-        .iter()
-        .map(|field| {
-            let ret = TPL_TRAIT_SET_VALUE.to_string()
-                .replace("${FIELD}", &field.field_name)
-                .replace("${COLUMN}", &field.column_name);
-            ret
-        })
-        .collect::<String>();
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-        .replace("${VALUES}", &values)
-        .replace("${SET_VALUES}", &set_values)
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
     TPL_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)

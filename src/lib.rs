@@ -19,6 +19,7 @@ pub mod meta;
 use visitor::Visitor;
 
 pub use entity::Entity;
+pub use entity::EntityInner;
 pub use mysql::Value;
 pub use mysql::Row;
 pub use db::DB;

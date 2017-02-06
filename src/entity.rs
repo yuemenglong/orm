@@ -1,24 +1,139 @@
 use std::collections::HashMap;
 use mysql::Value;
+use mysql::Error;
+use mysql::error::MySqlError;
+use mysql::value::from_value;
+use mysql::prelude::FromValue;
+use mysql::QueryResult;
 use mysql::Row;
 
 use meta::EntityMeta;
 use sql;
 
+#[derive(Clone, Default, Debug)]
+pub struct EntityInner {
+    fields: HashMap<String, Value>,
+    refers: HashMap<String, EntityInner>,
+}
+
+impl EntityInner {
+    pub fn set<V>(&mut self, key: &str, value: Option<V>)
+        where Value: From<V>
+    {
+        match value {
+            None => self.fields.remove(key),
+            Some(v) => self.fields.insert(key.to_string(), Value::from(v)),
+        };
+    }
+    pub fn get<V>(&self, key: &str) -> Option<V>
+        where V: FromValue
+    {
+        self.fields.get(key).map(|value| from_value(value.clone()))
+    }
+    pub fn has(&self, key: &str) -> bool {
+        self.fields.contains_key(key)
+    }
+}
+
+
+
 pub trait Entity {
     fn get_meta() -> &'static EntityMeta;
-    fn set_id(&mut self, id: u64);
-    fn get_id(&self) -> u64;
-    fn has_id(&self) -> bool;
+    fn get_inner(&self) -> &EntityInner;
+    fn get_inner_mut(&mut self) -> &mut EntityInner;
+
+    fn set_id(&mut self, id: u64) {
+        self.get_inner_mut().set("id", Some(id));
+    }
+    fn get_id(&self) -> u64 {
+        self.get_inner().get("id").unwrap()
+    }
+    fn has_id(&self) -> bool {
+        self.get_inner().has("id")
+    }
 
     fn get_columns() -> Vec<String> {
         sql::entity_get_columns(Self::get_meta())
     }
-    fn get_values(&self) -> Vec<Value>;
+    fn get_values(&self) -> Vec<Value> {
+        // 不包括id
+        let meta = Self::get_meta();
+        meta.fields
+            .iter()
+            .map(|field| Value::from(self.get_inner().fields.get(&field.field_name).clone()))
+            .collect::<Vec<_>>()
+    }
     fn get_params(&self) -> Vec<(String, Value)> {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
-    fn set_values(&mut self, row: &mut Row, prefix: &str);
+    fn set_values(&mut self,
+                  result: &QueryResult,
+                  row: &mut Row,
+                  prefix: &str)
+                  -> Result<(), Error> {
+        let meta = Self::get_meta();
+        let fields = meta.get_non_refer_fields();
+
+        fields.iter().fold(Ok(()), |acc, field| {
+            if (acc.is_err()) {
+                return acc;
+            }
+            let key = &field.field_name;
+            match result.column_index(key) {
+                Some(idx) => {
+                    let value = row.as_ref(idx).clone();
+                    self.get_inner_mut().set(key, value);
+                    // Ok((key.clone(), value))
+                    Ok(())
+                }
+                None => {
+                    let state = "ORM_INVALID_COLUMN_NAME".to_string();
+                    let message = key.to_string();
+                    let code = 60001;
+                    Err(Error::MySqlError(MySqlError {
+                        state: state,
+                        message: message,
+                        code: code,
+                    }))
+                }
+            }
+        })
+
+        // let ret = meta.do_non_refer_fields(&|field| {
+        //     let key = &field.field_name;
+        //     match result.column_index(key) {
+        //         Some(idx) => {
+        //             let value = row.as_ref(idx).clone();
+        //             // self.get_inner_mut().set(key, value);
+        //             Ok((key.clone(), value))
+        //             // Ok(())
+        //         }
+        //         None => {
+        //             let state = "ORM_INVALID_COLUMN_NAME".to_string();
+        //             let message = key.to_string();
+        //             let code = 60001;
+        //             Err(MySqlError {
+        //                 state: state,
+        //                 message: message,
+        //                 code: code,
+        //             })
+        //         }
+        //     }
+        // });
+        // let mut errs = ret.iter()
+        //     .filter(|res| res.is_err())
+        //     .collect::<Vec<_>>();
+        // if errs.len() > 0 {
+        //     return Err(Error::MySqlError(errs[0].clone().err().unwrap()));
+        // }
+        // Ok(())
+        // ret.iter().map(||)
+        // match errs.len() {
+        // 0 => Ok(()),
+        // }
+        // meta.get_non_refer_fields().map(||)
+        // self.get_inner_mut().
+    }
 
     // fn get_name() -> String;
     // // fn get_field_meta() -> Vec<FieldMeta>;
