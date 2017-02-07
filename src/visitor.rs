@@ -22,123 +22,120 @@ enum FieldType {
     Refer,
 }
 
-#[derive(Debug)]
-pub struct Visitor {
-    pub meta: OrmMeta,
+pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
+    let mut meta = OrmMeta::default();
+    meta.entities = krate.module
+        .items
+        .iter()
+        .map(|item| visit_item(item.deref()))
+        .collect::<Vec<_>>();
+    // .push(entity_meta);
+    // for item in krate.module.items.iter() {
+    // visit_item(item.deref());
+    // }
+    meta
 }
-
-impl Visitor {
-    pub fn new() -> Visitor {
-        Visitor { meta: OrmMeta::default() }
-    }
-
-    pub fn visit_krate(&mut self, krate: &syntax::ast::Crate) {
-        for item in krate.module.items.iter() {
-            self.visit_item(item.deref());
+fn visit_item(item: &syntax::ast::Item) -> EntityMeta {
+    let entity_meta = match item.node {
+        Struct(_, _) => visit_struct(item),
+        _ => unreachable!(),
+    };
+    entity_meta
+}
+fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
+    if let Struct(ref variant_data, ref _generics) = item.node {
+        let mut entity_meta = EntityMeta::default();
+        entity_meta.entity_name = item.ident.name.as_str().to_string();
+        entity_meta.table_name = item.ident.name.as_str().to_string();
+        if let &VariantData::Struct(ref vec, _id) = variant_data {
+            entity_meta.fields = vec.iter()
+                .map(visit_struct_field)
+                .collect();
+            // 为引用类型加上id
+            let refer_id_vec = entity_meta.fields
+                .iter()
+                .filter(|field| field.refer)
+                .map(FieldMeta::create_refer_id)
+                .collect::<Vec<_>>();
+            entity_meta.fields.extend(refer_id_vec);
+            // println!("{:?}", refer_id_vec);
+            // 加上pkey
+            entity_meta.fields.insert(0, FieldMeta::create_pkey());
+            return entity_meta;
         }
     }
-    fn visit_item(&mut self, item: &syntax::ast::Item) {
-        let entity_meta = match item.node {
-            Struct(_, _) => Self::visit_struct(item),
-            _ => unreachable!(),
-        };
-        self.meta.entities.push(entity_meta);
+    unreachable!();
+}
+fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
+    let mut field_meta = FieldMeta::default();
+    field_meta.nullable = true;
+    field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+    field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+
+    // 检查 id
+    if field_meta.field_name == "id" {
+        panic!("Id Will Be Added To Entity Automatically");
     }
-    fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
-        if let Struct(ref variant_data, ref _generics) = item.node {
-            let mut entity_meta = EntityMeta::default();
-            entity_meta.entity_name = item.ident.name.as_str().to_string();
-            entity_meta.table_name = item.ident.name.as_str().to_string();
-            if let &VariantData::Struct(ref vec, _id) = variant_data {
-                entity_meta.fields = vec.iter()
-                    .map(Self::visit_struct_field)
-                    .collect();
-                // 为引用类型加上id
-                let refer_id_vec = entity_meta.fields
-                    .iter()
-                    .filter(|field| field.refer)
-                    .map(FieldMeta::create_refer_id)
-                    .collect::<Vec<_>>();
-                entity_meta.fields.extend(refer_id_vec);
-                // println!("{:?}", refer_id_vec);
-                // 加上pkey
-                entity_meta.fields.insert(0, FieldMeta::create_pkey());
-                return entity_meta;
-            }
+
+    // 处理注解
+    match visit_struct_field_attrs(&mut field_meta, &field.attrs) {
+        FieldType::Normal => {
+            // 处理类型信息
+            // 1.ty
+            let ty = ty_to_string(field.ty.deref());
+            field_meta.ty = ty.clone();
+            // 2.db_ty
+            attach_db_type(&mut field_meta);
+
+            field_meta
         }
-        unreachable!();
+        FieldType::Refer => {
+            // 处理引用类型信息
+            let ty = ty_to_string(field.ty.deref());
+            let field = &field_meta.field_name;
+            FieldMeta::create_refer(field, &ty)
+        }
     }
-    fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
-        let mut field_meta = FieldMeta::default();
-        field_meta.nullable = true;
-        field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-        field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
-        // 检查 id
-        if field_meta.field_name == "id" {
-            panic!("Id Will Be Added To Entity Automatically");
-        }
 
-        // 处理注解
-        match Self::visit_struct_field_attrs(&mut field_meta, &field.attrs) {
-            FieldType::Normal => {
-                // 处理类型信息
-                // 1.ty
-                let ty = ty_to_string(field.ty.deref());
-                field_meta.ty = ty.clone();
-                // 2.db_ty
-                Self::attach_db_type(&mut field_meta);
-
-                field_meta
+}
+fn visit_struct_field_attrs(field_meta: &mut FieldMeta,
+                            attrs: &Vec<syntax::ast::Attribute>)
+                            -> FieldType {
+    let mut ret = FieldType::Normal;
+    for attr in attrs.iter() {
+        match anno::visit_struct_field_attr(attr) {
+            Annotation::Len(len) => {
+                field_meta.len = len;
             }
-            FieldType::Refer => {
-                // 处理引用类型信息
-                let ty = ty_to_string(field.ty.deref());
-                let field = &field_meta.field_name;
-                FieldMeta::create_refer(field, &ty)
+            Annotation::Nullable(b) => {
+                field_meta.nullable = b;
             }
+            Annotation::Pointer => {
+                ret = FieldType::Refer;
+            }
+            _ => {}
         }
-
-
     }
-    fn visit_struct_field_attrs(field_meta: &mut FieldMeta,
-                                attrs: &Vec<syntax::ast::Attribute>)
-                                -> FieldType {
-        let mut ret = FieldType::Normal;
-        for attr in attrs.iter() {
-            match anno::visit_struct_field_attr(attr) {
-                Annotation::Len(len) => {
-                    field_meta.len = len;
-                }
-                Annotation::Nullable(b) => {
-                    field_meta.nullable = b;
-                }
-                Annotation::Pointer => {
-                    ret = FieldType::Refer;
-                }
-                _ => {}
-            }
+    ret
+}
+fn attach_db_type(field_meta: &mut FieldMeta) {
+    let postfix = match field_meta.nullable {
+        true => "",
+        false => " NOT NULL",
+    };
+    field_meta.db_ty = match field_meta.ty.as_ref() {
+        "i32" => format!("`{}` INTEGER{}", field_meta.column_name, postfix),
+        "i64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
+        "u64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
+        "String" => {
+            format!("`{}` VARCHAR({}){}",
+                    field_meta.column_name,
+                    field_meta.len,
+                    postfix)
         }
-        ret
-    }
-    fn attach_db_type(field_meta: &mut FieldMeta) {
-        let postfix = match field_meta.nullable {
-            true => "",
-            false => " NOT NULL",
-        };
-        field_meta.db_ty = match field_meta.ty.as_ref() {
-            "i32" => format!("`{}` INTEGER{}", field_meta.column_name, postfix),
-            "i64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
-            "u64" => format!("`{}` BIGINT{}", field_meta.column_name, postfix),
-            "String" => {
-                format!("`{}` VARCHAR({}){}",
-                        field_meta.column_name,
-                        field_meta.len,
-                        postfix)
-            }
-            _ => {
-                panic!("Unsupported Type: {}", field_meta.ty);
-            }
+        _ => {
+            panic!("Unsupported Type: {}", field_meta.ty);
         }
     }
 }

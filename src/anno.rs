@@ -70,7 +70,7 @@ fn visit_anno_nullable(attr: &syntax::ast::Attribute) -> Annotation {
 }
 
 fn visit_anno_pointer(attr: &syntax::ast::Attribute) -> Annotation {
-    if let MetaItemKind::Word = attr.value.node{
+    if let MetaItemKind::Word = attr.value.node {
         return Annotation::Pointer;
     }
     unreachable!()

@@ -88,7 +88,7 @@ impl DB {
             return Ok(None);
         }
         let row_res = option.unwrap();
-        if let Err(err) = row_res{
+        if let Err(err) = row_res {
             return Err(err);
         }
         let mut row = row_res.unwrap();

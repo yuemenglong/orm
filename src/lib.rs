@@ -4,7 +4,7 @@ extern crate regex;
 extern crate mysql;
 extern crate rustc_serialize;
 
-pub use rustc_serialize::json as json;
+pub use rustc_serialize::json;
 
 mod formatter;
 mod visitor;
@@ -15,8 +15,6 @@ mod entity;
 pub mod sql;
 pub mod init;
 pub mod meta;
-
-use visitor::Visitor;
 
 pub use entity::Entity;
 pub use entity::EntityInner;
@@ -44,10 +42,8 @@ pub fn build(src: &str) -> String {
     let krate =
         parse::parse_crate_from_source_str("stdin".to_string(), src.to_string(), &parse_session)
             .unwrap();
-    // TODO 重构visitor全部用方法 不用类
-    let mut visitor = Visitor::new();
-    visitor.visit_krate(&krate);
-    let ret = formatter::format_meta(&visitor.meta);
+    let meta = visitor::visit_krate(&krate);
+    let ret = formatter::format_meta(&meta);
     ret
 }
 
