@@ -44,7 +44,7 @@ impl DB {
         return Ok(ret);
     }
     pub fn create_table<E: Entity>(&self) -> Result<u64, Error> {
-        let sql = sql_create_table(E::get_meta());
+        let sql = sql_create_table(E::meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, ());
         match res {
@@ -53,7 +53,7 @@ impl DB {
         }
     }
     pub fn drop_table<E: Entity>(&self) -> Result<u64, Error> {
-        let sql = sql_drop_table(E::get_meta());
+        let sql = sql_drop_table(E::meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, ());
         match res {
@@ -65,7 +65,7 @@ impl DB {
         do_insert(entity, self.pool.get_conn().as_mut().unwrap())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
-        let sql = sql_update(E::get_meta());
+        let sql = sql_update(E::meta());
         println!("{}", sql);
         let mut params = entity.get_params();
         params.push(("id".to_string(), Value::from(entity.get_id())));
@@ -76,7 +76,7 @@ impl DB {
         }
     }
     pub fn get<E: Entity + Default>(&self, id: u64) -> Result<Option<E>, Error> {
-        let sql = sql_get(E::get_meta());
+        let sql = sql_get(E::meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, vec![("id", id)]);
         if let Err(err) = res {
@@ -97,7 +97,7 @@ impl DB {
         Ok(Some(entity))
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
-        let sql = sql_delete(E::get_meta());
+        let sql = sql_delete(E::meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, vec![("id", entity.get_id())]);
         match res {

@@ -18,7 +18,7 @@ use std::sync::ONCE_INIT;
 static mut META: Option<&'static ast::meta::OrmMeta> = None;
 static ONCE: Once = ONCE_INIT;
 
-fn get_meta() -> &'static ast::meta::OrmMeta {
+fn meta() -> &'static ast::meta::OrmMeta {
     let json = r#${JSON}#;
     ONCE.call_once(|| unsafe { META = Some(ast::init::init_meta(json)) });
     unsafe { META.unwrap() }
@@ -58,13 +58,13 @@ static TPL_IMPL_FIELD: &'static str = r#"
 
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
-    fn get_meta() -> &'static ast::meta::EntityMeta {
-        get_meta().entity_map.get("${ENTITY_NAME}").unwrap()
+    fn meta() -> &'static ast::meta::EntityMeta {
+        meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
-    fn get_inner(&self) -> &ast::EntityInner {
+    fn inner(&self) -> &ast::EntityInner {
         &self.inner
     }
-    fn get_inner_mut(&mut self) -> &mut ast::EntityInner {
+    fn inner_mut(&mut self) -> &mut ast::EntityInner {
         &mut self.inner
     }
 }

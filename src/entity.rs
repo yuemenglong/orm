@@ -38,29 +38,29 @@ impl EntityInner {
 }
 
 pub trait Entity {
-    fn get_meta() -> &'static EntityMeta;
-    fn get_inner(&self) -> &EntityInner;
-    fn get_inner_mut(&mut self) -> &mut EntityInner;
+    fn meta() -> &'static EntityMeta;
+    fn inner(&self) -> &EntityInner;
+    fn inner_mut(&mut self) -> &mut EntityInner;
 
     fn set_id(&mut self, id: u64) {
-        self.get_inner_mut().set("id", Some(id));
+        self.inner_mut().set("id", Some(id));
     }
     fn get_id(&self) -> u64 {
-        self.get_inner().get("id").unwrap()
+        self.inner().get("id").unwrap()
     }
     fn has_id(&self) -> bool {
-        self.get_inner().has("id")
+        self.inner().has("id")
     }
 
     fn get_columns() -> Vec<String> {
-        sql::entity_get_columns(Self::get_meta())
+        sql::entity_get_columns(Self::meta())
     }
     fn get_values(&self) -> Vec<Value> {
         // 不包括id
-        let meta = Self::get_meta();
+        let meta = Self::meta();
         meta.fields
             .iter()
-            .map(|field| Value::from(self.get_inner().fields.get(&field.field_name).clone()))
+            .map(|field| Value::from(self.inner().fields.get(&field.field_name).clone()))
             .collect::<Vec<_>>()
     }
     fn get_params(&self) -> Vec<(String, Value)> {
@@ -71,7 +71,7 @@ pub trait Entity {
                   row: &mut Row,
                   prefix: &str)
                   -> Result<(), Error> {
-        let meta = Self::get_meta();
+        let meta = Self::meta();
         let fields = meta.get_non_refer_fields();
 
         fields.iter().fold(Ok(()), |acc, field| {
@@ -82,7 +82,7 @@ pub trait Entity {
             match result.column_index(key) {
                 Some(idx) => {
                     let value = row.as_ref(idx).clone();
-                    self.get_inner_mut().set(key, value);
+                    self.inner_mut().set(key, value);
                     Ok(())
                 }
                 None => {
@@ -106,7 +106,7 @@ pub trait Entity {
         where C: GenericConnection,
               Self: Clone
     {
-        let sql = sql::sql_insert(Self::get_meta());
+        let sql = sql::sql_insert(Self::meta());
         println!("{}", sql);
         let res = conn.prep_exec(sql, self.get_params());
         match res {

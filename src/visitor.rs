@@ -29,10 +29,6 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         .iter()
         .map(|item| visit_item(item.deref()))
         .collect::<Vec<_>>();
-    // .push(entity_meta);
-    // for item in krate.module.items.iter() {
-    // visit_item(item.deref());
-    // }
     meta
 }
 fn visit_item(item: &syntax::ast::Item) -> EntityMeta {
@@ -58,7 +54,6 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
                 .map(FieldMeta::create_refer_id)
                 .collect::<Vec<_>>();
             entity_meta.fields.extend(refer_id_vec);
-            // println!("{:?}", refer_id_vec);
             // 加上pkey
             entity_meta.fields.insert(0, FieldMeta::create_pkey());
             return entity_meta;
