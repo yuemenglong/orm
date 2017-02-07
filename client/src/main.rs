@@ -22,6 +22,9 @@ fn curd_test(db: &ast::DB) {
     let mut p = Person::default();
     p.set_age(100);
     p.set_name("Tom".to_string());
+    // p.set_name("Tom".to_string());
+    // p.set_id(10);
+    // println!("{:?}", p.get_params());
     db.drop_table::<Person>().unwrap();
     let ret = db.create_table::<Person>().unwrap();
     let mut p = db.insert(&p).unwrap();
@@ -34,4 +37,5 @@ fn curd_test(db: &ast::DB) {
     db.delete(p).unwrap();
     let p = db.get::<Person>(id).unwrap();
     println!("{:?}", p);
+
 }

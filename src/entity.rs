@@ -6,8 +6,10 @@ use mysql::value::from_value;
 use mysql::prelude::FromValue;
 use mysql::QueryResult;
 use mysql::Row;
+use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
+use meta::FieldMeta;
 use sql;
 
 #[derive(Clone, Default, Debug)]
@@ -34,8 +36,6 @@ impl EntityInner {
         self.fields.contains_key(key)
     }
 }
-
-
 
 pub trait Entity {
     fn get_meta() -> &'static EntityMeta;
@@ -75,7 +75,7 @@ pub trait Entity {
         let fields = meta.get_non_refer_fields();
 
         fields.iter().fold(Ok(()), |acc, field| {
-            if (acc.is_err()) {
+            if acc.is_err() {
                 return acc;
             }
             let key = &field.field_name;
@@ -83,7 +83,6 @@ pub trait Entity {
                 Some(idx) => {
                     let value = row.as_ref(idx).clone();
                     self.get_inner_mut().set(key, value);
-                    // Ok((key.clone(), value))
                     Ok(())
                 }
                 None => {
@@ -98,41 +97,26 @@ pub trait Entity {
                 }
             }
         })
+    }
 
-        // let ret = meta.do_non_refer_fields(&|field| {
-        //     let key = &field.field_name;
-        //     match result.column_index(key) {
-        //         Some(idx) => {
-        //             let value = row.as_ref(idx).clone();
-        //             // self.get_inner_mut().set(key, value);
-        //             Ok((key.clone(), value))
-        //             // Ok(())
-        //         }
-        //         None => {
-        //             let state = "ORM_INVALID_COLUMN_NAME".to_string();
-        //             let message = key.to_string();
-        //             let code = 60001;
-        //             Err(MySqlError {
-        //                 state: state,
-        //                 message: message,
-        //                 code: code,
-        //             })
-        //         }
-        //     }
-        // });
-        // let mut errs = ret.iter()
-        //     .filter(|res| res.is_err())
-        //     .collect::<Vec<_>>();
-        // if errs.len() > 0 {
-        //     return Err(Error::MySqlError(errs[0].clone().err().unwrap()));
-        // }
-        // Ok(())
-        // ret.iter().map(||)
-        // match errs.len() {
-        // 0 => Ok(()),
-        // }
-        // meta.get_non_refer_fields().map(||)
-        // self.get_inner_mut().
+    // fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;
+    // fn set_refer(&mut self, field: &str, e: Option<Entity>);
+
+    fn do_insert<C>(&self, conn: &mut C) -> Result<Self, Error>
+        where C: GenericConnection,
+              Self: Clone
+    {
+        let sql = sql::sql_insert(Self::get_meta());
+        println!("{}", sql);
+        let res = conn.prep_exec(sql, self.get_params());
+        match res {
+            Ok(res) => {
+                let mut ret = (*self).clone();
+                ret.set_id(res.last_insert_id());
+                Ok(ret)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     // fn get_name() -> String;
