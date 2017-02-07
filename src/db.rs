@@ -1,6 +1,8 @@
 use mysql::Pool;
 use mysql::Error;
 use mysql::Value;
+
+use mysql::prelude::GenericConnection;
 use meta;
 use std::fmt::Debug;
 
@@ -60,7 +62,7 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<E, Error> {
-        entity.do_insert(self.pool.get_conn().as_mut().unwrap())
+        do_insert(entity, self.pool.get_conn().as_mut().unwrap())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
         let sql = sql_update(E::get_meta());
@@ -106,4 +108,13 @@ impl DB {
     //     //         phantom: PhantomData,
     //     //     }
     //     // }
+}
+
+
+fn do_insert<E, C>(entity: &E, conn: &mut C) -> Result<E, Error>
+    where E: Entity + Clone,
+          C: GenericConnection
+{
+    // 1. 遍历所有refer，看有没有id，没有的话做insert，有的话暂时什么都不做
+    entity.do_insert(conn)
 }

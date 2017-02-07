@@ -5,6 +5,7 @@ use mysql::Row;
 use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
+use meta::FieldMeta;
 use sql;
 
 pub trait Entity {
@@ -16,13 +17,20 @@ pub trait Entity {
     fn get_columns() -> Vec<String> {
         sql::entity_get_columns(Self::get_meta())
     }
-    fn get_values(&self) -> Vec<Value>;
     fn get_params(&self) -> Vec<(String, Value)> {
         Self::get_columns().into_iter().zip(self.get_values().into_iter()).collect::<Vec<_>>()
     }
+    fn get_refer_meta() -> Vec<&'static FieldMeta> {
+        Self::get_meta().fields.iter().filter(|field| field.refer).collect::<Vec<_>>()
+    }
+
+    fn get_values(&self) -> Vec<Value>;
     fn set_values(&mut self, row: &mut Row, prefix: &str);
 
-    fn do_insert<C>(&self, conn: &mut C) ->Result<Self, Error>
+    fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;
+    // fn set_refer(&mut self, field: &str, e: Option<Entity>);
+
+    fn do_insert<C>(&self, conn: &mut C) -> Result<Self, Error>
         where C: GenericConnection,
               Self: Clone
     {

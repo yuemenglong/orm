@@ -36,7 +36,6 @@ pub struct ${ENTITY_NAME} {${STRUCT_FIELDS}
 static TPL_STRUCT_FIELD: &'static str = r#"
     pub ${FIELD}: Option<${TYPE}>, "#;
 
-
 static TPL_IMPL: &'static str = r#"
 impl ${ENTITY_NAME} {${IMPL_FIELDS}
 }
@@ -59,6 +58,9 @@ static TPL_IMPL_FIELD: &'static str = r#"
 static TPL_TRAIT_SET_VALUE: &'static str = r#"
         self.${FIELD} = row.get::<Option<${TYPE}>, &str>(format!("{}${COLUMN}", prefix).as_ref()).unwrap();"#;
 
+static TPL_TRAIT_GET_REFER: &'static str = r#"
+        "${FIELD}" => self.${FIELD}.as_ref(),"#;
+
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn get_meta() -> &'static ast::meta::EntityMeta {
@@ -68,6 +70,12 @@ impl ast::Entity for ${ENTITY_NAME} {
         vec![${VALUES}]
     }
     fn set_values(&mut self, row: &mut ast::Row, prefix: &str) {${SET_VALUES}
+    }
+    fn get_refer(&self, field: &str) -> Option<&ast::Entity> {
+        match field {
+            ${GET_REFERS}
+            _ => None,
+        }
     }
     fn get_id(&self) -> u64 {
         self.id.unwrap()
@@ -151,15 +159,22 @@ fn format_entity_trait_set_value(meta: &FieldMeta) -> String {
         .replace("${FIELD}", &meta.field_name)
         .replace("${COLUMN}", &meta.column_name)
 }
+fn format_entity_trait_get_refer(meta: &FieldMeta) -> String {
+    TPL_TRAIT_GET_REFER.to_string()
+        .replace("${FIELD}", &meta.field_name)
+}
+
 fn format_entity_trait(meta: &EntityMeta) -> String {
     let values = do_normal_fields(meta, ", ", &format_entity_trait_get_value);
     let set_id_values = do_id_fields(meta, "", &format_entity_trait_set_value);
     let set_normal_values = do_normal_fields(meta, "", &format_entity_trait_set_value);
     let set_values = format!("{}{}", set_id_values, set_normal_values);
+    let get_refers = do_refer_fields(meta, "", &format_entity_trait_get_refer);
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${VALUES}", &values)
         .replace("${SET_VALUES}", &set_values)
+        .replace("${GET_REFERS}", &get_refers)
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
     TPL_STRUCT_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)
