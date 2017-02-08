@@ -12,12 +12,14 @@ mod anno;
 mod db;
 mod cond;
 mod entity;
+
 pub mod sql;
 pub mod init;
 pub mod meta;
 
 pub use entity::Entity;
 pub use entity::EntityInner;
+pub use entity::EntityInnerPointer;
 pub use mysql::Value;
 pub use mysql::Row;
 pub use db::DB;

@@ -1,4 +1,8 @@
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::ops::Deref;
+
 use mysql::Value;
 use mysql::Error;
 use mysql::error::MySqlError;
@@ -12,10 +16,12 @@ use meta::EntityMeta;
 use meta::FieldMeta;
 use sql;
 
+pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
+
 #[derive(Clone, Default, Debug)]
 pub struct EntityInner {
     fields: HashMap<String, Value>,
-    refers: HashMap<String, EntityInner>,
+    refers: HashMap<String, EntityInnerPointer>,
 }
 
 impl EntityInner {
@@ -35,21 +41,61 @@ impl EntityInner {
     pub fn has(&self, key: &str) -> bool {
         self.fields.contains_key(key)
     }
+
+    pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        match value {
+            None => self.refers.remove(key),
+            Some(inner) => self.refers.insert(key.to_string(), inner.clone()),
+        };
+    }
+    pub fn get_refer(&self, key: &str) -> Option<&EntityInnerPointer> {
+        self.refers.get(key)
+    }
+    pub fn has_refer(&self, key: &str) -> bool {
+        self.refers.contains_key(key)
+    }
 }
 
 pub trait Entity {
     fn meta() -> &'static EntityMeta;
-    fn inner(&self) -> &EntityInner;
-    fn inner_mut(&mut self) -> &mut EntityInner;
+    fn inner(&self) -> EntityInnerPointer;
+    fn do_inner<F, R>(&self, cb: F) -> R
+        where F: FnOnce(&EntityInner) -> R
+    {
+        let rc = self.inner();
+        let inner = rc.borrow();
+        cb(&inner)
+    }
+    fn do_inner_mut<F, R>(&self, cb: F) -> R
+        where F: FnOnce(&mut EntityInner) -> R
+    {
+        let rc = self.inner();
+        let mut inner = rc.borrow_mut();
+        cb(&mut inner)
+    }
+
+    fn do_inner_get<R>(&self, key: &str) -> R
+        where R: FromValue
+    {
+        self.do_inner(|inner| inner.get(key).unwrap())
+    }
+    fn do_inner_set<V>(&self, key: &str, value: V)
+        where Value: From<V>
+    {
+        self.do_inner_mut(|inner| inner.set(key, Some(value)))
+    }
+    fn do_inner_has(&self, key: &str) -> bool {
+        self.do_inner(|inner| inner.has(key))
+    }
 
     fn set_id(&mut self, id: u64) {
-        self.inner_mut().set("id", Some(id));
+        self.do_inner_mut(|inner| inner.set("id", Some(id)));
     }
     fn get_id(&self) -> u64 {
-        self.inner().get("id").unwrap()
+        self.do_inner(|inner| inner.get("id").unwrap())
     }
     fn has_id(&self) -> bool {
-        self.inner().has("id")
+        self.do_inner(|inner| inner.has("id"))
     }
 
     fn get_columns() -> Vec<String> {
@@ -60,7 +106,9 @@ pub trait Entity {
         let meta = Self::meta();
         meta.fields
             .iter()
-            .map(|field| Value::from(self.inner().fields.get(&field.field_name).clone()))
+            .map(|field| {
+                self.do_inner(|inner| Value::from(inner.fields.get(&field.field_name).clone()))
+            })
             .collect::<Vec<_>>()
     }
     fn get_params(&self) -> Vec<(String, Value)> {
@@ -82,7 +130,7 @@ pub trait Entity {
             match result.column_index(key) {
                 Some(idx) => {
                     let value = row.as_ref(idx).clone();
-                    self.inner_mut().set(key, value);
+                    self.do_inner_mut(|inner| inner.set(key, value));
                     Ok(())
                 }
                 None => {

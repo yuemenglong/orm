@@ -91,8 +91,6 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
             FieldMeta::create_refer(field, &ty)
         }
     }
-
-
 }
 fn visit_struct_field_attrs(field_meta: &mut FieldMeta,
                             attrs: &Vec<syntax::ast::Attribute>)

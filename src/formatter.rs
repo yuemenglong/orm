@@ -12,6 +12,7 @@ use meta::*;
 
 static TPL: &'static str = r#"
 use ast;
+use ast::Entity;
 use std::sync::Once;
 use std::sync::ONCE_INIT;
 
@@ -30,7 +31,7 @@ ${ENTITIES}
 static TPL_STRUCT: &'static str = r#"
 #[derive(Debug, Clone, Default)]
 pub struct ${ENTITY_NAME} {
-    inner: ast::EntityInner,
+    inner: ast::EntityInnerPointer,
 }
 "#;
 
@@ -45,15 +46,29 @@ impl ${ENTITY_NAME} {${IMPL_FIELDS}
 static TPL_IMPL_FIELD: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.inner.get("${FIELD}").unwrap()
+        self.do_inner_get("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
-        self.inner.set("${FIELD}", Some(value));
+        self.do_inner_set("${FIELD}", Some(value));
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner.has("${FIELD}")
+        self.do_inner_has("${FIELD}")
+    }"#;
+
+static TPL_IMPL_FIELD_REFER: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> ${TYPE} {
+        self.inner.get_refer("${FIELD}").unwrap()
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
+        self.inner.set_refer("${FIELD}", Some(value));
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner.has_refer("${FIELD}")
     }"#;
 
 static TPL_TRAIT: &'static str = r#"
@@ -61,11 +76,8 @@ impl ast::Entity for ${ENTITY_NAME} {
     fn meta() -> &'static ast::meta::EntityMeta {
         meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
-    fn inner(&self) -> &ast::EntityInner {
-        &self.inner
-    }
-    fn inner_mut(&mut self) -> &mut ast::EntityInner {
-        &mut self.inner
+    fn inner(&self) -> ast::EntityInnerPointer {
+        self.inner.clone()
     }
 }
 "#;

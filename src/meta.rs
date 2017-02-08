@@ -30,8 +30,14 @@ pub struct OrmMeta {
 }
 
 impl EntityMeta {
+    pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
+        self.fields.iter().filter(|field| !field.refer && !field.pkey).collect::<Vec<_>>()
+    }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
         self.fields.iter().filter(|field| !field.refer).collect::<Vec<_>>()
+    }
+    pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
+        self.fields.iter().filter(|field| field.refer).collect::<Vec<_>>()
     }
 }
 
