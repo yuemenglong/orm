@@ -30,6 +30,9 @@ pub struct OrmMeta {
 }
 
 impl EntityMeta {
+    pub fn get_id_fields(&self) -> Vec<&FieldMeta> {
+        self.fields.iter().filter(|field| field.pkey).collect::<Vec<_>>()
+    }
     pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
         self.fields.iter().filter(|field| !field.refer && !field.pkey).collect::<Vec<_>>()
     }

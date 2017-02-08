@@ -46,7 +46,7 @@ impl ${ENTITY_NAME} {${IMPL_FIELDS}
 static TPL_IMPL_FIELD: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.do_inner_get("${FIELD}")
+        self.do_inner_get("${FIELD}").unwrap()
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
@@ -83,27 +83,24 @@ impl ast::Entity for ${ENTITY_NAME} {
 "#;
 
 fn do_id_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.fields
-        .iter()
-        .filter(|field| field.pkey)
+    meta.get_id_fields()
+        .into_iter()
         .map(cb)
         .collect::<Vec<_>>()
         .join(join)
 }
 
 fn do_normal_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.fields
-        .iter()
-        .filter(|field| !field.pkey && !field.refer)
+    meta.get_normal_fields()
+        .into_iter()
         .map(cb)
         .collect::<Vec<_>>()
         .join(join)
 }
 
 fn do_refer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.fields
-        .iter()
-        .filter(|field| field.refer)
+    meta.get_refer_fields()
+        .into_iter()
         .map(cb)
         .collect::<Vec<_>>()
         .join(join)
@@ -137,11 +134,11 @@ fn format_entity_define(meta: &EntityMeta) -> String {
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let normal_fields = do_normal_fields(meta, "", &format_entity_field_impl);
-    let refer_fields = do_refer_fields(meta, "", &format_entity_field_impl);
-    let fields = format!("{}\n{}", normal_fields, refer_fields);
+    // let refer_fields = do_refer_fields(meta, "", &format_entity_field_impl);
+    // let fields = format!("{}\n{}", normal_fields, refer_fields);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-        .replace("${IMPL_FIELDS}", &fields)
+        .replace("${IMPL_FIELDS}", &normal_fields)
 }
 fn format_entity_trait_get_value(meta: &FieldMeta) -> String {
     format!("ast::Value::from(&self.{})", meta.field_name)
