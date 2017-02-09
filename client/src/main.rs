@@ -11,7 +11,11 @@ use entity::*;
 
 fn main() {
     let db = ast::open("root", "root", "172.16.16.213", 3306, "test").unwrap();
-    curd_test(&db);
+    refer_test(&db);
+}
+
+fn refer_test(db: &ast::DB){
+    db.rebuild(meta());
 }
 
 fn curd_test(db: &ast::DB) {
@@ -30,5 +34,4 @@ fn curd_test(db: &ast::DB) {
     db.delete(p).unwrap();
     let p = db.get::<Person>(id).unwrap();
     println!("{:?}", p);
-
 }

@@ -15,6 +15,10 @@ pub struct DB {
 }
 
 impl DB {
+    pub fn rebuild(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
+        try!(self.drop_tables(meta));
+        Ok(try!(self.create_tables(meta)))
+    }
     pub fn create_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in meta.entities.iter() {

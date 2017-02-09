@@ -34,12 +34,13 @@ impl EntityInner {
             None => Value::NULL,
         }
     }
+
     pub fn set<V>(&mut self, key: &str, value: Option<V>)
-        where Value: From<V>
+        where Value: From<Option<V>>
     {
         match value {
             None => self.fields.remove(key),
-            Some(v) => self.fields.insert(key.to_string(), Value::from(v)),
+            Some(v) => self.fields.insert(key.to_string(), Value::from(Some(v))),
         };
     }
     pub fn get<V>(&self, key: &str) -> Option<V>
@@ -67,6 +68,7 @@ impl EntityInner {
 
 pub trait Entity {
     fn meta() -> &'static EntityMeta;
+    fn new(inner: EntityInnerPointer) -> Self;
     fn inner(&self) -> EntityInnerPointer;
     fn do_inner<F, R>(&self, cb: F) -> R
         where F: FnOnce(&EntityInner) -> R
@@ -88,13 +90,27 @@ pub trait Entity {
     {
         self.do_inner(|inner| inner.get::<V>(key))
     }
-    fn do_inner_set<V>(&self, key: &str, value: V)
-        where Value: From<V>
+    fn do_inner_set<V>(&self, key: &str, value: Option<V>)
+        where Value: From<Option<V>>
     {
-        self.do_inner_mut(|inner| inner.set(key, Some(value)))
+        self.do_inner_mut(|inner| inner.set(key, value));
     }
     fn do_inner_has(&self, key: &str) -> bool {
         self.do_inner(|inner| inner.has(key))
+    }
+
+    fn do_inner_get_refer<E>(&self, key: &str) -> Option<E>
+        where E: Entity
+    {
+        self.do_inner(|inner| inner.get_refer(key)).map(|inner_rc| E::new(inner_rc))
+    }
+    fn do_inner_set_refer<E>(&self, key: &str, value: Option<&E>)
+        where E: Entity
+    {
+        self.do_inner_mut(|inner| inner.set_refer(key, value.map(|v| v.inner())));
+    }
+    fn do_inner_has_refer(&self, key: &str) -> bool {
+        self.do_inner(|inner| inner.has_refer(key))
     }
 
     fn set_id(&mut self, id: u64) {
