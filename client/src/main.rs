@@ -16,6 +16,12 @@ fn main() {
 
 fn refer_test(db: &ast::DB){
     db.rebuild(meta());
+    let mut p = Person::default();
+    p.set_name("Tom".to_string());
+    let mut a = Address::default();
+    p.set_addr(&a);
+    println!("{:?}", p);
+    db.insert(&p).unwrap();
 }
 
 fn curd_test(db: &ast::DB) {
