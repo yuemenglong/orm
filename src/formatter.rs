@@ -13,11 +13,10 @@ use meta::*;
 static TPL: &'static str = r#"
 use ast;
 use ast::Entity;
-use std::sync::Once;
-use std::sync::ONCE_INIT;
+use std;
 
 static mut META: Option<&'static ast::meta::OrmMeta> = None;
-static ONCE: Once = ONCE_INIT;
+static ONCE: std::sync::Once = std::sync::ONCE_INIT;
 
 pub fn meta() -> &'static ast::meta::OrmMeta {
     let json = r#${JSON}#;
@@ -49,7 +48,7 @@ static TPL_IMPL_FIELD: &'static str = r#"
         self.do_inner_get("${FIELD}").unwrap()
     }
     #[allow(dead_code)]
-    pub fn set_${FIELD}(&mut self, value: ${TYPE}) {
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
         self.do_inner_set("${FIELD}", Some(value));
     }
     #[allow(dead_code)]
@@ -59,8 +58,8 @@ static TPL_IMPL_FIELD: &'static str = r#"
 
 static TPL_IMPL_REFER: &'static str = r#"
     #[allow(dead_code)]
-    pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.do_inner_get_refer("${FIELD}").unwrap()
+    pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
+        Box::new(self.do_inner_get_refer("${FIELD}").unwrap())
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: &${TYPE}) {
@@ -129,13 +128,12 @@ fn format_entity(meta: &EntityMeta) -> String {
     format!("{}{}{}", entity, implt, treit)
 }
 fn format_entity_define(meta: &EntityMeta) -> String {
-    let id_fields = do_id_fields(meta, "", &format_entity_define_field);
-    let normal_fields = do_normal_fields(meta, "", &format_entity_define_field);
-    let refer_fields = do_refer_fields(meta, "", &format_entity_define_field);
-    let fields = format!("{}{}\n{}", id_fields, normal_fields, refer_fields);
+    // let id_fields = do_id_fields(meta, "", &format_entity_define_field);
+    // let normal_fields = do_normal_fields(meta, "", &format_entity_define_field);
+    // let refer_fields = do_refer_fields(meta, "", &format_entity_define_field);
+    // let fields = format!("{}{}\n{}", id_fields, normal_fields, refer_fields);
     TPL_STRUCT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-        .replace("${STRUCT_FIELDS}", &fields)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
@@ -156,9 +154,14 @@ fn format_entity_define_field(meta: &FieldMeta) -> String {
     TPL_STRUCT_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)
 }
 fn format_entity_impl_field(meta: &FieldMeta) -> String {
+    let set_type = match meta.ty.as_ref() {
+        "String" => "&str",
+        _ => &meta.ty,
+    };
     TPL_IMPL_FIELD.to_string()
         .replace("${FIELD}", &meta.field_name)
         .replace("${TYPE}", &meta.ty)
+        .replace("${SET_TYPE}", set_type)
 }
 fn format_entity_impl_refer(meta: &FieldMeta) -> String {
     TPL_IMPL_REFER.to_string()

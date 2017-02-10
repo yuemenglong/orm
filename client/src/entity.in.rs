@@ -8,6 +8,6 @@ struct Person {
 }
 
 struct Address {
-    // road: String,
+    road: String,
     no: u64,
 }
