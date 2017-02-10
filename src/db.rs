@@ -79,7 +79,7 @@ impl DB {
             Err(err) => Err(err),
         }
     }
-    pub fn get<E: Entity + Default>(&self, id: u64) -> Result<Option<E>, Error> {
+    pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
         let sql = sql_get(E::meta());
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, vec![("id", id)]);
@@ -124,5 +124,8 @@ fn do_insert<E, C>(entity: &E, conn: &mut C) -> Result<E, Error>
           C: GenericConnection
 {
     // 1. 遍历所有refer，看有没有id，没有的话做insert，有的话暂时什么都不做
+    for field_meta in E::meta().get_refer_fields() {
+        
+    }
     entity.do_insert(conn)
 }
