@@ -1,7 +1,6 @@
 extern crate ast;
 
 use ast::Entity;
-use ast::sql;
 
 mod entity;
 use entity::*;

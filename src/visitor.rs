@@ -50,9 +50,8 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
                 .map(visit_struct_field)
                 .collect();
             // 为引用类型加上id
-            let refer_id_vec = entity_meta.fields
-                .iter()
-                .filter(|field| field.refer)
+            let refer_id_vec = entity_meta.get_refer_fields()
+                .into_iter()
                 .map(FieldMeta::create_refer_id)
                 .collect::<Vec<_>>();
             entity_meta.fields.extend(refer_id_vec);
@@ -85,7 +84,6 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
             attach_len(&mut field_meta);
             // 3.db_ty
             attach_db_type(&mut field_meta);
-            println!("{:?}", field_meta);
 
             field_meta
         }

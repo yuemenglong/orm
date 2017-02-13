@@ -10,7 +10,7 @@ pub struct FieldMeta {
     pub nullable: bool,
     pub len: u64,
     pub pkey: bool,
-    pub refer: bool, // 是否为引用属性
+    pub refer: Option<String>, // 是否为引用属性
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
@@ -34,13 +34,13 @@ impl EntityMeta {
         self.fields.iter().filter(|field| field.pkey).collect::<Vec<_>>()
     }
     pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| !field.refer && !field.pkey).collect::<Vec<_>>()
+        self.fields.iter().filter(|field| field.refer.is_none() && !field.pkey).collect::<Vec<_>>()
     }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| !field.refer).collect::<Vec<_>>()
+        self.fields.iter().filter(|field| field.refer.is_none()).collect::<Vec<_>>()
     }
     pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.refer).collect::<Vec<_>>()
+        self.fields.iter().filter(|field| field.refer.is_some()).collect::<Vec<_>>()
     }
 
     pub fn get_columns(&self) -> Vec<String> {
@@ -102,33 +102,32 @@ impl FieldMeta {
             nullable: false,
             len: 0,
             pkey: true,
-            refer: false,
+            refer: None,
         }
     }
     pub fn create_refer(field: &str, ty: &str) -> FieldMeta {
-        let column_name = format!("{}_id", field);
+        let refer_id = format!("{}_id", field);
         FieldMeta {
             field_name: field.to_string(),
-            column_name: column_name.to_string(),
+            column_name: refer_id.to_string(),
             ty: ty.to_string(),
-            db_ty: format!("`{}` BIGINT", &column_name),
+            db_ty: format!("`{}` BIGINT", &refer_id),
             nullable: true,
             len: 0,
             pkey: false,
-            refer: true,
+            refer: Some(refer_id),
         }
     }
     pub fn create_refer_id(meta: &FieldMeta) -> FieldMeta {
-        let field_name = format!("{}_id", meta.field_name);
         FieldMeta {
-            field_name: field_name.clone(),
+            field_name: meta.refer.as_ref().unwrap().clone(),
             column_name: meta.column_name.clone(),
             ty: "u64".to_string(),
             db_ty: meta.db_ty.clone(),
             nullable: true,
             len: 0,
             pkey: false,
-            refer: false,
+            refer: None,
         }
     }
 }

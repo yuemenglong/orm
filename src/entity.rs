@@ -15,7 +15,6 @@ use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
 use meta::FieldMeta;
-use sql;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
@@ -64,7 +63,11 @@ impl EntityInner {
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         match value {
             None => self.refers.remove(key),
-            Some(inner) => self.refers.insert(key.to_string(), inner.clone()),
+            Some(inner) => {
+                // let field_meta = self.meta().field_map.get(key).unwrap();
+                // let refer_id = field_meta.
+                self.refers.insert(key.to_string(), inner.clone())
+            }
         };
     }
     pub fn get_refer(&self, key: &str) -> Option<EntityInnerPointer> {

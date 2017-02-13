@@ -13,7 +13,6 @@ mod db;
 mod cond;
 mod entity;
 
-pub mod sql;
 pub mod init;
 pub mod meta;
 

@@ -11,7 +11,6 @@ use std::ops::DerefMut;
 // use cond::Cond;
 use entity::Entity;
 use entity::EntityInner;
-use sql::*;
 
 pub struct DB {
     pub pool: Pool,
