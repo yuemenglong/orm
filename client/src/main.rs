@@ -12,7 +12,7 @@ use entity::*;
 // default值的问题
 // str的问题
 fn main() {
-    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
+    let db = ast::open("root", "root", "172.16.16.213", 3306, "test").unwrap();
     refer_test(&db);
 }
 

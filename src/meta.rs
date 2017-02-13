@@ -109,9 +109,9 @@ impl FieldMeta {
         let column_name = format!("{}_id", field);
         FieldMeta {
             field_name: field.to_string(),
-            column_name: column_name,
+            column_name: column_name.to_string(),
             ty: ty.to_string(),
-            db_ty: format!("`{}` BIGINT", field),
+            db_ty: format!("`{}` BIGINT", &column_name),
             nullable: true,
             len: 0,
             pkey: false,

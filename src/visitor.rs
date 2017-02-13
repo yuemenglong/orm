@@ -16,6 +16,8 @@ use anno::Annotation;
 
 use meta::*;
 
+const DEFAULT_LEN: u64 = 64;
+
 #[derive(Debug)]
 enum FieldType {
     Normal,
@@ -79,9 +81,11 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
             // 1.ty
             let ty = ty_to_string(field.ty.deref());
             field_meta.ty = ty.clone();
-            // 2.db_ty
+            // 2.len
+            attach_len(&mut field_meta);
+            // 3.db_ty
             attach_db_type(&mut field_meta);
-            // 3.
+            println!("{:?}", field_meta);
 
             field_meta
         }
@@ -134,8 +138,11 @@ fn attach_db_type(field_meta: &mut FieldMeta) {
     }
 }
 
-fn attach_len(field_meta: &mut FieldMeta){
-   
+fn attach_len(field_meta: &mut FieldMeta) {
+    match (field_meta.ty.as_ref(), field_meta.len) {
+        ("String", 0) => field_meta.len = DEFAULT_LEN,
+        (_, _) => {}
+    }
 }
 
 pub fn fix_meta(meta: &mut OrmMeta) {
