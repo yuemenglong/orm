@@ -12,7 +12,7 @@ use entity::*;
 // default值的问题
 // str的问题
 fn main() {
-    let db = ast::open("root", "root", "172.16.16.213", 3306, "test").unwrap();
+    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
     refer_test(&db);
 }
 
@@ -34,7 +34,7 @@ fn curd_test(db: &ast::DB) {
     p.set_name("Tom");
     db.drop_table::<Person>().unwrap();
     let ret = db.create_table::<Person>().unwrap();
-    let mut p = db.insert(&p).unwrap();
+    db.insert(&p).unwrap();
     println!("{:?}", p);
     let id = p.get_id();
     p.set_name("Dick");

@@ -42,6 +42,54 @@ impl EntityMeta {
     pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
         self.fields.iter().filter(|field| field.refer).collect::<Vec<_>>()
     }
+
+    pub fn get_columns(&self) -> Vec<String> {
+        self.get_normal_fields()
+            .iter()
+            .map(|field| field.column_name.clone())
+            .collect::<Vec<_>>()
+    }
+    pub fn sql_create_table(&self) -> String {
+        let fields = self.get_non_refer_fields()
+            .iter()
+            .map(|field| field.db_ty.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
+                self.table_name,
+                fields)
+    }
+    pub fn sql_drop_table(&self) -> String {
+        format!("DROP TABLE IF EXISTS `{}`", self.table_name)
+    }
+    pub fn sql_insert(&self) -> String {
+        let columns = self.get_columns().join(", ");
+        let values = self.get_columns()
+            .iter()
+            .map(|column| format!(":{}", column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("INSERT INTO `{}`({}) VALUES ({})",
+                &self.table_name,
+                &columns,
+                &values)
+    }
+    pub fn sql_update(&self) -> String {
+        let pairs = self.get_columns()
+            .iter()
+            .map(|column| format!("{} = :{}", column, column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("UPDATE `{}` SET {} where id = :id",
+                &self.table_name,
+                &pairs)
+    }
+    pub fn sql_get(&self) -> String {
+        format!("SELECT * FROM `{}` WHERE id = :id", &self.table_name)
+    }
+    pub fn sql_delete(&self) -> String {
+        format!("DELETE FROM `{}` WHERE id = :id", &self.table_name)
+    }
 }
 
 impl FieldMeta {
@@ -58,11 +106,12 @@ impl FieldMeta {
         }
     }
     pub fn create_refer(field: &str, ty: &str) -> FieldMeta {
+        let column_name = format!("{}_id", field);
         FieldMeta {
             field_name: field.to_string(),
-            column_name: "".to_string(),
+            column_name: column_name,
             ty: ty.to_string(),
-            db_ty: "".to_string(),
+            db_ty: format!("`{}` BIGINT", field),
             nullable: true,
             len: 0,
             pkey: false,
@@ -73,9 +122,9 @@ impl FieldMeta {
         let field_name = format!("{}_id", meta.field_name);
         FieldMeta {
             field_name: field_name.clone(),
-            column_name: field_name.clone(),
+            column_name: meta.column_name.clone(),
             ty: "u64".to_string(),
-            db_ty: format!("`{}` BIGINT", &field_name),
+            db_ty: meta.db_ty.clone(),
             nullable: true,
             len: 0,
             pkey: false,

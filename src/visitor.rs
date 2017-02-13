@@ -81,6 +81,7 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
             field_meta.ty = ty.clone();
             // 2.db_ty
             attach_db_type(&mut field_meta);
+            // 3.
 
             field_meta
         }
@@ -131,6 +132,10 @@ fn attach_db_type(field_meta: &mut FieldMeta) {
             panic!("Unsupported Type: {}", field_meta.ty);
         }
     }
+}
+
+fn attach_len(field_meta: &mut FieldMeta){
+   
 }
 
 pub fn fix_meta(meta: &mut OrmMeta) {

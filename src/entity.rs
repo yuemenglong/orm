@@ -34,14 +34,14 @@ impl EntityInner {
             refers: HashMap::new(),
         }
     }
-    pub fn set_value(&mut self, key: &str, value: Value) {
-        self.fields.insert(key.to_string(), value);
+    pub fn meta(&self) -> &'static EntityMeta {
+        self.meta
     }
-    pub fn get_value(&self, key: &str) -> Value {
-        match self.fields.get(key) {
-            Some(value) => value.clone(),
-            None => Value::NULL,
-        }
+    pub fn fields(&self) -> &HashMap<String, Value> {
+        &self.fields
+    }
+    pub fn refers(&self) -> &HashMap<String, EntityInnerPointer> {
+        &self.refers
     }
 
     pub fn set<V>(&mut self, key: &str, value: Option<V>)
@@ -58,7 +58,7 @@ impl EntityInner {
         self.fields.get(key).map(|value| value::from_value(value.clone()))
     }
     pub fn has(&self, key: &str) -> bool {
-        self.fields.contains_key(key)
+        self.fields.contains_key(key) && self.fields.get(key).unwrap() != &Value::NULL
     }
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
@@ -72,6 +72,57 @@ impl EntityInner {
     }
     pub fn has_refer(&self, key: &str) -> bool {
         self.refers.contains_key(key)
+    }
+
+    pub fn get_values(&self) -> Vec<Value> {
+        // 不包括id
+        self.meta()
+            .get_normal_fields()
+            .into_iter()
+            .map(|field| {
+                self.fields
+                    .get(&field.field_name)
+                    .map(|value| value.clone())
+                    .or(Some(Value::NULL))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+    }
+    pub fn get_params(&self) -> Vec<(String, Value)> {
+        // 不包括id
+        self.meta()
+            .get_normal_fields()
+            .into_iter()
+            .map(|field| {
+                (field.column_name.clone(),
+                 self.fields
+                     .get(&field.field_name)
+                     .map(|value| value.clone())
+                     .or(Some(Value::NULL))
+                     .unwrap())
+            })
+            .collect::<Vec<_>>()
+    }
+    pub fn set_values(&mut self, result: &QueryResult, row: &mut Row, prefix: &str) {
+        // 包括id
+        for field in self.meta.get_non_refer_fields() {
+            let key = &field.field_name;
+            result.column_index(key).map(|idx| {
+                self.fields.insert(field.field_name.to_string(),
+                                   row.as_ref(idx).unwrap().clone());
+            });
+        }
+    }
+
+    pub fn do_insert<C>(&mut self, conn: &mut C) -> Result<(), Error>
+        where C: GenericConnection
+    {
+        let sql = self.meta().sql_insert();
+        let params = self.get_params();
+        println!("{}, {:?}", sql, params);
+        conn.prep_exec(sql, params).map(|res| {
+            self.fields.insert("id".to_string(), Value::from(res.last_insert_id()));
+        })
     }
 }
 
@@ -89,6 +140,7 @@ pub trait Entity {
     fn default() -> Self;
     fn new(inner: EntityInnerPointer) -> Self;
     fn inner(&self) -> EntityInnerPointer;
+
     fn do_inner<F, R>(&self, cb: F) -> R
         where F: FnOnce(&EntityInner) -> R
     {
@@ -142,79 +194,10 @@ pub trait Entity {
         self.inner_has("id")
     }
 
-    fn get_columns() -> Vec<String> {
-        sql::entity_get_columns(Self::meta())
-    }
-    fn get_values(&self) -> Vec<Value> {
-        // 不包括id
-        let meta = Self::meta();
-        meta.fields
-            .iter()
-            .map(|field| self.do_inner(|inner| inner.get_value(&field.field_name)))
-            .collect::<Vec<_>>()
-    }
-    fn get_params(&self) -> Vec<(String, Value)> {
-        Self::meta()
-            .get_normal_fields()
-            .into_iter()
-            .map(|field| {
-                (field.column_name.clone(),
-                 self.do_inner(|inner| inner.get_value(&field.field_name)))
-            })
-            .collect::<Vec<_>>()
-    }
-    fn set_values(&mut self,
-                  result: &QueryResult,
-                  row: &mut Row,
-                  prefix: &str)
-                  -> Result<(), Error> {
-        let meta = Self::meta();
-        let fields = meta.get_non_refer_fields();
-
-        fields.iter().fold(Ok(()), |acc, field| {
-            if acc.is_err() {
-                return acc;
-            }
-            let key = &field.field_name;
-            match result.column_index(key) {
-                Some(idx) => {
-                    let value = row.as_ref(idx).clone();
-                    self.inner_set(key, value);
-                    Ok(())
-                }
-                None => {
-                    let state = "ORM_INVALID_COLUMN_NAME".to_string();
-                    let message = key.to_string();
-                    let code = 60001;
-                    Err(Error::MySqlError(MySqlError {
-                        state: state,
-                        message: message,
-                        code: code,
-                    }))
-                }
-            }
-        })
-    }
 
     // fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;
     // fn set_refer(&mut self, field: &str, e: Option<Entity>);
 
-    fn do_insert<C>(&self, conn: &mut C) -> Result<Self, Error>
-        where C: GenericConnection,
-              Self: Clone
-    {
-        let sql = sql::sql_insert(Self::meta());
-        println!("{}", sql);
-        let res = conn.prep_exec(sql, self.get_params());
-        match res {
-            Ok(res) => {
-                let mut ret = (*self).clone();
-                ret.set_id(res.last_insert_id());
-                Ok(ret)
-            }
-            Err(err) => Err(err),
-        }
-    }
 
     // fn get_name() -> String;
     // // fn get_field_meta() -> Vec<FieldMeta>;
@@ -222,8 +205,8 @@ pub trait Entity {
     // fn from_row(row: Row) -> Self;
     // fn from_row_ex(row: Row, nameMap: &HashMap<String, String>) -> Self;
 
-    // fn get_create_table() -> String;
-    // fn get_drop_table() -> String;
+    // fn sql_create_table() -> String;
+    // fn sql_drop_table() -> String;
 
     // fn get_field_list() -> String;
     // fn get_prepare() -> String;

@@ -5,9 +5,12 @@ use mysql::Value;
 use mysql::prelude::GenericConnection;
 use meta;
 use std::fmt::Debug;
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 // use cond::Cond;
 use entity::Entity;
+use entity::EntityInner;
 use sql::*;
 
 pub struct DB {
@@ -22,7 +25,7 @@ impl DB {
     pub fn create_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in meta.entities.iter() {
-            let sql = sql_create_table(entity_meta);
+            let sql = entity_meta.sql_create_table();
             println!("{}", sql);
             match self.pool.prep_exec(sql, ()) {
                 Ok(res) => ret += res.affected_rows(),
@@ -36,7 +39,7 @@ impl DB {
     pub fn drop_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in meta.entities.iter() {
-            let sql = sql_drop_table(entity_meta);
+            let sql = entity_meta.sql_drop_table();
             println!("{}", sql);
             match self.pool.prep_exec(sql, ()) {
                 Ok(res) => ret += res.affected_rows(),
@@ -48,7 +51,7 @@ impl DB {
         return Ok(ret);
     }
     pub fn create_table<E: Entity>(&self) -> Result<u64, Error> {
-        let sql = sql_create_table(E::meta());
+        let sql = E::meta().sql_create_table();
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, ());
         match res {
@@ -57,7 +60,7 @@ impl DB {
         }
     }
     pub fn drop_table<E: Entity>(&self) -> Result<u64, Error> {
-        let sql = sql_drop_table(E::meta());
+        let sql = E::meta().sql_drop_table();
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, ());
         match res {
@@ -65,13 +68,16 @@ impl DB {
             Err(err) => Err(err),
         }
     }
-    pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<E, Error> {
-        do_insert(entity, self.pool.get_conn().as_mut().unwrap())
+    pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
+        let inner_rc = entity.inner();
+        let mut inner = inner_rc.borrow_mut();
+        // let mut conn = self.pool.get_conn().as_mut().unwrap();
+        do_insert(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
-        let sql = sql_update(E::meta());
+        let sql = E::meta().sql_update();
         println!("{}", sql);
-        let mut params = entity.get_params();
+        let mut params = entity.do_inner(|inner| inner.get_params());
         params.push(("id".to_string(), Value::from(entity.get_id())));
         let res = self.pool.prep_exec(sql, params);
         match res {
@@ -80,7 +86,7 @@ impl DB {
         }
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
-        let sql = sql_get(E::meta());
+        let sql = E::meta().sql_get();
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, vec![("id", id)]);
         if let Err(err) = res {
@@ -97,11 +103,11 @@ impl DB {
         }
         let mut row = row_res.unwrap();
         let mut entity = E::default();
-        entity.set_values(&res, &mut row, "");
+        entity.do_inner_mut(|inner| inner.set_values(&res, &mut row, ""));
         Ok(Some(entity))
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
-        let sql = sql_delete(E::meta());
+        let sql = E::meta().sql_delete();
         println!("{}", sql);
         let res = self.pool.prep_exec(sql, vec![("id", entity.get_id())]);
         match res {
@@ -119,13 +125,14 @@ impl DB {
 }
 
 
-fn do_insert<E, C>(entity: &E, conn: &mut C) -> Result<E, Error>
-    where E: Entity + Clone,
-          C: GenericConnection
+fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
+    where C: GenericConnection
 {
-    // 1. 遍历所有refer，看有没有id，没有的话做insert，有的话暂时什么都不做
-    for field_meta in E::meta().get_refer_fields() {
-        
+    for (refer_field, refer_inner_rc) in inner.refers() {
+        let mut refer_inner = refer_inner_rc.borrow_mut();
+        if !refer_inner.has("id"){
+            try!(do_insert(refer_inner.deref_mut(), conn));
+        }
     }
-    entity.do_insert(conn)
+    inner.do_insert(conn)
 }
