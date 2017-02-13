@@ -131,6 +131,7 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
         let mut refer_inner = refer_inner_rc.borrow_mut();
         if !refer_inner.has("id"){
             try!(do_insert(refer_inner.deref_mut(), conn));
+            inner.set_refer(refer_field, Some(refer_inner_rc.clone()));
         }
     }
     inner.do_insert(conn)

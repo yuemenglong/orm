@@ -61,12 +61,21 @@ impl EntityInner {
     }
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        let refer_meta = self.meta().field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.refer.as_ref().unwrap().clone();
         match value {
-            None => self.refers.remove(key),
+            None => {
+                self.fields.remove(&refer_id_field);
+                self.refers.remove(key);
+            }
             Some(inner) => {
-                // let field_meta = self.meta().field_map.get(key).unwrap();
-                // let refer_id = field_meta.
-                self.refers.insert(key.to_string(), inner.clone())
+                if inner.borrow().has("id") {
+                    let refer_id = inner.borrow().get("id").unwrap();
+                    self.fields.insert(refer_id_field, refer_id);
+                } else {
+                    self.fields.remove(&refer_id_field);
+                }
+                self.refers.insert(key.to_string(), inner.clone());
             }
         };
     }
