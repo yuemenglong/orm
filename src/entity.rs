@@ -15,6 +15,7 @@ use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
 use meta::FieldMeta;
+use meta::TypeMeta;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
@@ -52,23 +53,24 @@ impl EntityInner {
     }
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
-        // let refer_meta = self.meta.field_map.get(key).unwrap();
-        // let refer_id_field = refer_meta.refer.as_ref().unwrap().clone();
-        // match value {
-        //     None => {
-        //         self.fields.remove(&refer_id_field);
-        //         self.refers.remove(key);
-        //     }
-        //     Some(inner) => {
-        //         if inner.borrow().has("id") {
-        //             let refer_id = inner.borrow().get("id").unwrap();
-        //             self.fields.insert(refer_id_field, refer_id);
-        //         } else {
-        //             self.fields.remove(&refer_id_field);
-        //         }
-        //         self.refers.insert(key.to_string(), inner.clone());
-        //     }
-        // };
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        if let TypeMeta::Pointer(_, ref refer_id_field) = refer_meta.ty {
+            match value {
+                None => {
+                    self.fields.remove(refer_id_field);
+                    self.refers.remove(key);
+                }
+                Some(inner) => {
+                    if inner.borrow().has("id") {
+                        let refer_id = inner.borrow().get("id").unwrap();
+                        self.fields.insert(refer_id_field.to_string(), refer_id);
+                    } else {
+                        self.fields.remove(refer_id_field);
+                    }
+                    self.refers.insert(key.to_string(), inner.clone());
+                }
+            };
+        }
     }
     pub fn get_refer(&self, key: &str) -> Option<EntityInnerPointer> {
         self.refers.get(key).map(|rc| rc.clone())
@@ -79,7 +81,7 @@ impl EntityInner {
 
     pub fn get_values(&self) -> Vec<Value> {
         // 不包括id
-       self.meta 
+        self.meta
             .get_normal_fields()
             .into_iter()
             .map(|field| {
@@ -93,7 +95,7 @@ impl EntityInner {
     }
     pub fn get_params(&self) -> Vec<(String, Value)> {
         // 不包括id
-       self.meta 
+        self.meta
             .get_normal_fields()
             .into_iter()
             .map(|field| {
