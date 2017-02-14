@@ -156,20 +156,18 @@ fn format_entity_trait(meta: &EntityMeta) -> String {
         .replace("${ENTITY_NAME}", &meta.entity_name)
 }
 fn format_entity_define_field(meta: &FieldMeta) -> String {
-    TPL_STRUCT_FIELD.to_string().replace("${FIELD}", &meta.field_name).replace("${TYPE}", &meta.ty)
+    TPL_STRUCT_FIELD.to_string()
+        .replace("${FIELD}", &meta.field_name)
+        .replace("${TYPE}", &meta.ty())
 }
 fn format_entity_impl_field(meta: &FieldMeta) -> String {
-    let set_type = match meta.ty.as_ref() {
-        "String" => "&str",
-        _ => &meta.ty,
-    };
     TPL_IMPL_FIELD.to_string()
         .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty)
-        .replace("${SET_TYPE}", set_type)
+        .replace("${TYPE}", &meta.ty())
+        .replace("${SET_TYPE}", &meta.set_ty())
 }
 fn format_entity_impl_refer(meta: &FieldMeta) -> String {
     TPL_IMPL_REFER.to_string()
         .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty)
+        .replace("${TYPE}", &meta.ty())
 }

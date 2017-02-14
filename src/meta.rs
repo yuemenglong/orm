@@ -1,16 +1,21 @@
 use std::collections::HashMap;
 use rustc_serialize::json;
 
+#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
+pub enum TypeMeta {
+    NULL,
+    Id,
+    Number(String),
+    String(u64),
+    Pointer(String, String), // refer_entity, refer_id
+}
+
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct FieldMeta {
     pub field_name: String,
     pub column_name: String,
-    pub ty: String,
-    pub db_ty: String,
+    pub ty: TypeMeta,
     pub nullable: bool,
-    pub len: u64,
-    pub pkey: bool,
-    pub refer: Option<String>, // 是否为引用属性
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
@@ -29,18 +34,134 @@ pub struct OrmMeta {
     pub table_map: HashMap<String, EntityMeta>,
 }
 
+impl Default for TypeMeta {
+    fn default() -> TypeMeta {
+        TypeMeta::NULL
+    }
+}
+
+impl FieldMeta {
+    pub fn ty(&self) -> String {
+        match self.ty {
+            TypeMeta::Id => "u64".to_string(),
+            TypeMeta::Number(ref ty) => ty.to_string(),
+            TypeMeta::String(ref len) => "String".to_string(),
+            TypeMeta::Pointer(ref entity, _) => entity.to_string(),
+            _ => unreachable!(),
+        }
+    }
+    pub fn db_ty(&self) -> String {
+        let nullable = match self.nullable {
+            true => "",
+            false => " NOT NULL",
+        };
+        match self.ty {
+            TypeMeta::Id => "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
+            TypeMeta::Number(ref ty) => {
+                match ty.as_ref() {
+                    "i32" => format!("`{}` INTEGER{}", self.column_name, nullable),
+                    "i64" => format!("`{}` BIGINT{}", self.column_name, nullable),
+                    "u64" => format!("`{}` BIGINT{}", self.column_name, nullable),
+                    _ => unreachable!(),
+                }
+            }
+            TypeMeta::String(ref len) => {
+                format!("`{}` VARCHAR({}){}", self.column_name, len, nullable)
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub fn set_ty(&self) -> String {
+        match self.ty {
+            TypeMeta::String(_) => "&str".to_string(),
+            _ => self.ty(),
+        }
+    }
+    pub fn create_pkey() -> FieldMeta {
+        FieldMeta {
+            field_name: "id".to_string(),
+            column_name: "id".to_string(),
+            ty: TypeMeta::Id,
+            nullable: false,
+        }
+    }
+    pub fn create_normal(field: &str, ty: &str, nullable: bool) -> FieldMeta {
+        FieldMeta {
+            field_name: field.to_string(),
+            column_name: field.to_string(),
+            ty: TypeMeta::NULL,
+            nullable: nullable,
+        }
+    }
+    pub fn create_refer(field: &str, ty: &str, nullable: bool) -> FieldMeta {
+        let refer_id = format!("{}_id", field);
+        FieldMeta {
+            field_name: field.to_string(),
+            column_name: refer_id.to_string(),
+            ty: TypeMeta::Pointer(ty.to_string(), refer_id.to_string()),
+            nullable: nullable,
+        }
+    }
+    pub fn create_refer_id(meta: &FieldMeta) -> FieldMeta {
+        match meta.ty {
+            TypeMeta::Pointer(ref entity_name, ref id_field) => {
+                FieldMeta {
+                    field_name: id_field.to_string(),
+                    column_name: meta.column_name.clone(),
+                    ty: TypeMeta::Number("u64".to_string()),
+                    nullable: true,
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl EntityMeta {
     pub fn get_id_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.pkey).collect::<Vec<_>>()
+        self.fields
+            .iter()
+            .filter(|field| {
+                match &field.ty {
+                    &TypeMeta::Id => true,
+                    _ => false,
+                }
+            })
+            .collect::<Vec<_>>()
     }
     pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.refer.is_none() && !field.pkey).collect::<Vec<_>>()
+        self.fields
+            .iter()
+            .filter(|field| {
+                match &field.ty {
+                    &TypeMeta::Number(_) => true,
+                    &TypeMeta::String(_) => true,
+                    _ => false,
+                }
+            })
+            .collect::<Vec<_>>()
     }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.refer.is_none()).collect::<Vec<_>>()
+        self.fields
+            .iter()
+            .filter(|field| {
+                match &field.ty {
+                    &TypeMeta::Pointer(_, _) => false,
+                    _ => true,
+                }
+            })
+            .collect::<Vec<_>>()
     }
     pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.refer.is_some()).collect::<Vec<_>>()
+        self.fields
+            .iter()
+            .filter(|field| {
+                match field.ty {
+                    TypeMeta::Pointer(_, _) => true,
+                    _ => false,
+                }
+            })
+            .collect::<Vec<_>>()
     }
 
     pub fn get_columns(&self) -> Vec<String> {
@@ -52,7 +173,7 @@ impl EntityMeta {
     pub fn sql_create_table(&self) -> String {
         let fields = self.get_non_refer_fields()
             .iter()
-            .map(|field| field.db_ty.to_string())
+            .map(|field| field.db_ty().to_string())
             .collect::<Vec<_>>()
             .join(", ");
         format!("CREATE TABLE IF NOT EXISTS `{}`({})",
@@ -89,45 +210,5 @@ impl EntityMeta {
     }
     pub fn sql_delete(&self) -> String {
         format!("DELETE FROM `{}` WHERE id = :id", &self.table_name)
-    }
-}
-
-impl FieldMeta {
-    pub fn create_pkey() -> FieldMeta {
-        FieldMeta {
-            field_name: "id".to_string(),
-            column_name: "id".to_string(),
-            ty: "u64".to_string(),
-            db_ty: "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
-            nullable: false,
-            len: 0,
-            pkey: true,
-            refer: None,
-        }
-    }
-    pub fn create_refer(field: &str, ty: &str) -> FieldMeta {
-        let refer_id = format!("{}_id", field);
-        FieldMeta {
-            field_name: field.to_string(),
-            column_name: refer_id.to_string(),
-            ty: ty.to_string(),
-            db_ty: format!("`{}` BIGINT", &refer_id),
-            nullable: true,
-            len: 0,
-            pkey: false,
-            refer: Some(refer_id),
-        }
-    }
-    pub fn create_refer_id(meta: &FieldMeta) -> FieldMeta {
-        FieldMeta {
-            field_name: meta.refer.as_ref().unwrap().clone(),
-            column_name: meta.column_name.clone(),
-            ty: "u64".to_string(),
-            db_ty: meta.db_ty.clone(),
-            nullable: true,
-            len: 0,
-            pkey: false,
-            refer: None,
-        }
     }
 }
