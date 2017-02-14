@@ -11,6 +11,7 @@ use std::ops::DerefMut;
 // use cond::Cond;
 use entity::Entity;
 use entity::EntityInner;
+use meta::TypeMeta;
 
 pub struct DB {
     pub pool: Pool,
@@ -129,14 +130,18 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
 {
     for (refer_field, refer_inner_rc) in &inner.refers {
         let field_meta = inner.meta.field_map.get(refer_field).unwrap();
-        let refer_id_field = field_meta.refer.as_ref().unwrap();
-        let mut refer_inner = refer_inner_rc.borrow_mut();
-        // refer对象没有id则直接insert
-        if refer_inner.fields.get("id").is_none() {
-            try!(do_insert(refer_inner.deref_mut(), conn));
-            // 将refer的id写回原对象对应的refer_id
-            let refer_id = refer_inner.fields.get("id").unwrap().clone();
-            inner.fields.insert(refer_id_field.to_string(), refer_id);
+        match field_meta.ty {
+            TypeMeta::Pointer(ref entity, ref refer_id_field) => {
+                let mut refer_inner = refer_inner_rc.borrow_mut();
+                // refer对象没有id则直接insert
+                if refer_inner.fields.get("id").is_none() {
+                    try!(do_insert(refer_inner.deref_mut(), conn));
+                    // 将refer的id写回原对象对应的refer_id
+                    let refer_id = refer_inner.fields.get("id").unwrap().clone();
+                    inner.fields.insert(refer_id_field.to_string(), refer_id);
+                }
+            }
+            _ => unreachable!(),
         }
     }
     inner.do_insert(conn)
