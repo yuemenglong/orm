@@ -20,9 +20,9 @@ pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
 #[derive(Clone)]
 pub struct EntityInner {
-    meta: &'static EntityMeta,
-    fields: HashMap<String, Value>,
-    refers: HashMap<String, EntityInnerPointer>,
+    pub meta: &'static EntityMeta,
+    pub fields: HashMap<String, Value>,
+    pub refers: HashMap<String, EntityInnerPointer>,
 }
 
 impl EntityInner {
@@ -32,15 +32,6 @@ impl EntityInner {
             fields: HashMap::new(),
             refers: HashMap::new(),
         }
-    }
-    pub fn meta(&self) -> &'static EntityMeta {
-        self.meta
-    }
-    pub fn fields(&self) -> &HashMap<String, Value> {
-        &self.fields
-    }
-    pub fn refers(&self) -> &HashMap<String, EntityInnerPointer> {
-        &self.refers
     }
 
     pub fn set<V>(&mut self, key: &str, value: Option<V>)
@@ -61,7 +52,7 @@ impl EntityInner {
     }
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
-        let refer_meta = self.meta().field_map.get(key).unwrap();
+        let refer_meta = self.meta.field_map.get(key).unwrap();
         let refer_id_field = refer_meta.refer.as_ref().unwrap().clone();
         match value {
             None => {
@@ -88,7 +79,7 @@ impl EntityInner {
 
     pub fn get_values(&self) -> Vec<Value> {
         // 不包括id
-        self.meta()
+       self.meta 
             .get_normal_fields()
             .into_iter()
             .map(|field| {
@@ -102,7 +93,7 @@ impl EntityInner {
     }
     pub fn get_params(&self) -> Vec<(String, Value)> {
         // 不包括id
-        self.meta()
+       self.meta 
             .get_normal_fields()
             .into_iter()
             .map(|field| {
@@ -129,7 +120,7 @@ impl EntityInner {
     pub fn do_insert<C>(&mut self, conn: &mut C) -> Result<(), Error>
         where C: GenericConnection
     {
-        let sql = self.meta().sql_insert();
+        let sql = self.meta.sql_insert();
         let params = self.get_params();
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| {
