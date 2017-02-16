@@ -52,7 +52,7 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
             // 为引用类型加上id
             let refer_id_vec = entity_meta.get_refer_fields()
                 .into_iter()
-                .map(FieldMeta::create_refer_id)
+                .map(FieldMeta::create_pointer_id)
                 .collect::<Vec<_>>();
             entity_meta.fields.extend(refer_id_vec);
             // 加上pkey
@@ -64,10 +64,6 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
 }
 fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-    // let mut field_meta = FieldMeta::default();
-    // field_meta.nullable = true;
-    // field_meta.field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-    // field_meta.column_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
     // 检查 id
     if &field_name == "id" {
@@ -79,41 +75,12 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
     let ty = ty_to_string(field.ty.deref());
     match (ty.as_ref(), pointer) {
         // 引用类型
-        (_, true) => FieldMeta::create_refer(&field_name, &ty, nullable),
+        (_, true) => FieldMeta::create_pointer(&field_name, &ty, nullable),
         // String类型
-        ("String", false) => {
-            let mut field_meta = FieldMeta::create_normal(&field_name, &ty, nullable);
-            field_meta.ty = TypeMeta::String(len);
-            field_meta
-        }
+        ("String", false) => FieldMeta::create_string(&field_name, len, nullable),
         // 数字类型
-        (_, false) => {
-            let mut field_meta = FieldMeta::create_normal(&field_name, &ty, nullable);
-            field_meta.ty = TypeMeta::Number(ty);
-            field_meta
-        }
+        (_, false) => FieldMeta::create_number(&field_name, &ty, nullable),
     }
-
-    //  {
-    //     FieldType::Normal => {
-    //         // 处理类型信息
-    //         // 1.ty
-    //         let ty = ty_to_string(field.ty.deref());
-    //         field_meta.ty = ty.clone();
-    //         // 2.len
-    //         attach_len(&mut field_meta);
-    //         // 3.db_ty
-    //         attach_db_type(&mut field_meta);
-
-    //         field_meta
-    //     }
-    //     FieldType::Refer => {
-    //         // 处理引用类型信息
-    //         let ty = ty_to_string(field.ty.deref());
-    //         let field = &field_meta.field_name;
-    //         FieldMeta::create_refer(field, &ty)
-    //     }
-    // }
 }
 //(nullable, len, pointer)
 fn visit_struct_field_attrs(attrs: &Vec<syntax::ast::Attribute>) -> (bool, u64, bool) {
@@ -139,23 +106,23 @@ fn visit_struct_field_attrs(attrs: &Vec<syntax::ast::Attribute>) -> (bool, u64, 
 
 pub fn fix_meta(meta: &mut OrmMeta) {
     for entity_meta in meta.entities.iter_mut() {
-        // fix field map / column map
+        // build field map / column map
         entity_meta.field_map = entity_meta.fields
             .iter()
-            .map(|field_meta_rc| (field_meta_rc.field_name.clone(), field_meta_rc.clone()))
+            .map(|field_meta_rc| (field_meta_rc.field(), field_meta_rc.clone()))
             .collect();
-        entity_meta.column_map = entity_meta.fields
-            .iter()
-            .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
-            .collect();
+        // entity_meta.column_map = entity_meta.fields
+        //     .iter()
+        //     .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
+        //     .collect();
     }
-    // fix entity_map / table_map
+    // build entity_map / table_map
     meta.entity_map = meta.entities
         .iter()
         .map(|entity_meta_rc| (entity_meta_rc.entity_name.clone(), entity_meta_rc.clone()))
         .collect();
-    meta.table_map = meta.entities
-        .iter()
-        .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
-        .collect();
+    // meta.table_map = meta.entities
+    //     .iter()
+    //     .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
+    //     .collect();
 }

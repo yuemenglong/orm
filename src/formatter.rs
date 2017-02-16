@@ -62,7 +62,7 @@ static TPL_IMPL_REFER: &'static str = r#"
         Box::new(self.inner_get_refer("${FIELD}").unwrap())
     }
     #[allow(dead_code)]
-    pub fn set_${FIELD}(&mut self, value: &${TYPE}) {
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
         self.inner_set_refer("${FIELD}", Some(value));
     }
     #[allow(dead_code)]
@@ -149,7 +149,7 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .replace("${IMPL_FIELDS}", &fields)
 }
 fn format_entity_trait_get_value(meta: &FieldMeta) -> String {
-    format!("ast::Value::from(&self.{})", meta.field_name)
+    format!("ast::Value::from(&self.{})", meta.field())
 }
 fn format_entity_trait(meta: &EntityMeta) -> String {
     TPL_TRAIT.to_string()
@@ -157,17 +157,18 @@ fn format_entity_trait(meta: &EntityMeta) -> String {
 }
 fn format_entity_define_field(meta: &FieldMeta) -> String {
     TPL_STRUCT_FIELD.to_string()
-        .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty())
+        .replace("${FIELD}", &meta.field())
+        .replace("${TYPE}", &meta.type_name())
 }
 fn format_entity_impl_field(meta: &FieldMeta) -> String {
     TPL_IMPL_FIELD.to_string()
-        .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty())
-        .replace("${SET_TYPE}", &meta.set_ty())
+        .replace("${FIELD}", &meta.field())
+        .replace("${TYPE}", &meta.type_name())
+        .replace("${SET_TYPE}", &meta.type_name_set())
 }
 fn format_entity_impl_refer(meta: &FieldMeta) -> String {
     TPL_IMPL_REFER.to_string()
-        .replace("${FIELD}", &meta.field_name)
-        .replace("${TYPE}", &meta.ty())
+        .replace("${FIELD}", &meta.field())
+        .replace("${TYPE}", &meta.type_name())
+        .replace("${SET_TYPE}", &meta.type_name_set())
 }

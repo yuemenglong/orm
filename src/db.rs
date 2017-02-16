@@ -12,6 +12,7 @@ use std::ops::DerefMut;
 use entity::Entity;
 use entity::EntityInner;
 use meta::TypeMeta;
+use meta::TypeReferMeta;
 
 pub struct DB {
     pub pool: Pool,
@@ -128,10 +129,12 @@ impl DB {
 fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
     where C: GenericConnection
 {
+    // 遍历目前已存在的引用
     for (refer_field, refer_inner_rc) in &inner.refers {
-        let field_meta = inner.meta.field_map.get(refer_field).unwrap();
-        match field_meta.ty {
-            TypeMeta::Pointer(ref entity, ref refer_id_field) => {
+        // 拿到该引用对应的meta信息
+        let refer_meta = inner.meta.field_map.get(refer_field).unwrap();
+        match refer_meta.as_refer() {
+            &TypeReferMeta::Pointer{id: ref refer_id_field} => {
                 let mut refer_inner = refer_inner_rc.borrow_mut();
                 // refer对象没有id则直接insert
                 if refer_inner.fields.get("id").is_none() {
@@ -140,6 +143,7 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
                     let refer_id = refer_inner.fields.get("id").unwrap().clone();
                     inner.fields.insert(refer_id_field.to_string(), refer_id);
                 }
+                //如果有id就不进行insert操作,说明该对象已经存在
             }
             _ => unreachable!(),
         }

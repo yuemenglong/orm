@@ -54,23 +54,28 @@ impl EntityInner {
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let refer_meta = self.meta.field_map.get(key).unwrap();
-        if let TypeMeta::Pointer(_, ref refer_id_field) = refer_meta.ty {
-            match value {
-                None => {
-                    self.fields.remove(refer_id_field);
-                    self.refers.remove(key);
+        let refer_id_field = refer_meta.get_refer_pointer_id();
+        match value {
+            // 设为NULL等价于删除对象+对象引用id
+            None => {
+                self.fields.remove(&refer_id_field);
+                self.refers.remove(key);
+            }
+            // 写入对象+对象引用id
+            Some(inner) => {
+                // 对引用id的操作
+                if inner.borrow().has("id") {
+                    // 对象有id的情况下更新引用id
+                    let refer_id = inner.borrow().get("id").unwrap();
+                    self.fields.insert(refer_id_field, refer_id);
+                } else {
+                    // 对象没有id的情况下删除引用id
+                    self.fields.remove(&refer_id_field);
                 }
-                Some(inner) => {
-                    if inner.borrow().has("id") {
-                        let refer_id = inner.borrow().get("id").unwrap();
-                        self.fields.insert(refer_id_field.to_string(), refer_id);
-                    } else {
-                        self.fields.remove(refer_id_field);
-                    }
-                    self.refers.insert(key.to_string(), inner.clone());
-                }
-            };
-        }
+                // 写入对象
+                self.refers.insert(key.to_string(), inner.clone());
+            }
+        };
     }
     pub fn get_refer(&self, key: &str) -> Option<EntityInnerPointer> {
         self.refers.get(key).map(|rc| rc.clone())
@@ -86,7 +91,7 @@ impl EntityInner {
             .into_iter()
             .map(|field| {
                 self.fields
-                    .get(&field.field_name)
+                    .get(&field.field())
                     .map(|value| value.clone())
                     .or(Some(Value::NULL))
                     .unwrap()
@@ -99,9 +104,9 @@ impl EntityInner {
             .get_normal_fields()
             .into_iter()
             .map(|field| {
-                (field.column_name.clone(),
+                (field.column(),
                  self.fields
-                     .get(&field.field_name)
+                     .get(&field.field())
                      .map(|value| value.clone())
                      .or(Some(Value::NULL))
                      .unwrap())
@@ -111,10 +116,9 @@ impl EntityInner {
     pub fn set_values(&mut self, result: &QueryResult, row: &mut Row, prefix: &str) {
         // 包括id
         for field in self.meta.get_non_refer_fields() {
-            let key = &field.field_name;
+            let key = &field.field();
             result.column_index(key).map(|idx| {
-                self.fields.insert(field.field_name.to_string(),
-                                   row.as_ref(idx).unwrap().clone());
+                self.fields.insert(field.field(), row.as_ref(idx).unwrap().clone());
             });
         }
     }
