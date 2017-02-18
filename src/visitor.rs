@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::cell::RefMut;
+use std::str::FromStr;
 
 use regex::Regex;
 
@@ -11,8 +12,7 @@ use syntax::ast::NestedMetaItemKind;
 use syntax::ast::LitKind;
 use syntax::print::pprust::*;
 
-use anno;
-use anno::Annotation;
+use attr;
 
 use meta::*;
 
@@ -84,23 +84,11 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
 }
 //(nullable, len, pointer)
 fn visit_struct_field_attrs(attrs: &Vec<syntax::ast::Attribute>) -> (bool, u64, bool) {
-    let mut nullable = true;
-    let mut len = 64;
-    let mut pointer = false;
-    for attr in attrs.iter() {
-        match anno::visit_struct_field_attr(attr) {
-            Annotation::Len(l) => {
-                len = l;
-            }
-            Annotation::Nullable(b) => {
-                nullable = b;
-            }
-            Annotation::Pointer => {
-                pointer = true;
-            }
-            _ => {}
-        }
-    }
+    let attrs = attr::visit_attrs(attrs);
+    // let nullable: bool = bool::from_str("true").unwrap();
+    let nullable = attrs.get("nullable").map_or(true, |s| bool::from_str(s).unwrap());
+    let len = attrs.get("len").map_or(64, |s| u64::from_str(s).unwrap());
+    let pointer = attrs.get_attr("pointer").is_some();
     (nullable, len, pointer)
 }
 

@@ -8,7 +8,7 @@ pub use rustc_serialize::json;
 
 mod formatter;
 mod visitor;
-mod anno;
+mod attr;
 mod db;
 mod cond;
 mod entity;
