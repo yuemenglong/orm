@@ -5,8 +5,8 @@ use syntax::ast::NestedMetaItemKind;
 
 #[derive(Debug)]
 pub struct Attr {
-    name: String,
-    values: Option<Vec<Attr>>,
+    pub name: String,
+    pub values: Option<Vec<Attr>>,
 }
 
 impl Attr {
@@ -15,6 +15,16 @@ impl Attr {
             name: name,
             values: None,
         }
+    }
+    pub fn has(&self, name: &str) -> bool {
+        self.values.as_ref().map_or(false, |vec| {
+            for item in vec {
+                if item.name == name {
+                    return true;
+                }
+            }
+            return false;
+        })
     }
     pub fn get(&self, name: &str) -> Option<&str> {
         self.values.as_ref().map_or(None, |vec| {

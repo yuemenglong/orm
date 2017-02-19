@@ -12,7 +12,7 @@ use syntax::ast::NestedMetaItemKind;
 use syntax::ast::LitKind;
 use syntax::print::pprust::*;
 
-use attr;
+use attr::visit_attrs;
 
 use meta::*;
 
@@ -47,14 +47,8 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
         entity_meta.table_name = item.ident.name.as_str().to_string();
         if let &VariantData::Struct(ref vec, _id) = variant_data {
             entity_meta.fields = vec.iter()
-                .map(visit_struct_field)
+                .flat_map(visit_struct_field)
                 .collect();
-            // 为引用类型加上id
-            let refer_id_vec = entity_meta.get_refer_fields()
-                .into_iter()
-                .map(FieldMeta::create_pointer_id)
-                .collect::<Vec<_>>();
-            entity_meta.fields.extend(refer_id_vec);
             // 加上pkey
             entity_meta.fields.insert(0, FieldMeta::create_pkey());
             return entity_meta;
@@ -62,7 +56,7 @@ fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
     }
     unreachable!();
 }
-fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
+fn visit_struct_field(field: &syntax::ast::StructField) -> Vec<FieldMeta> {
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
     // 检查 id
@@ -71,26 +65,15 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> FieldMeta {
     }
 
     // 处理注解
-    let (nullable, len, pointer) = visit_struct_field_attrs(&field.attrs);
     let ty = ty_to_string(field.ty.deref());
-    match (ty.as_ref(), pointer) {
-        // 引用类型
-        (_, true) => FieldMeta::create_pointer(&field_name, &ty, nullable),
-        // String类型
-        ("String", false) => FieldMeta::create_string(&field_name, len, nullable),
-        // 数字类型
-        (_, false) => FieldMeta::create_number(&field_name, &ty, nullable),
+    let attr = visit_attrs(&field.attrs);
+    if FieldMeta::is_normal_type(&ty) {
+        vec![FieldMeta::create_normal(&field_name, &ty, &attr)]
+    } else {
+        FieldMeta::create_refer(&field_name, &ty, &attr)
     }
 }
-//(nullable, len, pointer)
-fn visit_struct_field_attrs(attrs: &Vec<syntax::ast::Attribute>) -> (bool, u64, bool) {
-    let attrs = attr::visit_attrs(attrs);
-    // let nullable: bool = bool::from_str("true").unwrap();
-    let nullable = attrs.get("nullable").map_or(true, |s| bool::from_str(s).unwrap());
-    let len = attrs.get("len").map_or(64, |s| u64::from_str(s).unwrap());
-    let pointer = attrs.get_attr("pointer").is_some();
-    (nullable, len, pointer)
-}
+
 
 pub fn fix_meta(meta: &mut OrmMeta) {
     for entity_meta in meta.entities.iter_mut() {

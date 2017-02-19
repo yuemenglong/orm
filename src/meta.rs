@@ -1,21 +1,33 @@
 use std::collections::HashMap;
 use rustc_serialize::json;
+use attr::Attr;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
-pub enum TypeNormalMeta {
+pub enum Cascade {
+    Insert,
+    Update,
+    Delete,
+    NoInsert,
+    NoUpdate,
+    NoDelete,
+}
+
+#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
+enum TypeNormalMeta {
     NULL,
     Number(String),
     String(u64),
 }
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
-pub enum TypeReferMeta {
+enum TypeReferMeta {
     NULL,
     Pointer { id: String },
 }
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
-pub enum TypeMeta {
+enum TypeMeta {
     NULL,
     Id,
     Normal {
@@ -24,13 +36,14 @@ pub enum TypeMeta {
     },
     Refer {
         entity: String,
+        cascade: Vec<Cascade>,
         refer: TypeReferMeta,
     },
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct FieldMeta {
-    field_name: String,
+    field: String,
     ty: TypeMeta,
     nullable: bool,
 }
@@ -127,7 +140,7 @@ impl FieldMeta {
         }
     }
     pub fn field(&self) -> String {
-        self.field_name.to_string()
+        self.field.to_string()
     }
     pub fn type_name(&self) -> String {
         match self.ty {
@@ -161,10 +174,28 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn as_refer(&self) -> &TypeReferMeta {
+
+    pub fn get_refer_entity(&self) -> String {
         match self.ty {
-            TypeMeta::Refer { refer: ref refer, .. } => refer,
+            TypeMeta::Refer { entity: ref entity, .. } => entity.to_string(),
             _ => unreachable!(),
+        }
+    }
+    pub fn get_refer_cascade(&self) -> &Vec<Cascade> {
+        match self.ty {
+            TypeMeta::Refer { cascade: ref cascade, .. } => cascade,
+            _ => unreachable!(),
+        }
+    }
+    pub fn is_refer_pointer(&self) -> bool {
+        match self.ty {
+            TypeMeta::Refer { refer: ref refer, .. } => {
+                match refer {
+                    &TypeReferMeta::Pointer { .. } => true,
+                    _ => false,
+                }
+            }
+            _ => false,
         }
     }
     pub fn get_refer_pointer_id(&self) -> String {
@@ -176,16 +207,133 @@ impl FieldMeta {
         unreachable!();
     }
 
+    pub fn has_refer_cascade_insert(&self) -> bool {
+        for cascade in self.get_refer_cascade() {
+            match cascade {
+                &Cascade::Insert => return true,
+                _ => {
+                    continue;
+                }
+            }
+        }
+        return false;
+    }
+    pub fn has_refer_cascade_update(&self) -> bool {
+        for cascade in self.get_refer_cascade() {
+            match cascade {
+                &Cascade::Update => return true,
+                _ => {
+                    continue;
+                }
+            }
+        }
+        return false;
+    }
+    pub fn has_refer_cascade_delete(&self) -> bool {
+        for cascade in self.get_refer_cascade() {
+            match cascade {
+                &Cascade::Delete => return true,
+                _ => {
+                    continue;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+impl FieldMeta {
     pub fn create_pkey() -> FieldMeta {
         FieldMeta {
-            field_name: "id".to_string(),
+            field: "id".to_string(),
             ty: TypeMeta::Id,
             nullable: false,
         }
     }
+    fn pick_nullable(attr: &Attr) -> bool {
+        let default = true;
+        attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
+    }
+    fn pick_len(attr: &Attr) -> u64 {
+        let default = 64;
+        attr.get("len").map_or(default, |str| u64::from_str(str).unwrap())
+    }
+    pub fn create_normal(field: &str, ty: &str, attr: &Attr) -> FieldMeta {
+        match ty {
+            "i32" | "u32" | "i64" | "u64" => {
+                FieldMeta {
+                    field: field.to_string(),
+                    ty: TypeMeta::Normal {
+                        column: field.to_string(),
+                        normal: TypeNormalMeta::Number(ty.to_string()),
+                    },
+                    nullable: Self::pick_nullable(attr),
+                }
+            }
+            "String" => {
+                FieldMeta {
+                    field: field.to_string(),
+                    ty: TypeMeta::Normal {
+                        column: field.to_string(),
+                        normal: TypeNormalMeta::String(Self::pick_len(attr)),
+                    },
+                    nullable: Self::pick_nullable(attr),
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub fn create_refer(field: &str, ty: &str, attr: &Attr) -> Vec<FieldMeta> {
+        let refer_id_field = format!("{}_id", field);
+        let cascade = attr.get_attr("cascade").map_or(Vec::new(), |attr| {
+            attr.values.as_ref().map_or(Vec::new(), |values| {
+                values.iter()
+                    .map(|attr| {
+                        match attr.name.as_ref() {
+                            "insert" => Cascade::Insert,
+                            "update" => Cascade::Update,
+                            "delete" => Cascade::Delete,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+        });
+        println!("{:?}", cascade);
+        // refer_id
+        // refer_object
+        if attr.has("pointer") {
+            let refer_object = FieldMeta {
+                field: field.to_string(),
+                ty: TypeMeta::Refer {
+                    entity: ty.to_string(),
+                    cascade: cascade,
+                    refer: TypeReferMeta::Pointer { id: refer_id_field.to_string() },
+                },
+                nullable: Self::pick_nullable(attr),
+            };
+            let refer_id = FieldMeta {
+                field: refer_id_field.to_string(),
+                ty: TypeMeta::Normal {
+                    column: refer_id_field.to_string(),
+                    normal: TypeNormalMeta::Number("u64".to_string()),
+                },
+                nullable: Self::pick_nullable(attr),
+            };
+            return vec![refer_id, refer_object];
+        }
+        unreachable!()
+    }
+    pub fn is_normal_type(ty: &str) -> bool {
+        match ty {
+            "i32" | "u32" | "i64" | "u64" => true,
+            "String" => true,
+            _ => false,
+        }
+    }
     pub fn create_string(field: &str, len: u64, nullable: bool) -> FieldMeta {
         FieldMeta {
-            field_name: field.to_string(),
+            field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
                 normal: TypeNormalMeta::String(len),
@@ -195,7 +343,7 @@ impl FieldMeta {
     }
     pub fn create_number(field: &str, ty: &str, nullable: bool) -> FieldMeta {
         FieldMeta {
-            field_name: field.to_string(),
+            field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
                 normal: TypeNormalMeta::Number(ty.to_string()),
@@ -206,9 +354,10 @@ impl FieldMeta {
     pub fn create_pointer(field: &str, entity: &str, nullable: bool) -> FieldMeta {
         let refer_id = format!("{}_id", field);
         FieldMeta {
-            field_name: field.to_string(),
+            field: field.to_string(),
             ty: TypeMeta::Refer {
                 entity: entity.to_string(),
+                cascade: Vec::new(),
                 refer: TypeReferMeta::Pointer { id: refer_id.to_string() },
             },
             nullable: nullable,
@@ -217,7 +366,7 @@ impl FieldMeta {
     pub fn create_pointer_id(meta: &FieldMeta) -> FieldMeta {
         let refer_id = meta.get_refer_pointer_id();
         FieldMeta {
-            field_name: refer_id.to_string(),
+            field: refer_id.to_string(),
             ty: TypeMeta::Normal {
                 column: refer_id.to_string(),
                 normal: TypeNormalMeta::Number("u64".to_string()),

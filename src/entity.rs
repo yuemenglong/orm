@@ -14,8 +14,6 @@ use mysql::Row;
 use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
-use meta::FieldMeta;
-use meta::TypeMeta;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 

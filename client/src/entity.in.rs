@@ -4,6 +4,7 @@ struct Person {
     #[nullable(false)]
     name:String,
     #[pointer]
+    #[cascade(insert, update, delete)]
     addr:Address,
 }
 
