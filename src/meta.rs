@@ -8,9 +8,6 @@ pub enum Cascade {
     Insert,
     Update,
     Delete,
-    NoInsert,
-    NoUpdate,
-    NoDelete,
 }
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
@@ -243,12 +240,13 @@ impl FieldMeta {
 }
 
 impl FieldMeta {
-    pub fn create_pkey() -> FieldMeta {
-        FieldMeta {
+    pub fn create_pkey(entity: &str) -> Vec<(String, FieldMeta)> {
+        let meta = FieldMeta {
             field: "id".to_string(),
             ty: TypeMeta::Id,
             nullable: false,
-        }
+        };
+        vec![(entity.to_string(), meta)]
     }
     fn pick_nullable(attr: &Attr) -> bool {
         let default = true;
@@ -258,8 +256,12 @@ impl FieldMeta {
         let default = 64;
         attr.get("len").map_or(default, |str| u64::from_str(str).unwrap())
     }
-    pub fn create_normal(field: &str, ty: &str, attr: &Attr) -> FieldMeta {
-        match ty {
+    pub fn create_normal(entity: &str,
+                         field: &str,
+                         ty: &str,
+                         attr: &Attr)
+                         -> Vec<(String, FieldMeta)> {
+        let meta = match ty {
             "i32" | "u32" | "i64" | "u64" => {
                 FieldMeta {
                     field: field.to_string(),
@@ -281,9 +283,14 @@ impl FieldMeta {
                 }
             }
             _ => unreachable!(),
-        }
+        };
+        vec![(entity.to_string(), meta)]
     }
-    pub fn create_refer(field: &str, ty: &str, attr: &Attr) -> Vec<FieldMeta> {
+    pub fn create_refer(entity: &str,
+                        field: &str,
+                        ty: &str,
+                        attr: &Attr)
+                        -> Vec<(String, FieldMeta)> {
         let refer_id_field = format!("{}_id", field);
         let cascade = attr.get_attr("cascade").map_or(Vec::new(), |attr| {
             attr.values.as_ref().map_or(Vec::new(), |values| {
@@ -299,10 +306,18 @@ impl FieldMeta {
                     .collect::<Vec<_>>()
             })
         });
-        println!("{:?}", cascade);
+        // println!("{:?}", cascade);
         // refer_id
         // refer_object
         if attr.has("pointer") {
+            let refer_id = FieldMeta {
+                field: refer_id_field.to_string(),
+                ty: TypeMeta::Normal {
+                    column: refer_id_field.to_string(),
+                    normal: TypeNormalMeta::Number("u64".to_string()),
+                },
+                nullable: Self::pick_nullable(attr),
+            };
             let refer_object = FieldMeta {
                 field: field.to_string(),
                 ty: TypeMeta::Refer {
@@ -312,15 +327,7 @@ impl FieldMeta {
                 },
                 nullable: Self::pick_nullable(attr),
             };
-            let refer_id = FieldMeta {
-                field: refer_id_field.to_string(),
-                ty: TypeMeta::Normal {
-                    column: refer_id_field.to_string(),
-                    normal: TypeNormalMeta::Number("u64".to_string()),
-                },
-                nullable: Self::pick_nullable(attr),
-            };
-            return vec![refer_id, refer_object];
+            return vec![(entity.to_string(), refer_id), (entity.to_string(), refer_object)];
         }
         unreachable!()
     }

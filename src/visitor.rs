@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::collections::HashMap;
 use std::cell::RefMut;
 use std::str::FromStr;
 
@@ -26,37 +27,50 @@ enum FieldType {
 
 pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
     let mut meta = OrmMeta::default();
-    meta.entities = krate.module
+    let (entities, fields): (Vec<_>, Vec<_>) = krate.module
         .items
         .iter()
         .map(|item| visit_item(item.deref()))
-        .collect::<Vec<_>>();
+        .unzip();
+    let mut map: HashMap<String, Vec<FieldMeta>> = HashMap::new();
+    fields.into_iter().flat_map(|vec| vec).fold(&mut map, |mut acc, (entity, field)| {
+        if !acc.contains_key(&entity) {
+            acc.insert(entity.to_string(), Vec::new());
+        }
+        acc.get_mut(&entity).unwrap().push(field);
+        acc
+    });
+    meta.entities = entities.into_iter().map(|mut entity| {
+        entity.fields = map.remove(&entity.entity_name).unwrap();
+        entity
+    }).collect();
     meta
 }
-fn visit_item(item: &syntax::ast::Item) -> EntityMeta {
-    let entity_meta = match item.node {
+fn visit_item(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>) {
+    match item.node {
         Struct(_, _) => visit_struct(item),
         _ => unreachable!(),
-    };
-    entity_meta
+    }
 }
-fn visit_struct(item: &syntax::ast::Item) -> EntityMeta {
+fn visit_struct(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>) {
     if let Struct(ref variant_data, ref _generics) = item.node {
         let mut entity_meta = EntityMeta::default();
-        entity_meta.entity_name = item.ident.name.as_str().to_string();
-        entity_meta.table_name = item.ident.name.as_str().to_string();
+        let entity_name = item.ident.name.as_str().to_string();
+        entity_meta.entity_name = entity_name.to_string();
+        entity_meta.table_name = entity_name.to_string();
         if let &VariantData::Struct(ref vec, _id) = variant_data {
-            entity_meta.fields = vec.iter()
-                .flat_map(visit_struct_field)
-                .collect();
             // 加上pkey
-            entity_meta.fields.insert(0, FieldMeta::create_pkey());
-            return entity_meta;
+            let mut ret = FieldMeta::create_pkey(&entity_name);
+            let fields: Vec<_> = vec.iter()
+                .flat_map(|field| visit_struct_field(&entity_name, field))
+                .collect();
+            ret.extend(fields);
+            return (entity_meta, ret);
         }
     }
     unreachable!();
 }
-fn visit_struct_field(field: &syntax::ast::StructField) -> Vec<FieldMeta> {
+fn visit_struct_field(entity: &str, field: &syntax::ast::StructField) -> Vec<(String, FieldMeta)> {
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
 
     // 检查 id
@@ -68,9 +82,9 @@ fn visit_struct_field(field: &syntax::ast::StructField) -> Vec<FieldMeta> {
     let ty = ty_to_string(field.ty.deref());
     let attr = visit_attrs(&field.attrs);
     if FieldMeta::is_normal_type(&ty) {
-        vec![FieldMeta::create_normal(&field_name, &ty, &attr)]
+        FieldMeta::create_normal(&entity, &field_name, &ty, &attr)
     } else {
-        FieldMeta::create_refer(&field_name, &ty, &attr)
+        FieldMeta::create_refer(&entity, &field_name, &ty, &attr)
     }
 }
 

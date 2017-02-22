@@ -7,9 +7,6 @@ use entity::*;
 
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
-
-// default值的问题
-// str的问题
 fn main() {
     let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
     refer_test(&db);
@@ -44,3 +41,6 @@ fn curd_test(db: &ast::DB) {
     let p = db.get::<Person>(id).unwrap();
     println!("{:?}", p);
 }
+
+// 多对多的场景
+// 1. 
