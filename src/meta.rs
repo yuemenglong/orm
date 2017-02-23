@@ -240,7 +240,7 @@ impl FieldMeta {
 }
 
 impl FieldMeta {
-    pub fn create_pkey(entity: &str) -> Vec<(String, FieldMeta)> {
+    pub fn new_pkey(entity: &str) -> Vec<(String, FieldMeta)> {
         let meta = FieldMeta {
             field: "id".to_string(),
             ty: TypeMeta::Id,
@@ -256,43 +256,8 @@ impl FieldMeta {
         let default = 64;
         attr.get("len").map_or(default, |str| u64::from_str(str).unwrap())
     }
-    pub fn create_normal(entity: &str,
-                         field: &str,
-                         ty: &str,
-                         attr: &Attr)
-                         -> Vec<(String, FieldMeta)> {
-        let meta = match ty {
-            "i32" | "u32" | "i64" | "u64" => {
-                FieldMeta {
-                    field: field.to_string(),
-                    ty: TypeMeta::Normal {
-                        column: field.to_string(),
-                        normal: TypeNormalMeta::Number(ty.to_string()),
-                    },
-                    nullable: Self::pick_nullable(attr),
-                }
-            }
-            "String" => {
-                FieldMeta {
-                    field: field.to_string(),
-                    ty: TypeMeta::Normal {
-                        column: field.to_string(),
-                        normal: TypeNormalMeta::String(Self::pick_len(attr)),
-                    },
-                    nullable: Self::pick_nullable(attr),
-                }
-            }
-            _ => unreachable!(),
-        };
-        vec![(entity.to_string(), meta)]
-    }
-    pub fn create_refer(entity: &str,
-                        field: &str,
-                        ty: &str,
-                        attr: &Attr)
-                        -> Vec<(String, FieldMeta)> {
-        let refer_id_field = format!("{}_id", field);
-        let cascade = attr.get_attr("cascade").map_or(Vec::new(), |attr| {
+    fn pick_cascade(attr: &Attr) -> Vec<Cascade> {
+        attr.get_attr("cascade").map_or(Vec::new(), |attr| {
             attr.values.as_ref().map_or(Vec::new(), |values| {
                 values.iter()
                     .map(|attr| {
@@ -305,31 +270,7 @@ impl FieldMeta {
                     })
                     .collect::<Vec<_>>()
             })
-        });
-        // println!("{:?}", cascade);
-        // refer_id
-        // refer_object
-        if attr.has("pointer") {
-            let refer_id = FieldMeta {
-                field: refer_id_field.to_string(),
-                ty: TypeMeta::Normal {
-                    column: refer_id_field.to_string(),
-                    normal: TypeNormalMeta::Number("u64".to_string()),
-                },
-                nullable: Self::pick_nullable(attr),
-            };
-            let refer_object = FieldMeta {
-                field: field.to_string(),
-                ty: TypeMeta::Refer {
-                    entity: ty.to_string(),
-                    cascade: cascade,
-                    refer: TypeReferMeta::Pointer { id: refer_id_field.to_string() },
-                },
-                nullable: Self::pick_nullable(attr),
-            };
-            return vec![(entity.to_string(), refer_id), (entity.to_string(), refer_object)];
-        }
-        unreachable!()
+        })
     }
     pub fn is_normal_type(ty: &str) -> bool {
         match ty {
@@ -338,48 +279,73 @@ impl FieldMeta {
             _ => false,
         }
     }
-    pub fn create_string(field: &str, len: u64, nullable: bool) -> FieldMeta {
-        FieldMeta {
+    pub fn new(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        if Self::is_normal_type(ty) {
+            Self::new_normal(entity, field, ty, attr)
+        } else {
+            Self::new_refer(entity, field, ty, attr)
+        }
+    }
+    fn new_normal(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        match ty {
+            "i32" | "u32" | "i64" | "u64" => Self::new_number(entity, field, ty, attr),
+            "String" => Self::new_string(entity, field, ty, attr),
+            _ => unreachable!(),
+        }
+    }
+    fn new_refer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        if attr.has("pointer") {
+            return Self::new_pointer(entity, field, ty, attr);
+        }
+        unreachable!()
+    }
+
+    fn new_string(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        let meta = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
-                normal: TypeNormalMeta::String(len),
+                normal: TypeNormalMeta::String(Self::pick_len(attr)),
             },
-            nullable: nullable,
-        }
+            nullable: Self::pick_nullable(attr),
+        };
+        vec![(entity.to_string(), meta)]
     }
-    pub fn create_number(field: &str, ty: &str, nullable: bool) -> FieldMeta {
-        FieldMeta {
+    fn new_number(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        let meta = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
                 normal: TypeNormalMeta::Number(ty.to_string()),
             },
-            nullable: nullable,
-        }
+            nullable: Self::pick_nullable(attr),
+        };
+        vec![(entity.to_string(), meta)]
     }
-    pub fn create_pointer(field: &str, entity: &str, nullable: bool) -> FieldMeta {
-        let refer_id = format!("{}_id", field);
-        FieldMeta {
-            field: field.to_string(),
-            ty: TypeMeta::Refer {
-                entity: entity.to_string(),
-                cascade: Vec::new(),
-                refer: TypeReferMeta::Pointer { id: refer_id.to_string() },
-            },
-            nullable: nullable,
-        }
-    }
-    pub fn create_pointer_id(meta: &FieldMeta) -> FieldMeta {
-        let refer_id = meta.get_refer_pointer_id();
-        FieldMeta {
-            field: refer_id.to_string(),
+    fn new_pointer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        let refer_id_field = format!("{}_id", field);
+        let cascade = Self::pick_cascade(attr);
+        // println!("{:?}", cascade);
+        // refer_id
+        // refer_object
+        let refer_id = FieldMeta {
+            field: refer_id_field.to_string(),
             ty: TypeMeta::Normal {
-                column: refer_id.to_string(),
+                column: refer_id_field.to_string(),
                 normal: TypeNormalMeta::Number("u64".to_string()),
             },
-            nullable: meta.nullable,
-        }
+            nullable: Self::pick_nullable(attr),
+        };
+        let refer_object = FieldMeta {
+            field: field.to_string(),
+            ty: TypeMeta::Refer {
+                entity: ty.to_string(),
+                cascade: cascade,
+                refer: TypeReferMeta::Pointer { id: refer_id_field.to_string() },
+            },
+            nullable: Self::pick_nullable(attr),
+        };
+        return vec![(entity.to_string(), refer_id), (entity.to_string(), refer_object)];
     }
 }
 

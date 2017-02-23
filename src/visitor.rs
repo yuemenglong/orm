@@ -40,10 +40,12 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         acc.get_mut(&entity).unwrap().push(field);
         acc
     });
-    meta.entities = entities.into_iter().map(|mut entity| {
-        entity.fields = map.remove(&entity.entity_name).unwrap();
-        entity
-    }).collect();
+    meta.entities = entities.into_iter()
+        .map(|mut entity| {
+            entity.fields = map.remove(&entity.entity_name).unwrap();
+            entity
+        })
+        .collect();
     meta
 }
 fn visit_item(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>) {
@@ -60,7 +62,7 @@ fn visit_struct(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta
         entity_meta.table_name = entity_name.to_string();
         if let &VariantData::Struct(ref vec, _id) = variant_data {
             // 加上pkey
-            let mut ret = FieldMeta::create_pkey(&entity_name);
+            let mut ret = FieldMeta::new_pkey(&entity_name);
             let fields: Vec<_> = vec.iter()
                 .flat_map(|field| visit_struct_field(&entity_name, field))
                 .collect();
@@ -81,11 +83,7 @@ fn visit_struct_field(entity: &str, field: &syntax::ast::StructField) -> Vec<(St
     // 处理注解
     let ty = ty_to_string(field.ty.deref());
     let attr = visit_attrs(&field.attrs);
-    if FieldMeta::is_normal_type(&ty) {
-        FieldMeta::create_normal(&entity, &field_name, &ty, &attr)
-    } else {
-        FieldMeta::create_refer(&entity, &field_name, &ty, &attr)
-    }
+    FieldMeta::new(&entity, &field_name, &ty, &attr)
 }
 
 
