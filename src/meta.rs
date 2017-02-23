@@ -21,6 +21,7 @@ enum TypeNormalMeta {
 enum TypeReferMeta {
     NULL,
     Pointer { id: String },
+    OneToOne { id: String },
 }
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
@@ -29,6 +30,7 @@ enum TypeMeta {
     Id,
     Normal {
         column: String,
+        nullable: bool,
         normal: TypeNormalMeta,
     },
     Refer {
@@ -42,7 +44,6 @@ enum TypeMeta {
 pub struct FieldMeta {
     field: String,
     ty: TypeMeta,
-    nullable: bool,
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
@@ -154,11 +155,11 @@ impl FieldMeta {
         };
         match self.ty {
             TypeMeta::Id => "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
-            TypeMeta::Normal { column: ref column, normal: ref normal } => {
+            TypeMeta::Normal { column: ref column, normal: ref normal, nullable: ref nullable } => {
                 format!("`{}` {}{}",
                         column,
                         normal.db_type_string(),
-                        nullableFn(self.nullable))
+                        nullableFn(nullable.clone()))
             }
             _ => unreachable!(),
         }
@@ -244,7 +245,6 @@ impl FieldMeta {
         let meta = FieldMeta {
             field: "id".to_string(),
             ty: TypeMeta::Id,
-            nullable: false,
         };
         vec![(entity.to_string(), meta)]
     }
@@ -305,9 +305,9 @@ impl FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
+                nullable: Self::pick_nullable(attr),
                 normal: TypeNormalMeta::String(Self::pick_len(attr)),
             },
-            nullable: Self::pick_nullable(attr),
         };
         vec![(entity.to_string(), meta)]
     }
@@ -316,9 +316,9 @@ impl FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Normal {
                 column: field.to_string(),
+                nullable: Self::pick_nullable(attr),
                 normal: TypeNormalMeta::Number(ty.to_string()),
             },
-            nullable: Self::pick_nullable(attr),
         };
         vec![(entity.to_string(), meta)]
     }
@@ -332,9 +332,9 @@ impl FieldMeta {
             field: refer_id_field.to_string(),
             ty: TypeMeta::Normal {
                 column: refer_id_field.to_string(),
+                nullable: Self::pick_nullable(attr),
                 normal: TypeNormalMeta::Number("u64".to_string()),
             },
-            nullable: Self::pick_nullable(attr),
         };
         let refer_object = FieldMeta {
             field: field.to_string(),
@@ -343,9 +343,21 @@ impl FieldMeta {
                 cascade: cascade,
                 refer: TypeReferMeta::Pointer { id: refer_id_field.to_string() },
             },
-            nullable: Self::pick_nullable(attr),
         };
         return vec![(entity.to_string(), refer_id), (entity.to_string(), refer_object)];
+    }
+    fn new_one2one(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        // 对象挂在A上，id挂在B上
+        let refer_id_field = format!("{}_id", entity.to_lowercase());
+        let refer_id = FieldMeta {
+            field: refer_id_field.to_string(),
+            ty: TypeMeta::Normal {
+                column: refer_id_field,
+                nullable: Self::pick_nullable(attr),
+                normal: TypeNormalMeta::Number("u64".to_string()),
+            },
+        };
+        vec![(ty.to_string(), refer_id)]
     }
 }
 
