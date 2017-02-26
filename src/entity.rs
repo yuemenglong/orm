@@ -22,6 +22,7 @@ pub struct EntityInner {
     pub meta: &'static EntityMeta,
     pub fields: HashMap<String, Value>,
     pub refers: HashMap<String, EntityInnerPointer>,
+    pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 }
 
 impl EntityInner {
@@ -30,6 +31,7 @@ impl EntityInner {
             meta: meta,
             fields: HashMap::new(),
             refers: HashMap::new(),
+            bulks: HashMap::new(),
         }
     }
 
@@ -80,6 +82,54 @@ impl EntityInner {
     }
     pub fn has_refer(&self, key: &str) -> bool {
         self.refers.contains_key(key)
+    }
+
+    pub fn get_bulk(&self, key: &str, idx: usize) -> Option<EntityInnerPointer> {
+        match self.bulks.get(key) {
+            None => None,//说明是延迟加载
+            Some(opt) => {
+                match opt {
+                    &None => None,//说明真的没有
+                    &Some(ref vec) => {
+                        // 有并且已经加载
+                        vec.get(idx).map(|rc| rc.clone())
+                    }
+                }
+            }
+        }
+    }
+    pub fn get_bulks(&self, key: &str, idx: u64) -> Option<&Vec<EntityInnerPointer>> {
+        match self.bulks.get(key) {
+            None => None,//说明是延迟加载
+            Some(opt) => opt.as_ref(), // 有或者没有都由这个结构决定
+        }
+    }
+    pub fn set_bulks(&self, key: &str, value: Vec<EntityInnerPointer>) {
+        // 先把当下的都解开引用
+        let bulk_meta = self.meta.field_map.get(key).unwrap();
+        let bulk_id_field = bulk_meta.get_bulk_one_many_id();
+
+        // 把目前的bulk都解开引用
+        let bulk = self.bulks.get(key);
+        if bulk.is_none() {
+            // load
+            unimplemented!();
+        }
+        let opt = bulk.unwrap();
+        if opt.is_some() {
+            let vec = opt.as_ref().unwrap();
+            for rc in vec {
+                let mut inner = rc.borrow_mut();
+                inner.fields.insert(bulk_id_field.to_string(), Value::NULL);
+            }
+        }
+
+        // 把参数里的都加上引用
+        let self_id = self.fields.get("id").unwrap();
+        for rc in value{
+            let mut inner = rc.borrow_mut();
+            inner.fields.insert(bulk_id_field.to_string(), self_id.clone());
+        }
     }
 
     pub fn get_values(&self) -> Vec<Value> {
