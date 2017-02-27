@@ -209,6 +209,9 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
+    pub fn get_bulk_one_many_id(&self) -> String {
+        unimplemented!()
+    }
 
     pub fn has_refer_cascade_insert(&self) -> bool {
         for cascade in self.get_refer_cascade() {
