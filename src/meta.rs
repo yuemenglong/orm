@@ -75,28 +75,7 @@ impl Default for TypeMeta {
 }
 
 impl TypeMeta {
-    pub fn is_id(&self) -> bool {
-        match self {
-            &TypeMeta::Id => true,
-            _ => false,
-        }
-    }
-    pub fn is_normal(&self) -> bool {
-        match self {
-            &TypeMeta::Number { .. } => true,
-            &TypeMeta::String { .. } => true,
-            _ => false,
-        }
-    }
-    pub fn is_refer(&self) -> bool {
-        match self {
-            &TypeMeta::Pointer { .. } => true,
-            &TypeMeta::OneToOne { .. } => true,
-            &TypeMeta::OneToMany { .. } => true,
-            &TypeMeta::ManyToMany { .. } => true,
-            _ => false,
-        }
-    }
+
 }
 
 impl FieldMeta {
@@ -164,6 +143,29 @@ impl FieldMeta {
             TypeMeta::OneToMany { entity: ref entity, .. } => format!("&{}", entity),
             TypeMeta::ManyToMany { entity: ref entity, .. } => format!("&{}", entity),
             TypeMeta::NULL => unreachable!(),
+        }
+    }
+
+    pub fn is_type_id(&self) -> bool {
+        match self.ty {
+            TypeMeta::Id => true,
+            _ => false,
+        }
+    }
+    pub fn is_type_normal(&self) -> bool {
+        match self.ty {
+            TypeMeta::Number { .. } => true,
+            TypeMeta::String { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_type_refer(&self) -> bool {
+        match self.ty {
+            TypeMeta::Pointer { .. } => true,
+            TypeMeta::OneToOne { .. } => true,
+            TypeMeta::OneToMany { .. } => true,
+            TypeMeta::ManyToMany { .. } => true,
+            _ => false,
         }
     }
 
@@ -385,25 +387,25 @@ impl EntityMeta {
     pub fn get_id_fields(&self) -> Vec<&FieldMeta> {
         self.fields
             .iter()
-            .filter(|field| field.ty.is_id())
+            .filter(|field| field.is_type_id())
             .collect::<Vec<_>>()
     }
     pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
         self.fields
             .iter()
-            .filter(|field| field.ty.is_normal())
+            .filter(|field| field.is_type_normal())
             .collect::<Vec<_>>()
     }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
         self.fields
             .iter()
-            .filter(|field| !field.ty.is_refer())
+            .filter(|field| !field.is_type_refer())
             .collect::<Vec<_>>()
     }
-    pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
+    pub fn get_pointer_fields(&self) -> Vec<&FieldMeta> {
         self.fields
             .iter()
-            .filter(|field| field.ty.is_refer())
+            .filter(|field| field.is_refer_pointer())
             .collect::<Vec<_>>()
     }
 

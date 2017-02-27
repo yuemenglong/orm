@@ -56,18 +56,32 @@ static TPL_IMPL_FIELD: &'static str = r#"
         self.inner_has("${FIELD}")
     }"#;
 
-static TPL_IMPL_REFER: &'static str = r#"
+static TPL_IMPL_POINTER: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
-        Box::new(self.inner_get_refer("${FIELD}").unwrap())
+        Box::new(self.inner_get_pointer("${FIELD}").unwrap())
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set_refer("${FIELD}", Some(value));
+        self.inner_set_pointer("${FIELD}", Some(value));
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_refer("${FIELD}")
+        self.inner_has_pointer("${FIELD}")
+    }"#;
+
+static TPL_IMPL_ONE_ONE: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
+        Box::new(self.inner_get_one_one("${FIELD}").unwrap())
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
+        self.inner_set_one_one("${FIELD}", Some(value));
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_one_one("${FIELD}")
     }"#;
 
 static TPL_TRAIT: &'static str = r#"
@@ -107,8 +121,8 @@ fn do_normal_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String
         .join(join)
 }
 
-fn do_refer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.get_refer_fields()
+fn do_pointer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    meta.get_pointer_fields()
         .into_iter()
         .map(cb)
         .collect::<Vec<_>>()
@@ -135,14 +149,14 @@ fn format_entity(meta: &EntityMeta) -> String {
 fn format_entity_define(meta: &EntityMeta) -> String {
     // let id_fields = do_id_fields(meta, "", &format_entity_define_field);
     // let normal_fields = do_normal_fields(meta, "", &format_entity_define_field);
-    // let refer_fields = do_refer_fields(meta, "", &format_entity_define_field);
+    // let refer_fields = do_pointer_fields(meta, "", &format_entity_define_field);
     // let fields = format!("{}{}\n{}", id_fields, normal_fields, refer_fields);
     TPL_STRUCT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
-    let refer_fields = do_refer_fields(meta, "", &format_entity_impl_refer);
+    let refer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
     let fields = format!("{}\n{}", normal_fields, refer_fields);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
@@ -166,8 +180,8 @@ fn format_entity_impl_field(meta: &FieldMeta) -> String {
         .replace("${TYPE}", &meta.type_name())
         .replace("${SET_TYPE}", &meta.type_name_set())
 }
-fn format_entity_impl_refer(meta: &FieldMeta) -> String {
-    TPL_IMPL_REFER.to_string()
+fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
+    TPL_IMPL_POINTER.to_string()
         .replace("${FIELD}", &meta.field())
         .replace("${TYPE}", &meta.type_name())
         .replace("${SET_TYPE}", &meta.type_name_set())

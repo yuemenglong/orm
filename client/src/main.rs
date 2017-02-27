@@ -17,11 +17,14 @@ fn refer_test(db: &ast::DB) {
     let mut p = Person::default();
     p.set_name("Tom");
     let mut a = Address::default();
+    println!("{:?}", 1);
     p.set_addr(&a);
+    println!("{:?}", 2);
     a.set_road("中原路");
     p.get_addr().set_no(123);
     println!("{:?}", p);
     db.insert(&p).unwrap();
+    println!("{:?}", 3);
 }
 
 fn curd_test(db: &ast::DB) {
