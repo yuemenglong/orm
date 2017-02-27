@@ -140,8 +140,8 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
             let mut refer_inner = refer_inner_rc.borrow_mut();
             try!(do_insert(refer_inner.deref_mut(), conn));
             // 将refer的id写回原对象对应的refer_id
-            let refer_id = refer_inner.fields.get("id").unwrap().clone();
-            inner.fields.insert(refer_id_field, refer_id);
+            let refer_id = refer_inner.field_map.get("id").unwrap().clone();
+            inner.field_map.insert(refer_id_field, refer_id);
         }
     }
     inner.do_insert(conn)
