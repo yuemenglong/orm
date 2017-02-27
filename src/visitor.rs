@@ -32,6 +32,7 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         .iter()
         .map(|item| visit_item(item.deref()))
         .unzip();
+    // 根据entity聚合fields
     let mut map: HashMap<String, Vec<FieldMeta>> = HashMap::new();
     fields.into_iter().flat_map(|vec| vec).fold(&mut map, |mut acc, (entity, field)| {
         if !acc.contains_key(&entity) {

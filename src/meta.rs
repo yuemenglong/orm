@@ -11,32 +11,40 @@ pub enum Cascade {
 }
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
-enum TypeNormalMeta {
-    NULL,
-    Number(String),
-    String(u64),
-}
-
-#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
-enum TypeReferMeta {
-    NULL,
-    Pointer { id: String },
-    OneToOne { id: String },
-}
-
-#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
 enum TypeMeta {
     NULL,
     Id,
-    Normal {
+    Number {
+        number: String,
         column: String,
         nullable: bool,
-        normal: TypeNormalMeta,
     },
-    Refer {
+    String {
+        len: u64,
+        column: String,
+        nullable: bool,
+    },
+    Pointer {
         entity: String,
+        refer_id: String,
         cascade: Vec<Cascade>,
-        refer: TypeReferMeta,
+    },
+    OneToOne {
+        entity: String,
+        id: String,
+        cascade: Vec<Cascade>,
+    },
+    OneToMany {
+        entity: String,
+        id: String,
+        cascade: Vec<Cascade>,
+    },
+    ManyToMany {
+        entity: String,
+        mid: String,
+        id: String,
+        refer_id: String,
+        cascade: Vec<Cascade>,
     },
 }
 
@@ -60,51 +68,9 @@ pub struct OrmMeta {
     pub entity_map: HashMap<String, EntityMeta>, // pub table_map: HashMap<String, EntityMeta>,
 }
 
-impl Default for TypeNormalMeta {
-    fn default() -> TypeNormalMeta {
-        TypeNormalMeta::NULL
-    }
-}
-
-impl Default for TypeReferMeta {
-    fn default() -> TypeReferMeta {
-        TypeReferMeta::NULL
-    }
-}
-
 impl Default for TypeMeta {
     fn default() -> TypeMeta {
         TypeMeta::NULL
-    }
-}
-
-impl TypeNormalMeta {
-    pub fn type_name(&self) -> String {
-        match self {
-            &TypeNormalMeta::Number(ref ty) => ty.to_string(),
-            &TypeNormalMeta::String(..) => "String".to_string(),
-            _ => unreachable!(),
-        }
-    }
-    pub fn db_type_string(&self) -> String {
-        match self {
-            &TypeNormalMeta::Number(ref ty) => {
-                match ty.as_ref() {
-                    "i32" => format!("INTEGER"),
-                    "i64" => format!("BIGINT"),
-                    "u64" => format!("BIGINT"),
-                    _ => unreachable!(),
-                }
-            }
-            &TypeNormalMeta::String(ref len) => format!("VARCHAR({})", len),
-            _ => unreachable!(),
-        }
-    }
-    pub fn type_name_set(&self) -> String {
-        match self {
-            &TypeNormalMeta::String(..) => "&str".to_string(),
-            _ => self.type_name(),
-        }
     }
 }
 
@@ -117,13 +83,17 @@ impl TypeMeta {
     }
     pub fn is_normal(&self) -> bool {
         match self {
-            &TypeMeta::Normal { .. } => true,
+            &TypeMeta::Number { .. } => true,
+            &TypeMeta::String { .. } => true,
             _ => false,
         }
     }
     pub fn is_refer(&self) -> bool {
         match self {
-            &TypeMeta::Refer { .. } => true,
+            &TypeMeta::Pointer { .. } => true,
+            &TypeMeta::OneToOne { .. } => true,
+            &TypeMeta::OneToMany { .. } => true,
+            &TypeMeta::ManyToMany { .. } => true,
             _ => false,
         }
     }
@@ -133,7 +103,8 @@ impl FieldMeta {
     pub fn column(&self) -> String {
         match self.ty {
             TypeMeta::Id => "id".to_string(),
-            TypeMeta::Normal { column: ref column, .. } => column.to_string(),
+            TypeMeta::Number { column: ref column, .. } => column.to_string(),
+            TypeMeta::String { column: ref column, .. } => column.to_string(),
             _ => unreachable!(),
         }
     }
@@ -143,8 +114,21 @@ impl FieldMeta {
     pub fn type_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "u64".to_string(),
-            TypeMeta::Normal { normal: ref normal, .. } => normal.type_name(),
-            TypeMeta::Refer { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::Number { number: ref number, .. } => number.to_string(),
+            TypeMeta::String { .. } => "String".to_string(),
+            TypeMeta::Pointer { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToOne { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToMany { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::ManyToMany { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::NULL => unreachable!(),
+        }
+    }
+    pub fn db_type_number(number: &str) -> String {
+        match number {
+            "i32" => "INTEGER".to_string(),
+            "u32" => "INTEGER".to_string(),
+            "i64" => "BIGINT".to_string(),
+            "u64" => "BIGINT".to_string(),
             _ => unreachable!(),
         }
     }
@@ -155,10 +139,16 @@ impl FieldMeta {
         };
         match self.ty {
             TypeMeta::Id => "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
-            TypeMeta::Normal { column: ref column, normal: ref normal, nullable: ref nullable } => {
+            TypeMeta::Number { number: ref number, column: ref column, nullable: ref nullable } => {
                 format!("`{}` {}{}",
                         column,
-                        normal.db_type_string(),
+                        Self::db_type_number(number),
+                        nullableFn(nullable.clone()))
+            }
+            TypeMeta::String { len: ref len, column: ref column, nullable: ref nullable } => {
+                format!("`{}` VARCHAR({}){}",
+                        column,
+                        len,
                         nullableFn(nullable.clone()))
             }
             _ => unreachable!(),
@@ -167,42 +157,57 @@ impl FieldMeta {
     pub fn type_name_set(&self) -> String {
         match self.ty {
             TypeMeta::Id => self.type_name(),
-            TypeMeta::Normal { normal: ref normal, .. } => normal.type_name_set(),
-            TypeMeta::Refer { entity: ref entity, .. } => format!("&{}", entity),
-            _ => unreachable!(),
+            TypeMeta::Number { .. } => self.type_name(),
+            TypeMeta::String { .. } => "&str".to_string(),
+            TypeMeta::Pointer { entity: ref entity, .. } => format!("&{}", entity),
+            TypeMeta::OneToOne { entity: ref entity, .. } => format!("&{}", entity),
+            TypeMeta::OneToMany { entity: ref entity, .. } => format!("&{}", entity),
+            TypeMeta::ManyToMany { entity: ref entity, .. } => format!("&{}", entity),
+            TypeMeta::NULL => unreachable!(),
         }
     }
 
     pub fn get_refer_entity(&self) -> String {
         match self.ty {
-            TypeMeta::Refer { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::Pointer { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToOne { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToMany { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::ManyToMany { entity: ref entity, .. } => entity.to_string(),
             _ => unreachable!(),
         }
     }
     pub fn get_refer_cascade(&self) -> &Vec<Cascade> {
         match self.ty {
-            TypeMeta::Refer { cascade: ref cascade, .. } => cascade,
+            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade,
+            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade,
+            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade,
+            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade,
             _ => unreachable!(),
         }
     }
     pub fn is_refer_pointer(&self) -> bool {
         match self.ty {
-            TypeMeta::Refer { refer: ref refer, .. } => {
-                match refer {
-                    &TypeReferMeta::Pointer { .. } => true,
-                    _ => false,
-                }
-            }
+            TypeMeta::Pointer { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_one_one(&self) -> bool {
+        match self.ty {
+            TypeMeta::OneToOne { .. } => true,
             _ => false,
         }
     }
     pub fn get_refer_pointer_id(&self) -> String {
-        if let TypeMeta::Refer { refer: ref refer, .. } = self.ty {
-            if let &TypeReferMeta::Pointer { id: ref id } = refer {
-                return id.to_string();
-            }
+        match self.ty {
+            TypeMeta::Pointer { refer_id: ref refer_id, .. } => refer_id.to_string(),
+            _ => unreachable!(),
         }
-        unreachable!();
+    }
+    pub fn get_refer_one_one_id(&self) -> String {
+        match self.ty {
+            TypeMeta::OneToOne { id: ref id, .. } => id.to_string(),
+            _ => unreachable!(),
+        }
     }
 
     pub fn has_refer_cascade_insert(&self) -> bool {
@@ -296,6 +301,8 @@ impl FieldMeta {
     fn new_refer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         if attr.has("pointer") {
             return Self::new_pointer(entity, field, ty, attr);
+        } else if attr.has("one-one") {
+            return Self::new_one_one(entity, field, ty, attr);
         }
         unreachable!()
     }
@@ -303,10 +310,10 @@ impl FieldMeta {
     fn new_string(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let meta = FieldMeta {
             field: field.to_string(),
-            ty: TypeMeta::Normal {
+            ty: TypeMeta::String {
+                len: Self::pick_len(attr),
                 column: field.to_string(),
                 nullable: Self::pick_nullable(attr),
-                normal: TypeNormalMeta::String(Self::pick_len(attr)),
             },
         };
         vec![(entity.to_string(), meta)]
@@ -314,50 +321,60 @@ impl FieldMeta {
     fn new_number(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let meta = FieldMeta {
             field: field.to_string(),
-            ty: TypeMeta::Normal {
+            ty: TypeMeta::Number {
+                number: ty.to_string(),
                 column: field.to_string(),
                 nullable: Self::pick_nullable(attr),
-                normal: TypeNormalMeta::Number(ty.to_string()),
             },
         };
         vec![(entity.to_string(), meta)]
     }
     fn new_pointer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let refer_id_field = format!("{}_id", field);
-        let cascade = Self::pick_cascade(attr);
-        // println!("{:?}", cascade);
-        // refer_id
-        // refer_object
-        let refer_id = FieldMeta {
-            field: refer_id_field.to_string(),
-            ty: TypeMeta::Normal {
-                column: refer_id_field.to_string(),
-                nullable: Self::pick_nullable(attr),
-                normal: TypeNormalMeta::Number("u64".to_string()),
-            },
-        };
+        // 对象与id都挂在A上
+        // let refer_id = FieldMeta {
+        //     field: refer_id_field.to_string(),
+        //     ty: TypeMeta:: {
+        //         column: refer_id_field.to_string(),
+        //         nullable: Self::pick_nullable(attr),
+        //         normal: TypeNormalMeta::Number("u64".to_string()),
+        //     },
+        // };
+        let mut ret = FieldMeta::new_number(entity, refer_id_field.as_ref(), "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
-            ty: TypeMeta::Refer {
+            ty: TypeMeta::Pointer {
+                refer_id: refer_id_field.to_string(),
                 entity: ty.to_string(),
-                cascade: cascade,
-                refer: TypeReferMeta::Pointer { id: refer_id_field.to_string() },
+                cascade: Self::pick_cascade(attr),
             },
         };
-        return vec![(entity.to_string(), refer_id), (entity.to_string(), refer_object)];
+        ret.push((entity.to_string(), refer_object));
+        ret
+        // return vec![refer_id, (entity.to_string(), refer_object)];
     }
-    fn new_one2one(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+    fn new_one_one(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
-        let refer_id = FieldMeta {
-            field: refer_id_field.to_string(),
-            ty: TypeMeta::Normal {
-                column: refer_id_field,
-                nullable: Self::pick_nullable(attr),
-                normal: TypeNormalMeta::Number("u64".to_string()),
+        // let refer_id = FieldMeta {
+        //     field: refer_id_field.to_string(),
+        //     ty: TypeMeta::Normal {
+        //         column: refer_id_field.to_string(),
+        //         nullable: Self::pick_nullable(attr),
+        //         normal: TypeNormalMeta::Number("u64".to_string()),
+        //     },
+        // };
+        let mut ret = FieldMeta::new_number(ty, refer_id_field.as_ref(), "u64", attr);
+        let refer_object = FieldMeta {
+            field: field.to_string(),
+            ty: TypeMeta::OneToOne {
+                id: refer_id_field.to_string(),
+                entity: ty.to_string(),
+                cascade: Self::pick_cascade(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
             },
         };
-        vec![(ty.to_string(), refer_id)]
+        ret.push((entity.to_string(), refer_object));
+        ret
     }
 }
 

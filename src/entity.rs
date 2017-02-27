@@ -52,29 +52,14 @@ impl EntityInner {
 
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_refer_pointer_id();
-        match value {
-            // 设为NULL等价于删除对象+对象引用id
-            None => {
-                self.fields.remove(&refer_id_field);
-                self.refers.remove(key);
-            }
-            // 写入对象+对象引用id
-            Some(inner) => {
-                // 对引用id的操作
-                if inner.borrow().has("id") {
-                    // 对象有id的情况下更新引用id
-                    let refer_id = inner.borrow().get("id").unwrap();
-                    self.fields.insert(refer_id_field, refer_id);
-                } else {
-                    // 对象没有id的情况下删除引用id
-                    self.fields.remove(&refer_id_field);
-                }
-                // 写入对象
-                self.refers.insert(key.to_string(), inner.clone());
-            }
-        };
+        if refer_meta.is_refer_pointer() {
+            return self.set_refer_pointer(key, value);
+        } else if refer_meta.is_refer_one_one() {
+            return self.set_refer_one_one(key, value);
+        }
+        unreachable!();
     }
+
     pub fn get_refer(&self, key: &str) -> Option<EntityInnerPointer> {
         self.refers.get(key).map(|rc| rc.clone())
     }
@@ -130,6 +115,65 @@ impl EntityInner {
         conn.prep_exec(sql, params).map(|res| {
             self.fields.insert("id".to_string(), Value::from(res.last_insert_id()));
         })
+    }
+}
+
+// 私有函数在这里实现
+impl EntityInner {
+    fn set_refer_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_refer_pointer_id();
+        match value {
+            // 设为NULL等价于删除对象+对象引用id
+            None => {
+                self.fields.remove(&refer_id_field);
+                self.refers.remove(key);
+            }
+            // 写入对象+对象引用id
+            Some(inner_rc) => {
+                let inner = inner_rc.borrow();
+                // 对引用id的操作
+                if inner.has("id") {
+                    // 对象有id的情况下更新引用id
+                    self.fields.insert(refer_id_field, inner.get("id").unwrap());
+                } else {
+                    // 对象没有id的情况下删除引用id
+                    self.fields.remove(&refer_id_field);
+                }
+                // 写入对象
+                self.refers.insert(key.to_string(), inner_rc.clone());
+            }
+        };
+    }
+    fn set_refer_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_refer_one_one_id();
+        match value {
+            // A中去掉对象，B中去掉id(如果A中有B的话)
+            None => {
+                let other = self.refers.remove(key);
+                match other {
+                    // 本来就没有，什么都不干
+                    None => {}
+                    // 有的话将B的引用id也去掉
+                    Some(other) => {
+                        other.borrow_mut().fields.remove(&refer_id_field);
+                    }
+                };
+            }
+            Some(inner_rc) => {
+                // A保存B对象，B保存A的id
+                let mut inner = inner_rc.borrow_mut();
+                if self.has("id") {
+                    // 如果A有id，更新B上的
+                    inner.fields.insert(refer_id_field, self.get("id").unwrap());
+                } else {
+                    // 如果A没有id，删除B上的
+                    inner.fields.remove(&refer_id_field);
+                }
+                self.refers.insert(key.to_string(), inner_rc.clone());
+            }
+        };
     }
 }
 

@@ -13,7 +13,7 @@ fn main() {
 }
 
 fn refer_test(db: &ast::DB) {
-    db.rebuild(meta());
+    db.rebuild(meta()).unwrap();
     let mut p = Person::default();
     p.set_name("Tom");
     let mut a = Address::default();
