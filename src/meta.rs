@@ -199,13 +199,13 @@ impl FieldMeta {
             _ => false,
         }
     }
-    pub fn get_refer_pointer_id(&self) -> String {
+    pub fn get_pointer_id(&self) -> String {
         match self.ty {
             TypeMeta::Pointer { refer_id: ref refer_id, .. } => refer_id.to_string(),
             _ => unreachable!(),
         }
     }
-    pub fn get_refer_one_one_id(&self) -> String {
+    pub fn get_one_one_id(&self) -> String {
         match self.ty {
             TypeMeta::OneToOne { id: ref id, .. } => id.to_string(),
             _ => unreachable!(),

@@ -131,7 +131,6 @@ fn do_pointer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> Strin
 
 pub fn format_meta(meta: &OrmMeta) -> String {
     let json = format!("\"{}\"", rustc_serialize::json::encode(&meta).unwrap());
-    // println!("{}", json);
     let entities = meta.entities
         .iter()
         .map(format_entity)

@@ -22,6 +22,7 @@ pub struct EntityInner {
     pub meta: &'static EntityMeta,
     pub field_map: HashMap<String, Value>,
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
+    pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
     pub refers: HashMap<String, EntityInnerPointer>,
     pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 }
@@ -32,6 +33,7 @@ impl EntityInner {
             meta: meta,
             field_map: HashMap::new(),
             pointer_map: HashMap::new(),
+            one_one_map: HashMap::new(),
             refers: HashMap::new(),
             bulks: HashMap::new(),
         }
@@ -56,7 +58,7 @@ impl EntityInner {
 
     pub fn set_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_refer_pointer_id();
+        let refer_id_field = refer_meta.get_pointer_id();
         match value {
             None => {
                 // a.b_id => NULL, a.b = None
@@ -67,7 +69,7 @@ impl EntityInner {
                 // a.b_id = b.id, a.b = Some(b);
                 let inner = inner_rc.borrow();
                 let refer_id = inner.field_map.get("id");
-                if refer_id.is_some(){
+                if refer_id.is_some() {
                     self.field_map.insert(refer_id_field, refer_id.unwrap().clone());
                 }
                 self.pointer_map.insert(key.to_string(), Some(inner_rc.clone()));
@@ -76,8 +78,8 @@ impl EntityInner {
     }
     pub fn get_pointer(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_refer_pointer_id();
-        match self.pointer_map.get("key") {
+        let refer_id_field = refer_meta.get_pointer_id();
+        match self.pointer_map.get(key) {
             None => {
                 // lazy load
                 // TODO
@@ -93,12 +95,51 @@ impl EntityInner {
         self.get_pointer(key).is_some()
     }
 
+    pub fn set_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_one_one_id();
+        match value {
+            None => {
+                // a.b_id => NULL, a.b = None
+                self.field_map.insert(refer_id_field, Value::NULL);
+                self.one_one_map.insert(key.to_string(), None);
+            }
+            Some(inner_rc) => {
+                // a.b_id = b.id, a.b = Some(b);
+                let inner = inner_rc.borrow();
+                let refer_id = inner.field_map.get("id");
+                if refer_id.is_some() {
+                    self.field_map.insert(refer_id_field, refer_id.unwrap().clone());
+                }
+                self.one_one_map.insert(key.to_string(), Some(inner_rc.clone()));
+            }
+        }
+    }
+    pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_one_one_id();
+        match self.one_one_map.get("key") {
+            None => {
+                // lazy load
+                // TODO
+                unimplemented!()
+            }
+            Some(opt) => {
+                // 里面是啥就是啥
+                opt.as_ref().map(|inner| inner.clone())
+            }
+        }
+    }
+    pub fn has_one_one(&mut self, key: &str) -> bool {
+        self.get_pointer(key).is_some()
+    }
+
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let refer_meta = self.meta.field_map.get(key).unwrap();
         if refer_meta.is_refer_pointer() {
-            return self.set_refer_pointer(key, value);
+            return self.set_pointer(key, value);
         } else if refer_meta.is_refer_one_one() {
-            return self.set_refer_one_one(key, value);
+            return self.set_one_one(key, value);
         }
         unreachable!();
     }
@@ -165,7 +206,7 @@ impl EntityInner {
 impl EntityInner {
     // fn set_refer_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
     //     let refer_meta = self.meta.field_map.get(key).unwrap();
-    //     let refer_id_field = refer_meta.get_refer_pointer_id();
+    //     let refer_id_field = refer_meta.get_pointer_id();
     //     match value {
     //         // 设为NULL等价于删除对象+对象引用id
     //         None => {
@@ -190,7 +231,7 @@ impl EntityInner {
     // }
     // fn set_refer_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
     //     let refer_meta = self.meta.field_map.get(key).unwrap();
-    //     let refer_id_field = refer_meta.get_refer_one_one_id();
+    //     let refer_id_field = refer_meta.get_one_one_id();
     //     match value {
     //         // A中去掉对象，B中去掉id(如果A中有B的话)
     //         None => {
