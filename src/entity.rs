@@ -318,11 +318,13 @@ impl fmt::Debug for EntityInner {
             }
         };
         write!(f,
-               "{{ {}, {} }}",
+               "{{ {}, {}, {} }}",
                output(format!("FieldMap: {:?}", self.field_map),
                       self.field_map.len()),
                output(format!("PointerMap: {:?}", self.pointer_map),
-                      self.pointer_map.len()))
+                      self.pointer_map.len()),
+               output(format!("OneOneMap: {:?}", self.one_one_map),
+                      self.one_one_map.len()))
     }
 }
 
@@ -373,6 +375,20 @@ pub trait Entity {
     }
     fn inner_has_pointer(&self, key: &str) -> bool {
         self.do_inner_mut(|inner| inner.has_pointer(key))
+    }
+
+    fn inner_get_one_one<E>(&self, key: &str) -> Option<E>
+        where E: Entity
+    {
+        self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc))
+    }
+    fn inner_set_one_one<E>(&self, key: &str, value: Option<&E>)
+        where E: Entity
+    {
+        self.do_inner_mut(|inner| inner.set_one_one(key, value.map(|v| v.inner())));
+    }
+    fn inner_has_one_one(&self, key: &str) -> bool {
+        self.do_inner_mut(|inner| inner.has_one_one(key))
     }
 
     fn set_id(&mut self, id: u64) {

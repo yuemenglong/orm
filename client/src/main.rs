@@ -14,15 +14,22 @@ fn main() {
 
 fn refer_test(db: &ast::DB) {
     db.rebuild(meta()).unwrap();
-    let mut p = Person::default();
-    p.set_name("Tom");
-    let mut a = Address::default();
-    p.set_addr(&a);
-    a.set_road("中原路");
-    p.get_addr().set_no(123);
-    println!("{:?}", p);
-    db.insert(&p).unwrap();
-    println!("{:?}", p);
+    let mut person = Person::default();
+    person.set_name("Tom");
+
+    let mut addr = Address::default();
+    person.set_addr(&addr);
+    addr.set_road("中原路");
+    person.get_addr().set_no(123);
+    println!("{:?}", person);
+
+    let mut account = Account::default();
+    account.set_bank("中国银行");
+    person.set_account(&account);
+    println!("{:?}", person);
+    
+    db.insert(&person).unwrap();
+    println!("{:?}", person);
 }
 
 fn curd_test(db: &ast::DB) {

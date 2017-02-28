@@ -113,6 +113,13 @@ fn do_id_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) ->
         .join(join)
 }
 
+fn do_spec_fields(fields: Vec<&FieldMeta>, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    fields.into_iter()
+        .map(cb)
+        .collect::<Vec<_>>()
+        .join(join)
+}
+
 fn do_normal_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
     meta.get_normal_fields()
         .into_iter()
@@ -155,8 +162,9 @@ fn format_entity_define(meta: &EntityMeta) -> String {
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
-    let refer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
-    let fields = format!("{}\n{}", normal_fields, refer_fields);
+    let pointer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
+    let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
+    let fields = format!("{}\n{}\n{}", normal_fields, pointer_fields, one_one_fields);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
@@ -181,6 +189,12 @@ fn format_entity_impl_field(meta: &FieldMeta) -> String {
 }
 fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
     TPL_IMPL_POINTER.to_string()
+        .replace("${FIELD}", &meta.field())
+        .replace("${TYPE}", &meta.type_name())
+        .replace("${SET_TYPE}", &meta.type_name_set())
+}
+fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
+    TPL_IMPL_ONE_ONE.to_string()
         .replace("${FIELD}", &meta.field())
         .replace("${TYPE}", &meta.type_name())
         .replace("${SET_TYPE}", &meta.type_name_set())

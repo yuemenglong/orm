@@ -127,7 +127,7 @@ impl DB {
 fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
     where C: GenericConnection
 {
-    // 遍历目前已存在的引用
+    // 遍历pointer
     for (refer_field, opt) in &inner.pointer_map {
         if opt.is_none() {
             // lazy load, 在insert的情况下基本不会到这个分支
@@ -147,5 +147,27 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
         let refer_id = refer_inner.field_map.get("id").unwrap().clone();
         inner.field_map.insert(refer_id_field, refer_id);
     }
-    inner.do_insert(conn)
+
+    try!(inner.do_insert(conn));
+
+    // 需要等a写入后才能写b，因为aid在b上，需要a先有id
+    for (refer_field, opt) in &inner.one_one_map {
+        if opt.is_none() {
+            // lazy load, 在insert的情况下基本不会到这个分支
+            unreachable!();
+        }
+        let refer_inner_rc = opt.as_ref().unwrap().clone();
+        // 拿到该引用对应的meta信息
+        let refer_meta = inner.meta.field_map.get(refer_field).unwrap();
+        // 判断是否需要级联写入
+        if !refer_meta.has_refer_cascade_insert() {
+            continue;
+        }
+        let refer_id_field = refer_meta.get_one_one_id();
+        let mut refer_inner = refer_inner_rc.borrow_mut();
+        let self_id = inner.field_map.get("id").unwrap().clone();
+        refer_inner.field_map.insert(refer_id_field.to_string(), self_id);
+        try!(do_insert(refer_inner.deref_mut(), conn));
+    }
+    Ok(())
 }

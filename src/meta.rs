@@ -74,9 +74,7 @@ impl Default for TypeMeta {
     }
 }
 
-impl TypeMeta {
-
-}
+impl TypeMeta {}
 
 impl FieldMeta {
     pub fn column(&self) -> String {
@@ -306,7 +304,7 @@ impl FieldMeta {
     fn new_refer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         if attr.has("pointer") {
             return Self::new_pointer(entity, field, ty, attr);
-        } else if attr.has("one-one") {
+        } else if attr.has("one_one") {
             return Self::new_one_one(entity, field, ty, attr);
         }
         unreachable!()
@@ -406,6 +404,12 @@ impl EntityMeta {
         self.fields
             .iter()
             .filter(|field| field.is_refer_pointer())
+            .collect::<Vec<_>>()
+    }
+    pub fn get_one_one_fields(&self) -> Vec<&FieldMeta> {
+        self.fields
+            .iter()
+            .filter(|field| field.is_refer_one_one())
             .collect::<Vec<_>>()
     }
 
