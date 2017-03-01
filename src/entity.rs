@@ -24,17 +24,30 @@ pub struct EntityInner {
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
+
     pub refers: HashMap<String, EntityInnerPointer>,
     pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 }
 
 impl EntityInner {
     pub fn new(meta: &'static EntityMeta) -> EntityInner {
+        let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
+            .into_iter()
+            .map(|meta| (meta.field(), Value::NULL))
+            .collect();
+        let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
+            .into_iter()
+            .map(|meta| (meta.field(), None))
+            .collect();
+        let one_one_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_one_one_fields()
+            .into_iter()
+            .map(|meta| (meta.field(), None))
+            .collect();
         EntityInner {
             meta: meta,
-            field_map: HashMap::new(),
-            pointer_map: HashMap::new(),
-            one_one_map: HashMap::new(),
+            field_map: field_map,
+            pointer_map: pointer_map,
+            one_one_map: one_one_map,
             one_many_map: HashMap::new(),
             refers: HashMap::new(),
             bulks: HashMap::new(),
