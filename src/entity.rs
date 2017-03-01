@@ -23,6 +23,7 @@ pub struct EntityInner {
     pub field_map: HashMap<String, Value>,
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
+    pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
     pub refers: HashMap<String, EntityInnerPointer>,
     pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 }
@@ -34,6 +35,7 @@ impl EntityInner {
             field_map: HashMap::new(),
             pointer_map: HashMap::new(),
             one_one_map: HashMap::new(),
+            one_many_map: HashMap::new(),
             refers: HashMap::new(),
             bulks: HashMap::new(),
         }
@@ -61,7 +63,7 @@ impl EntityInner {
         let refer_id_field = refer_meta.get_pointer_id();
         match value {
             None => {
-                // a.b_id => NULL, a.b = None
+                // a.b_id = NULL, a.b = None
                 self.field_map.insert(refer_id_field, Value::NULL);
                 self.pointer_map.insert(key.to_string(), None);
             }
@@ -100,12 +102,22 @@ impl EntityInner {
         let refer_id_field = refer_meta.get_one_one_id();
         match value {
             None => {
-                // a.b_id => NULL, a.b = None
-                self.field_map.insert(refer_id_field, Value::NULL);
-                self.one_one_map.insert(key.to_string(), None);
+                // a.b = None, b.a_id = NULL
+                let refer_object = self.one_one_map.insert(key.to_string(), None);
+                if refer_object.is_none() {
+                    // lazy load
+                    unimplemented!();
+                }
+                // 到这里一定有b，只是可以为NULL
+                let refer_object = refer_object.unwrap();
+                if refer_object.is_some() {
+                    // 且未设置为空
+                    let refer_object = refer_object.unwrap();
+                    refer_object.borrow_mut().field_map.insert(refer_id_field, Value::NULL);
+                }
             }
             Some(inner_rc) => {
-                // a.b_id = b.id, a.b = Some(b);
+                // b.a_id = a.id, a.b = Some(b);
                 let inner = inner_rc.borrow();
                 let refer_id = inner.field_map.get("id");
                 if refer_id.is_some() {
@@ -134,6 +146,45 @@ impl EntityInner {
         self.get_pointer(key).is_some()
     }
 
+    pub fn set_one_many(&mut self, key: &str, value: Option<Vec<EntityInnerPointer>>) {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_one_many_id();
+        match value {
+            None => {
+                // b.a_id => NULL, a.b = None
+                self.field_map.insert(refer_id_field, Value::NULL);
+                self.one_many_map.insert(key.to_string(), None);
+            }
+            Some(inner_rc) => {
+                // a.b_id = b.id, a.b = Some(b);
+                // let inner = inner_rc.borrow();
+                // let refer_id = inner.field_map.get("id");
+                // if refer_id.is_some() {
+                //     self.field_map.insert(refer_id_field, refer_id.unwrap().clone());
+                // }
+                // self.one_many_map.insert(key.to_string(), Some(inner_rc.clone()));
+            }
+        }
+    }
+    pub fn get_one_many(&mut self, key: &str) -> Option<Vec<EntityInnerPointer>> {
+        let refer_meta = self.meta.field_map.get(key).unwrap();
+        let refer_id_field = refer_meta.get_one_many_id();
+        match self.one_many_map.get("key") {
+            None => {
+                // lazy load
+                // TODO
+                unimplemented!()
+            }
+            Some(opt) => {
+                // 里面是啥就是啥
+                opt.as_ref().map(|inner| inner.clone())
+            }
+        }
+    }
+    pub fn has_one_many(&mut self, key: &str) -> bool {
+        self.get_pointer(key).is_some()
+    }
+
     pub fn set_refer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let refer_meta = self.meta.field_map.get(key).unwrap();
         if refer_meta.is_refer_pointer() {
@@ -143,7 +194,6 @@ impl EntityInner {
         }
         unreachable!();
     }
-
     pub fn get_refer(&self, key: &str) -> Option<EntityInnerPointer> {
         self.refers.get(key).map(|rc| rc.clone())
     }

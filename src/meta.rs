@@ -209,6 +209,12 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
+    pub fn get_one_many_id(&self) -> String {
+        match self.ty {
+            TypeMeta::OneToMany { id: ref id, .. } => id.to_string(),
+            _ => unreachable!(),
+        }
+    }
     pub fn get_bulk_one_many_id(&self) -> String {
         unimplemented!()
     }
