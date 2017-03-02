@@ -30,6 +30,10 @@ fn refer_test(db: &ast::DB) {
     
     db.insert(&person).unwrap();
     println!("{:?}", person);
+
+    person.set_name("Bob");
+    db.update(&person).unwrap();
+    println!("{:?}", person);
 }
 
 fn curd_test(db: &ast::DB) {

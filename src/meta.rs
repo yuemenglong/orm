@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
+    NULL,
     Insert,
     Update,
     Delete,

@@ -14,6 +14,7 @@ use mysql::Row;
 use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
+use meta::Cascade;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
@@ -24,6 +25,8 @@ pub struct EntityInner {
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
+
+    pub cascade: Option<Cascade>,
 
     pub refers: HashMap<String, EntityInnerPointer>,
     pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
@@ -49,6 +52,7 @@ impl EntityInner {
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: HashMap::new(),
+            cascade: None,
             refers: HashMap::new(),
             bulks: HashMap::new(),
         }
@@ -258,10 +262,29 @@ impl EntityInner {
     {
         let sql = self.meta.sql_insert();
         let params = self.get_params();
+        // TODO if !auto push(id)
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| {
             self.field_map.insert("id".to_string(), Value::from(res.last_insert_id()));
         })
+    }
+    pub fn do_update<C>(&mut self, conn: &mut C) -> Result<(), Error>
+        where C: GenericConnection
+    {
+        let sql = self.meta.sql_update();
+        let mut params = self.get_params();
+        let id = self.field_map.get("id").unwrap().clone();
+        params.insert(0, ("id".to_string(), id));
+        println!("{}, {:?}", sql, params);
+        conn.prep_exec(sql, params).map(|res| ())
+        // let mut params = entity.do_inner(|inner| inner.get_params());
+        // params.push(("id".to_string(), Value::from(entity.get_id())));
+        // let res = self.pool.prep_exec(sql, params);
+        // match res {
+        //     Ok(res) => Ok(res.affected_rows()),
+        //     Err(err) => Err(err),
+        // }
+
     }
 }
 
@@ -381,12 +404,12 @@ impl fmt::Debug for EntityInner {
             }
         };
         write!(f,
-               "{{ {}, {}, {} }}",
+               "{{ {}{}{} }}",
                output(format!("FieldMap: {:?}", self.field_map),
                       self.field_map.len()),
-               output(format!("PointerMap: {:?}", self.pointer_map),
+               output(format!(", PointerMap: {:?}", self.pointer_map),
                       self.pointer_map.len()),
-               output(format!("OneOneMap: {:?}", self.one_one_map),
+               output(format!(", OneOneMap: {:?}", self.one_one_map),
                       self.one_one_map.len()))
     }
 }

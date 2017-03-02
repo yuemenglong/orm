@@ -70,19 +70,12 @@ impl DB {
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
         let inner_rc = entity.inner();
         let mut inner = inner_rc.borrow_mut();
-        // let mut conn = self.pool.get_conn().as_mut().unwrap();
         do_insert(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
     }
-    pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
-        let sql = E::meta().sql_update();
-        println!("{}", sql);
-        let mut params = entity.do_inner(|inner| inner.get_params());
-        params.push(("id".to_string(), Value::from(entity.get_id())));
-        let res = self.pool.prep_exec(sql, params);
-        match res {
-            Ok(res) => Ok(res.affected_rows()),
-            Err(err) => Err(err),
-        }
+    pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
+        let inner_rc = entity.inner();
+        let mut inner = inner_rc.borrow_mut();
+        do_update(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
         let sql = E::meta().sql_get();
@@ -171,3 +164,11 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
     }
     Ok(())
 }
+
+fn do_update<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
+    where C: GenericConnection
+{
+    try!(inner.do_update(conn));
+    Ok(())
+}
+
