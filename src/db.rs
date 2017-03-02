@@ -136,23 +136,15 @@ fn do_insert<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
     try!(inner.do_insert(conn));
 
     // 需要等a写入后才能写b，因为aid在b上，需要a先有id
-    for (refer_field, opt) in &inner.one_one_map {
+    for (refer_field, opt) in inner.one_one_map.clone() {
         if opt.is_none() {
-            // lazy load, 在insert的情况下基本不会到这个分支
-            unreachable!();
-        }
-        let refer_inner_rc = opt.as_ref().unwrap().clone();
-        // 拿到该引用对应的meta信息
-        let refer_meta = inner.meta.field_map.get(refer_field).unwrap();
-        // 判断是否需要级联写入
-        if !refer_meta.has_refer_cascade_insert() {
+            // lazy load
             continue;
         }
-        let refer_id_field = refer_meta.get_one_one_id();
+        let refer_inner_rc = opt.unwrap();
         let mut refer_inner = refer_inner_rc.borrow_mut();
-        let self_id = inner.field_map.get("id").unwrap().clone();
-        refer_inner.field_map.insert(refer_id_field.to_string(), self_id);
-        try!(do_insert(refer_inner.deref_mut(), conn));
+        let refer_meta = inner.meta.field_map.get(&refer_field).unwrap();
+        try!(do_cascade_insert(inner, refer_inner.deref_mut(), refer_meta, conn));
     }
     Ok(())
 }
@@ -164,8 +156,12 @@ fn do_cascade_insert<C>(a: &mut EntityInner,
                         -> Result<(), Error>
     where C: GenericConnection
 {
-    if a_b_meta.has_refer_cascade_insert() {
-        try!(do_cascade_insert_pointer(a, b, a_b_meta, conn));
+    if a_b_meta.has_cascade_insert() {
+        if a_b_meta.is_refer_pointer(){
+            try!(do_cascade_insert_pointer(a, b, a_b_meta, conn));
+        }else if a_b_meta.is_refer_one_one(){
+            try!(do_cascade_insert_one_one(a, b, a_b_meta, conn));
+        }
     }
     Ok(())
 }
@@ -186,6 +182,22 @@ fn do_cascade_insert_pointer<C>(a: &mut EntityInner,
     Ok(())
 }
 
+fn do_cascade_insert_one_one<C>(a: &mut EntityInner,
+                                b: &mut EntityInner,
+                                a_b_meta: &FieldMeta,
+                                conn: &mut C)
+                                -> Result<(), Error>
+    where C: GenericConnection
+{
+    // b.a_id = a.id;
+    let a_id_field = a_b_meta.get_one_one_id();
+    let a_id = a.field_map.get("id").unwrap().clone();
+    b.field_map.insert(a_id_field, a_id);
+    // insert(b);
+    try!(do_insert(b, conn));
+    Ok(())
+}
+
 fn do_update<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
     where C: GenericConnection
 {
@@ -199,7 +211,7 @@ fn do_update<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
         // 拿到该引用对应的meta信息
         let refer_meta = inner.meta.field_map.get(refer_field).unwrap();
         // 判断是否需要级联更新
-        if !refer_meta.has_refer_cascade_update() {
+        if !refer_meta.has_cascade_update() {
             continue;
         }
         let refer_id_field = refer_meta.get_pointer_id();
@@ -222,7 +234,7 @@ fn do_update<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
         // 拿到该引用对应的meta信息
         let refer_meta = inner.meta.field_map.get(refer_field).unwrap();
         // 判断是否需要级联更新
-        if !refer_meta.has_refer_cascade_update() {
+        if !refer_meta.has_cascade_update() {
             continue;
         }
         let refer_id_field = refer_meta.get_one_one_id();

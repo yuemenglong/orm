@@ -220,7 +220,7 @@ impl FieldMeta {
         unimplemented!()
     }
 
-    pub fn has_refer_cascade_insert(&self) -> bool {
+    pub fn has_cascade_insert(&self) -> bool {
         for cascade in self.get_refer_cascade() {
             match cascade {
                 &Cascade::Insert => return true,
@@ -231,7 +231,7 @@ impl FieldMeta {
         }
         return false;
     }
-    pub fn has_refer_cascade_update(&self) -> bool {
+    pub fn has_cascade_update(&self) -> bool {
         for cascade in self.get_refer_cascade() {
             match cascade {
                 &Cascade::Update => return true,

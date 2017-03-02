@@ -21,19 +21,19 @@ fn refer_test(db: &ast::DB) {
     person.set_addr(&addr);
     addr.set_road("中原路");
     person.get_addr().set_no(123);
-    println!("{:?}", person);
+    person.debug();
 
     let mut account = Account::default();
     account.set_bank("中国银行");
     person.set_account(&account);
-    println!("{:?}", person);
+    person.debug();
     
     db.insert(&person).unwrap();
-    println!("{:?}", person);
+    person.debug();
 
     person.set_name("Bob");
     db.update(&person).unwrap();
-    println!("{:?}", person);
+    person.debug();
 }
 
 fn curd_test(db: &ast::DB) {
