@@ -7,6 +7,8 @@ use meta;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 // use cond::Cond;
 use entity::Entity;
@@ -78,26 +80,11 @@ impl DB {
         let mut inner = inner_rc.borrow_mut();
         do_update(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
     }
-    pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
-        let sql = E::meta().sql_get();
-        println!("{}", sql);
-        let res = self.pool.prep_exec(sql, vec![("id", id)]);
-        if let Err(err) = res {
-            return Err(err);
-        }
-        let mut res = res.unwrap();
-        let option = res.next();
-        if let None = option {
-            return Ok(None);
-        }
-        let row_res = option.unwrap();
-        if let Err(err) = row_res {
-            return Err(err);
-        }
-        let mut row = row_res.unwrap();
-        let mut entity = E::default();
-        entity.do_inner_mut(|inner| inner.set_values(&res, &mut row, ""));
-        Ok(Some(entity))
+    pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
+        let mut inner = EntityInner::new(E::meta());
+        inner.field_map.insert("id".to_string(), Value::from(id));
+        try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
+        Ok(E::new(Rc::new(RefCell::new(inner))))
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
         let sql = E::meta().sql_delete();
@@ -157,9 +144,9 @@ fn do_cascade_insert<C>(a: &mut EntityInner,
     where C: GenericConnection
 {
     if a_b_meta.has_cascade_insert() {
-        if a_b_meta.is_refer_pointer(){
+        if a_b_meta.is_refer_pointer() {
             try!(do_cascade_insert_pointer(a, b, a_b_meta, conn));
-        }else if a_b_meta.is_refer_one_one(){
+        } else if a_b_meta.is_refer_one_one() {
             try!(do_cascade_insert_one_one(a, b, a_b_meta, conn));
         }
     }
@@ -243,5 +230,12 @@ fn do_update<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
         refer_inner.field_map.insert(refer_id_field.to_string(), self_id);
         try!(do_insert(refer_inner.deref_mut(), conn));
     }
+    Ok(())
+}
+
+fn do_get<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
+    where C: GenericConnection
+{
+    try!(inner.do_get(conn));
     Ok(())
 }

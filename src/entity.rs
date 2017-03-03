@@ -202,6 +202,56 @@ impl EntityInner {
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
     }
+    pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
+        where C: GenericConnection
+    {
+        // let sql = E::meta().sql_get();
+        // println!("{}", sql);
+        // let res = self.pool.prep_exec(sql, vec![("id", id)]);
+        // if let Err(err) = res {
+        //     return Err(err);
+        // }
+        // let mut res = res.unwrap();
+        // let option = res.next();
+        // if let None = option {
+        //     return Ok(None);
+        // }
+        // let row_res = option.unwrap();
+        // if let Err(err) = row_res {
+        //     return Err(err);
+        // }
+        // let mut row = row_res.unwrap();
+        // let mut entity = E::default();
+        // entity.do_inner_mut(|inner| inner.set_values(&res, &mut row, ""));
+        // Ok(Some(entity))
+
+
+        let sql = self.meta.sql_get();
+        let id = self.field_map.get("id").unwrap().clone();
+        let params = vec![("id".to_string(), id.clone())];
+        println!("{}, {:?}", sql, params);
+        let res = conn.prep_exec(sql, params);
+        if let Err(err) = res {
+            return Err(err);
+        }
+        let mut res = res.unwrap();
+        let row = res.next();
+        if row.is_none() {
+            // 没有读取到，返回id无效
+            return Err(Error::MySqlError(MySqlError {
+                state: "ID_NOT_EXIST".to_string(),
+                message: id.into_str(),
+                code: 60001,
+            }));
+        }
+        let row = row.unwrap();
+        if let Err(err) = row {
+            return Err(err);
+        }
+        let mut row = row.unwrap();
+        self.set_values(&res, &mut row, "");
+        Ok(())
+    }
 }
 
 impl EntityInner {

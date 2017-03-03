@@ -54,7 +54,7 @@ fn curd_test(db: &ast::DB) {
     let id = p.get_id();
     p.set_name("Dick");
     let ret = db.update(&p).unwrap();
-    let p = db.get::<Person>(p.get_id()).unwrap().unwrap();
+    let p = db.get::<Person>(p.get_id()).unwrap();
     println!("{:?}", p);
     db.delete(p).unwrap();
     let p = db.get::<Person>(id).unwrap();
