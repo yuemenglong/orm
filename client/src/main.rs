@@ -35,6 +35,12 @@ fn refer_test(db: &ast::DB) {
     db.update(&person).unwrap();
     person.debug();
 
+    person.clear_addr();
+    person.debug();
+
+    person.clear_account();
+    person.debug();
+    account.debug();
 }
 
 fn curd_test(db: &ast::DB) {
