@@ -77,15 +77,19 @@ static TPL_IMPL_POINTER: &'static str = r#"
 static TPL_IMPL_ONE_ONE: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
-        Box::new(self.inner_get_one_one("${FIELD}").unwrap())
+        Box::new(self.inner_get_one_one("${FIELD}"))
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set_one_one("${FIELD}", Some(value));
+        self.inner_set_one_one("${FIELD}", value);
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
         self.inner_has_one_one("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_one_one("${FIELD}")
     }"#;
 
 static TPL_TRAIT: &'static str = r#"

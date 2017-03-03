@@ -109,36 +109,34 @@ impl EntityInner {
     pub fn set_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
         let mut a = self;
         let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_a_id_field = a_b_meta.get_one_one_id();
         let old_b = a.get_one_one(key);
-        // old_b.a_id = NULL if old_b.a_id = a.id
+        // old_b.a_id = NULL;
         if old_b.is_some() {
             let old_b = old_b.unwrap();
-            clear_one_one_id(a, old_b.clone(), a_b_meta);
+            old_b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
         }
-
-        match value {
-            None => {
-                set_one_one_null(a, a_b_meta);
-            } 
-            Some(b) => {
-                set_one_one(a, b, a_b_meta);
-            }
+        // b.a_id = a.id;
+        let a_id = a.field_map.get("id").unwrap();
+        let b = value.clone();
+        if b.is_some() {
+            let b = b.unwrap();
+            b.borrow_mut().field_map.insert(b_a_id_field, a_id.clone());
         }
+        // a.b = b;
+        let a_b_field = a_b_meta.field();
+        a.one_one_map.insert(a_b_field, value);
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let mut a = &self;
         let a_b_meta = self.meta.field_map.get(key).unwrap();
-        match a.one_one_map.get(key) {
-            None => {
-                // lazy load
-                // TODO
-                unimplemented!()
-            }
-            Some(a_b) => {
-                // 里面是啥就是啥
-                a_b.as_ref().map(|inner| inner.clone())
-            }
+        let a_b_field = a_b_meta.field();
+        let a_b = a.one_one_map.get(&a_b_field);
+        if a_b.is_none() {
+            // lazy load
+            unimplemented!();
         }
+        a.one_one_map.get(&a_b_field).unwrap().clone()
     }
     pub fn has_one_one(&mut self, key: &str) -> bool {
         self.get_pointer(key).is_some()
@@ -203,35 +201,6 @@ impl EntityInner {
         params.insert(0, ("id".to_string(), id));
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
-    }
-}
-
-fn set_one_one(a: &mut EntityInner, b_rc: EntityInnerPointer, a_b_meta: &FieldMeta) {
-    // a.b = b;
-    let mut b = b_rc.borrow_mut();
-    let a_b_field = a_b_meta.field();
-    a.one_one_map.insert(a_b_field, Some(b_rc.clone()));
-
-    // b.a_id = a.id;
-    let b_a_id_field = a_b_meta.get_one_one_id();
-    let a_id = a.field_map.get("id").unwrap_or(&Value::NULL).clone();
-    b.field_map.insert(b_a_id_field, a_id);
-}
-
-fn set_one_one_null(a: &mut EntityInner, a_b_meta: &FieldMeta) {
-    // a.b = None;
-    let a_b_field = a_b_meta.field();
-    a.one_one_map.insert(a_b_field, None);
-}
-
-fn clear_one_one_id(a: &mut EntityInner, b_rc: EntityInnerPointer, a_b_meta: &FieldMeta) {
-    // b.a_id = NULL if b.a_id = a.id;
-    let mut b = b_rc.borrow_mut();
-    let b_a_id_field = a_b_meta.get_one_one_id();
-    let b_a_id = b.field_map.get(&b_a_id_field).unwrap().clone();
-    let a_id = a.field_map.get("id").unwrap().clone();
-    if b_a_id == a_id {
-        b.field_map.insert(b_a_id_field, Value::NULL);
     }
 }
 
@@ -334,18 +303,21 @@ pub trait Entity {
         self.do_inner_mut(|inner| inner.set_pointer(key, None))
     }
 
-    fn inner_get_one_one<E>(&self, key: &str) -> Option<E>
+    fn inner_get_one_one<E>(&self, key: &str) -> E
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc))
+        self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc)).expect("")
     }
-    fn inner_set_one_one<E>(&self, key: &str, value: Option<&E>)
+    fn inner_set_one_one<E>(&self, key: &str, value: &E)
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.set_one_one(key, value.map(|v| v.inner())));
+        self.do_inner_mut(|inner| inner.set_one_one(key, Some(value.inner())));
     }
     fn inner_has_one_one(&self, key: &str) -> bool {
-        self.do_inner_mut(|inner| inner.has_one_one(key))
+        self.do_inner_mut(|inner| inner.get_one_one(key)).is_some()
+    }
+    fn inner_clear_one_one(&self, key: &str) {
+        self.do_inner_mut(|inner| inner.set_one_one(key, None));
     }
 
     fn set_id(&mut self, id: u64) {
