@@ -34,6 +34,7 @@ fn refer_test(db: &ast::DB) {
     person.set_name("Bob");
     db.update(&person).unwrap();
     person.debug();
+
 }
 
 fn curd_test(db: &ast::DB) {

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::fmt;
 
 use mysql::Value;
@@ -14,6 +15,7 @@ use mysql::Row;
 use mysql::prelude::GenericConnection;
 
 use meta::EntityMeta;
+use meta::FieldMeta;
 use meta::Cascade;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
@@ -76,93 +78,65 @@ impl EntityInner {
     }
 
     pub fn set_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
-        let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_pointer_id();
-        match value {
-            None => {
-                // a.b_id = NULL, a.b = None
-                self.field_map.insert(refer_id_field, Value::NULL);
-                self.pointer_map.insert(key.to_string(), None);
-            }
-            Some(inner_rc) => {
-                // a.b_id = b.id, a.b = Some(b);
-                let inner = inner_rc.borrow();
-                let refer_id = inner.field_map.get("id");
-                if refer_id.is_some() {
-                    self.field_map.insert(refer_id_field, refer_id.unwrap().clone());
-                }
-                self.pointer_map.insert(key.to_string(), Some(inner_rc.clone()));
-            }
-        }
+        let a = self;
+        // a.b_id = b.id;
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let a_b_id_field = a_b_meta.get_pointer_id();
+        let b_id = match value {
+            None => Value::NULL,
+            Some(ref rc) => rc.borrow().field_map.get("id").unwrap().clone(),
+        };
+        a.field_map.insert(a_b_id_field, b_id);
+
+        // a.b = b;
+        let b = value;
+        let a_b_field = a_b_meta.field();
+        a.pointer_map.insert(a_b_field, b);
     }
     pub fn get_pointer(&mut self, key: &str) -> Option<EntityInnerPointer> {
-        let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_pointer_id();
-        match self.pointer_map.get(key) {
-            None => {
-                // lazy load
-                // TODO
-                unimplemented!()
-            }
-            Some(opt) => {
-                // 里面是啥就是啥
-                opt.as_ref().map(|inner| inner.clone())
-            }
+        let a = &self;
+        // return a.b
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let a_b = a.pointer_map.get(key);
+        if a_b.is_none() {
+            let a_b_id_field = a_b_meta.get_pointer_id();
+            // lazy load
+            unimplemented!();
         }
-    }
-    pub fn has_pointer(&mut self, key: &str) -> bool {
-        self.get_pointer(key).is_some()
+        a.pointer_map.get(key).unwrap().clone()
     }
 
     pub fn set_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
-        let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_object = self.get_one_one(key);
-        // 先将之前的b.a_id置为空
-        if refer_object.is_some(){
-
+        let mut a = self;
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let old_b = a.get_one_one(key);
+        // old_b.a_id = NULL if old_b.a_id = a.id
+        if old_b.is_some() {
+            let old_b = old_b.unwrap();
+            clear_one_one_id(a, old_b.clone(), a_b_meta);
         }
 
-        let refer_id_field = refer_meta.get_one_one_id();
-        let refer_object = refer_object.unwrap();
         match value {
             None => {
-                //将之前的a_id置为空
-                let refer_object = self.get_one_one(key);
-                refer_object = refer_object.unwrap();
-                // 到这里一定有b，只是可以为NULL
-                // a.b = None, b.a_id = NULL
-                if refer_object.is_some() {
-                    // 且未设置为空
-                    let refer_object = refer_object.unwrap();
-                    refer_object.borrow_mut().field_map.insert(refer_id_field, Value::NULL);
-                }
-            }
-            Some(inner_rc) => {
-                // b.a_id = a.id, a.b = Some(b);
-                let inner = inner_rc.borrow();
-                let refer_id = inner.field_map.get("id").unwrap_or(Value::NULL);
-                if refer_object.is_some() {
-                    refer_object = refer_object.unwrap();
-                    println!("{:?}=========================", refer_id_field);
-                    println!("{:?}=========================", refer_id);
-                    refer_object.field_map.insert(refer_id_field, refer_id.unwrap().clone());
-                }
-                self.one_one_map.insert(key.to_string(), Some(inner_rc.clone()));
+                set_one_one_null(a, a_b_meta);
+            } 
+            Some(b) => {
+                set_one_one(a, b, a_b_meta);
             }
         }
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
-        let refer_meta = self.meta.field_map.get(key).unwrap();
-        let refer_id_field = refer_meta.get_one_one_id();
-        match self.one_one_map.get("key") {
+        let mut a = &self;
+        let a_b_meta = self.meta.field_map.get(key).unwrap();
+        match a.one_one_map.get(key) {
             None => {
                 // lazy load
                 // TODO
                 unimplemented!()
             }
-            Some(opt) => {
+            Some(a_b) => {
                 // 里面是啥就是啥
-                opt.as_ref().map(|inner| inner.clone())
+                a_b.as_ref().map(|inner| inner.clone())
             }
         }
     }
@@ -232,32 +206,33 @@ impl EntityInner {
     }
 }
 
-fn set_one_one(a:&mut EntityInner, b_rc:EntityInnerPointer, a_b_meta:&FieldMeta){
-    // a.b = b; b.a_id = a.id;
-    let b = b_rc.borrow_mut();
-    let b_field = a_b_meta.field();
-    a.one_one_map.insert(b_field, b_rc.clone());
-    let a_id_field = a_b_meta.get_one_one_id();
-    let a_id = a.field_map.get("id").unwrap_or(Value::NULL).clone();
-    b.field_map.insert(a_id_field, a_id);
+fn set_one_one(a: &mut EntityInner, b_rc: EntityInnerPointer, a_b_meta: &FieldMeta) {
+    // a.b = b;
+    let mut b = b_rc.borrow_mut();
+    let a_b_field = a_b_meta.field();
+    a.one_one_map.insert(a_b_field, Some(b_rc.clone()));
+
+    // b.a_id = a.id;
+    let b_a_id_field = a_b_meta.get_one_one_id();
+    let a_id = a.field_map.get("id").unwrap_or(&Value::NULL).clone();
+    b.field_map.insert(b_a_id_field, a_id);
 }
 
-fn clear_one_one(a:&mut EntityInner, a_b_meta:&FieldMeta){
-    // a.b = None; old_b.a_id = NULL; 
-    let b_field = a_b_meta.field();
-    let old_b = a.one_one_map.insert(b_field, None);
-    if old_b.is_some(){
-        old_b = old_b.unwrap();
-        let b_a_id_field= a_b_meta.get_one_one_id();
-        old_b.field_map.insert(b_a_id_field, Value::NULL);
+fn set_one_one_null(a: &mut EntityInner, a_b_meta: &FieldMeta) {
+    // a.b = None;
+    let a_b_field = a_b_meta.field();
+    a.one_one_map.insert(a_b_field, None);
+}
+
+fn clear_one_one_id(a: &mut EntityInner, b_rc: EntityInnerPointer, a_b_meta: &FieldMeta) {
+    // b.a_id = NULL if b.a_id = a.id;
+    let mut b = b_rc.borrow_mut();
+    let b_a_id_field = a_b_meta.get_one_one_id();
+    let b_a_id = b.field_map.get(&b_a_id_field).unwrap().clone();
+    let a_id = a.field_map.get("id").unwrap().clone();
+    if b_a_id == a_id {
+        b.field_map.insert(b_a_id_field, Value::NULL);
     }
-}
-
-fn clear_one_one_id(b_rc:EntityInnerPointer, a_b_meta:&FieldMeta){
-    // b.a_id = NULL
-    let a_id_field = a_b_meta.get_one_one_id();
-    let b = b.rc.borrow_mut();
-    b.field_map.insert(a_id_field, Value::NULL);
 }
 
 impl EntityInner {
@@ -342,18 +317,21 @@ pub trait Entity {
         self.do_inner(|inner| inner.has(key))
     }
 
-    fn inner_get_pointer<E>(&self, key: &str) -> Option<E>
+    fn inner_get_pointer<E>(&self, key: &str) -> E
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::new(rc))
+        self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::new(rc)).expect("")
     }
-    fn inner_set_pointer<E>(&self, key: &str, value: Option<&E>)
+    fn inner_set_pointer<E>(&self, key: &str, value: &E)
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.set_pointer(key, value.map(|v| v.inner())));
+        self.do_inner_mut(|inner| inner.set_pointer(key, Some(value.inner())));
     }
     fn inner_has_pointer(&self, key: &str) -> bool {
-        self.do_inner_mut(|inner| inner.has_pointer(key))
+        self.do_inner_mut(|inner| inner.get_pointer(key)).is_some()
+    }
+    fn inner_clear_pointer(&self, key: &str) {
+        self.do_inner_mut(|inner| inner.set_pointer(key, None))
     }
 
     fn inner_get_one_one<E>(&self, key: &str) -> Option<E>
