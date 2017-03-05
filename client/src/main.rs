@@ -63,4 +63,7 @@ fn curd_test(db: &ast::DB) {
 }
 
 fn select(meta: &EntityMeta){
+
+    let fields = meta.get_normal_fields().into_iter().map(|field|{
+    });
 }

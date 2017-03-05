@@ -93,7 +93,7 @@ pub fn fix_meta(meta: &mut OrmMeta) {
         // build field map / column map
         entity_meta.field_map = entity_meta.fields
             .iter()
-            .map(|field_meta_rc| (field_meta_rc.field(), field_meta_rc.clone()))
+            .map(|field_meta_rc| (field_meta_rc.get_field_name(), field_meta_rc.clone()))
             .collect();
         // entity_meta.column_map = entity_meta.fields
         //     .iter()

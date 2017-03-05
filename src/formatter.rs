@@ -178,7 +178,7 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .replace("${IMPL_FIELDS}", &fields)
 }
 fn format_entity_trait_get_value(meta: &FieldMeta) -> String {
-    format!("ast::Value::from(&self.{})", meta.field())
+    format!("ast::Value::from(&self.{})", meta.get_field_name())
 }
 fn format_entity_trait(meta: &EntityMeta) -> String {
     TPL_TRAIT.to_string()
@@ -186,24 +186,24 @@ fn format_entity_trait(meta: &EntityMeta) -> String {
 }
 fn format_entity_define_field(meta: &FieldMeta) -> String {
     TPL_STRUCT_FIELD.to_string()
-        .replace("${FIELD}", &meta.field())
-        .replace("${TYPE}", &meta.type_name())
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
 }
 fn format_entity_impl_field(meta: &FieldMeta) -> String {
     TPL_IMPL_FIELD.to_string()
-        .replace("${FIELD}", &meta.field())
-        .replace("${TYPE}", &meta.type_name())
-        .replace("${SET_TYPE}", &meta.type_name_set())
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
 }
 fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
     TPL_IMPL_POINTER.to_string()
-        .replace("${FIELD}", &meta.field())
-        .replace("${TYPE}", &meta.type_name())
-        .replace("${SET_TYPE}", &meta.type_name_set())
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
 }
 fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
     TPL_IMPL_ONE_ONE.to_string()
-        .replace("${FIELD}", &meta.field())
-        .replace("${TYPE}", &meta.type_name())
-        .replace("${SET_TYPE}", &meta.type_name_set())
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
 }

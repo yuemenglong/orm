@@ -38,15 +38,15 @@ impl EntityInner {
     pub fn new(meta: &'static EntityMeta) -> EntityInner {
         let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
             .into_iter()
-            .map(|meta| (meta.field(), Value::NULL))
+            .map(|meta| (meta.get_field_name(), Value::NULL))
             .collect();
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
             .into_iter()
-            .map(|meta| (meta.field(), None))
+            .map(|meta| (meta.get_field_name(), None))
             .collect();
         let one_one_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_one_one_fields()
             .into_iter()
-            .map(|meta| (meta.field(), None))
+            .map(|meta| (meta.get_field_name(), None))
             .collect();
         EntityInner {
             meta: meta,
@@ -90,7 +90,7 @@ impl EntityInner {
 
         // a.b = b;
         let b = value;
-        let a_b_field = a_b_meta.field();
+        let a_b_field = a_b_meta.get_field_name();
         a.pointer_map.insert(a_b_field, b);
     }
     pub fn get_pointer(&mut self, key: &str) -> Option<EntityInnerPointer> {
@@ -124,13 +124,13 @@ impl EntityInner {
             b.borrow_mut().field_map.insert(b_a_id_field, a_id.clone());
         }
         // a.b = b;
-        let a_b_field = a_b_meta.field();
+        let a_b_field = a_b_meta.get_field_name();
         a.one_one_map.insert(a_b_field, value);
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let mut a = &self;
         let a_b_meta = self.meta.field_map.get(key).unwrap();
-        let a_b_field = a_b_meta.field();
+        let a_b_field = a_b_meta.get_field_name();
         let a_b = a.one_one_map.get(&a_b_field);
         if a_b.is_none() {
             // lazy load
@@ -149,7 +149,7 @@ impl EntityInner {
             .into_iter()
             .map(|field| {
                 self.field_map
-                    .get(&field.field())
+                    .get(&field.get_field_name())
                     .map(|value| value.clone())
                     .or(Some(Value::NULL))
                     .unwrap()
@@ -162,9 +162,9 @@ impl EntityInner {
             .get_normal_fields()
             .into_iter()
             .map(|field| {
-                (field.column(),
+                (field.get_column_name(),
                  self.field_map
-                     .get(&field.field())
+                     .get(&field.get_field_name())
                      .map(|value| value.clone())
                      .or(Some(Value::NULL))
                      .unwrap())
@@ -174,9 +174,9 @@ impl EntityInner {
     pub fn set_values(&mut self, result: &QueryResult, row: &mut Row, prefix: &str) {
         // 包括id
         for field in self.meta.get_non_refer_fields() {
-            let key = &field.field();
+            let key = &field.get_field_name();
             result.column_index(key).map(|idx| {
-                self.field_map.insert(field.field(), row.as_ref(idx).unwrap().clone());
+                self.field_map.insert(field.get_field_name(), row.as_ref(idx).unwrap().clone());
             });
         }
     }

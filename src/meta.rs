@@ -78,7 +78,7 @@ impl Default for TypeMeta {
 impl TypeMeta {}
 
 impl FieldMeta {
-    pub fn column(&self) -> String {
+    pub fn get_column_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "id".to_string(),
             TypeMeta::Number { column: ref column, .. } => column.to_string(),
@@ -86,10 +86,10 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn field(&self) -> String {
+    pub fn get_field_name(&self) -> String {
         self.field.to_string()
     }
-    pub fn type_name(&self) -> String {
+    pub fn get_type_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "u64".to_string(),
             TypeMeta::Number { number: ref number, .. } => number.to_string(),
@@ -101,7 +101,7 @@ impl FieldMeta {
             TypeMeta::NULL => unreachable!(),
         }
     }
-    pub fn db_type_number(number: &str) -> String {
+    fn get_db_type_number(number: &str) -> String {
         match number {
             "i32" => "INTEGER".to_string(),
             "u32" => "INTEGER".to_string(),
@@ -110,7 +110,7 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn db_type_string(&self) -> String {
+    fn get_db_type(&self) -> String {
         let nullableFn = |nullable| match nullable {
             true => "",
             false => " NOT NULL",
@@ -120,7 +120,7 @@ impl FieldMeta {
             TypeMeta::Number { number: ref number, column: ref column, nullable: ref nullable } => {
                 format!("`{}` {}{}",
                         column,
-                        Self::db_type_number(number),
+                        Self::get_db_type_number(number),
                         nullableFn(nullable.clone()))
             }
             TypeMeta::String { len: ref len, column: ref column, nullable: ref nullable } => {
@@ -132,10 +132,10 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn type_name_set(&self) -> String {
+    pub fn get_type_name_set(&self) -> String {
         match self.ty {
-            TypeMeta::Id => self.type_name(),
-            TypeMeta::Number { .. } => self.type_name(),
+            TypeMeta::Id => self.get_type_name(),
+            TypeMeta::Number { .. } => self.get_type_name(),
             TypeMeta::String { .. } => "&str".to_string(),
             TypeMeta::Pointer { entity: ref entity, .. } => format!("&{}", entity),
             TypeMeta::OneToOne { entity: ref entity, .. } => format!("&{}", entity),
@@ -423,13 +423,13 @@ impl EntityMeta {
     pub fn get_columns(&self) -> Vec<String> {
         self.get_normal_fields()
             .iter()
-            .map(|field| field.column())
+            .map(|field| field.get_column_name())
             .collect::<Vec<_>>()
     }
     pub fn sql_create_table(&self) -> String {
         let fields = self.get_non_refer_fields()
             .iter()
-            .map(|field| field.db_type_string().to_string())
+            .map(|field| field.get_db_type())
             .collect::<Vec<_>>()
             .join(", ");
         format!("CREATE TABLE IF NOT EXISTS `{}`({})",
