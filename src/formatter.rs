@@ -15,13 +15,13 @@ use ast;
 use ast::Entity;
 use std;
 
-static mut META: Option<&'static ast::meta::OrmMeta> = None;
+static mut ORM_META: Option<&'static ast::meta::OrmMeta> = None;
 static ONCE: std::sync::Once = std::sync::ONCE_INIT;
 
-pub fn meta() -> &'static ast::meta::OrmMeta {
+pub fn orm_meta() -> &'static ast::meta::OrmMeta {
     let json = r#${JSON}#;
-    ONCE.call_once(|| unsafe { META = Some(ast::init::init_meta(json)) });
-    unsafe { META.unwrap() }
+    ONCE.call_once(|| unsafe { ORM_META = Some(ast::init::init_meta(json)) });
+    unsafe { ORM_META.unwrap() }
 }
 
 ${ENTITIES}
@@ -95,7 +95,7 @@ static TPL_IMPL_ONE_ONE: &'static str = r#"
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn meta() -> &'static ast::meta::EntityMeta {
-        meta().entity_map.get("${ENTITY_NAME}").unwrap()
+        orm_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
     fn default() -> Self {
         ${ENTITY_NAME} {

@@ -1,6 +1,7 @@
 extern crate ast;
 
 use ast::Entity;
+use ast::EntityMeta;
 
 mod entity;
 use entity::*;
@@ -8,12 +9,12 @@ use entity::*;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    let db = ast::open("root", "root", "172.16.16.241", 3306, "test").unwrap();
+    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
     refer_test(&db);
 }
 
 fn refer_test(db: &ast::DB) {
-    db.rebuild(meta()).unwrap();
+    db.rebuild(orm_meta()).unwrap();
     let mut person = Person::default();
     person.set_name("Tom");
 
@@ -61,5 +62,5 @@ fn curd_test(db: &ast::DB) {
     println!("{:?}", p);
 }
 
-// 多对多的场景
-// 1. 
+fn select(meta: &EntityMeta){
+}
