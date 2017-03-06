@@ -10,7 +10,8 @@ use entity::*;
 // flush privileges;
 fn main() {
     let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
-    refer_test(&db);
+    select(Person::meta());
+    // refer_test(&db);
 }
 
 fn refer_test(db: &ast::DB) {
@@ -28,7 +29,7 @@ fn refer_test(db: &ast::DB) {
     account.set_bank("中国银行");
     person.set_account(&account);
     person.debug();
-    
+
     db.insert(&person).unwrap();
     person.debug();
 
@@ -62,8 +63,43 @@ fn curd_test(db: &ast::DB) {
     println!("{:?}", p);
 }
 
-fn select(meta: &EntityMeta){
+fn select_field(meta: &EntityMeta, alias: &str) -> String {
+    let fields = meta.get_non_refer_fields()
+        .into_iter()
+        .map(|field| {
+            let column_name = field.get_column_name();
+            let field_name = field.get_field_name();
+            format!("{}.{} as {}${}", alias, column_name, alias, field_name)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    fields
+}
 
-    let fields = meta.get_normal_fields().into_iter().map(|field|{
-    });
+fn select(meta: &EntityMeta) {
+    let entity_name = meta.entity_name.to_string();
+    let table_name = meta.table_name.to_string();
+    let alias = entity_name.to_string();
+    let mut fields = select_field(meta, alias.as_ref());
+    let mut tables = format!("{} as {}", table_name, entity_name);
+    // println!("{:?}", sql);
+    for a_b_meta in meta.get_pointer_fields() {
+        let join_alias = format!("{}_{}", entity_name, a_b_meta.get_field_name());
+        let join_table = a_b_meta.get_refer_table();
+        // println!("{:?}", join_alias);
+        // a.b_id = b.id
+        let join_sql = format!(" left join {} as {} on {}.{} = {}.id",
+                               join_table,
+                               join_alias,
+                               alias,
+                               a_b_meta.get_pointer_id(),
+                               join_alias);
+        tables.push_str(join_sql.as_ref());
+        let join_meta = orm_meta().entity_map.get(&a_b_meta.get_refer_entity()).unwrap();
+        let join_fields = select_field(join_meta, join_alias.as_ref());
+        fields.push_str(", ");
+        fields.push_str(join_fields.as_ref());
+    }
+    let sql = format!("select {} from {}", fields, tables);
+    println!("{:?}", sql);
 }

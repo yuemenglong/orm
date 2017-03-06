@@ -27,21 +27,25 @@ enum TypeMeta {
     },
     Pointer {
         entity: String,
+        table: String,
         refer_id: String,
         cascade: Vec<Cascade>,
     },
     OneToOne {
         entity: String,
+        table: String,
         id: String,
         cascade: Vec<Cascade>,
     },
     OneToMany {
         entity: String,
+        table: String,
         id: String,
         cascade: Vec<Cascade>,
     },
     ManyToMany {
         entity: String,
+        table: String,
         mid: String,
         id: String,
         refer_id: String,
@@ -174,6 +178,15 @@ impl FieldMeta {
             TypeMeta::OneToOne { entity: ref entity, .. } => entity.to_string(),
             TypeMeta::OneToMany { entity: ref entity, .. } => entity.to_string(),
             TypeMeta::ManyToMany { entity: ref entity, .. } => entity.to_string(),
+            _ => unreachable!(),
+        }
+    }
+    pub fn get_refer_table(&self) -> String {
+        match self.ty {
+            TypeMeta::Pointer { table: ref table, .. } => table.to_string(),
+            TypeMeta::OneToOne { table: ref table, .. } => table.to_string(),
+            TypeMeta::OneToMany { table: ref table, .. } => table.to_string(),
+            TypeMeta::ManyToMany { table: ref table, .. } => table.to_string(),
             _ => unreachable!(),
         }
     }
@@ -341,45 +354,34 @@ impl FieldMeta {
     }
     fn new_pointer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let refer_id_field = format!("{}_id", field);
+        let entity_name = ty.to_string();
+        let table_name = entity_name.to_string();
         // 对象与id都挂在A上
-        // let refer_id = FieldMeta {
-        //     field: refer_id_field.to_string(),
-        //     ty: TypeMeta:: {
-        //         column: refer_id_field.to_string(),
-        //         nullable: Self::pick_nullable(attr),
-        //         normal: TypeNormalMeta::Number("u64".to_string()),
-        //     },
-        // };
         let mut ret = FieldMeta::new_number(entity, refer_id_field.as_ref(), "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Pointer {
                 refer_id: refer_id_field.to_string(),
-                entity: ty.to_string(),
+                entity: entity_name,
+                table: table_name,
                 cascade: Self::pick_cascade(attr),
             },
         };
         ret.push((entity.to_string(), refer_object));
         ret
-        // return vec![refer_id, (entity.to_string(), refer_object)];
     }
     fn new_one_one(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
-        // let refer_id = FieldMeta {
-        //     field: refer_id_field.to_string(),
-        //     ty: TypeMeta::Normal {
-        //         column: refer_id_field.to_string(),
-        //         nullable: Self::pick_nullable(attr),
-        //         normal: TypeNormalMeta::Number("u64".to_string()),
-        //     },
-        // };
+        let entity_name = ty.to_string();
+        let table_name = entity_name.to_string();
         let mut ret = FieldMeta::new_number(ty, refer_id_field.as_ref(), "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToOne {
                 id: refer_id_field.to_string(),
-                entity: ty.to_string(),
+                entity: entity_name,
+                table: table_name,
                 cascade: Self::pick_cascade(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
             },
         };
