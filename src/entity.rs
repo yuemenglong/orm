@@ -140,9 +140,6 @@ impl EntityInner {
         }
         a.one_one_map.get(&a_b_field).unwrap().clone()
     }
-    pub fn has_one_one(&mut self, key: &str) -> bool {
-        self.get_pointer(key).is_some()
-    }
 
     pub fn get_values(&self) -> Vec<Value> {
         // 不包括id
@@ -252,6 +249,11 @@ impl EntityInner {
         }
         let mut row = row.unwrap();
         self.set_values(&res, &mut row, "");
+        Ok(())
+    }
+    pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
+        where C: GenericConnection
+    {
         Ok(())
     }
 }

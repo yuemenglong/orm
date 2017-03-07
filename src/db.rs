@@ -9,11 +9,14 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 // use cond::Cond;
 use entity::Entity;
 use entity::EntityInner;
+use entity::EntityInnerPointer;
 use meta::FieldMeta;
+use meta::Cascade;
 
 pub struct DB {
     pub pool: Pool,
@@ -71,14 +74,18 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
-        let inner_rc = entity.inner();
-        let mut inner = inner_rc.borrow_mut();
-        do_insert(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
+        // let inner_rc = entity.inner();
+        // let mut inner = inner_rc.borrow_mut();
+        // do_insert(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
+        self.handle(entity, Cascade::Insert);
+        Ok(())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let inner_rc = entity.inner();
-        let mut inner = inner_rc.borrow_mut();
-        do_update(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
+        // let inner_rc = entity.inner();
+        // let mut inner = inner_rc.borrow_mut();
+        // do_update(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
+        self.handle(entity, Cascade::Insert);
+        Ok(())
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
         let mut inner = EntityInner::default(E::meta());
@@ -95,6 +102,11 @@ impl DB {
             Err(err) => Err(err),
         }
     }
+    pub fn handle<E: Entity>(&self, entity: &E, op: Cascade) {
+        let mut conn = self.pool.get_conn();
+        let mut session = Session::new(conn.as_mut().unwrap());
+        session.handle(entity.inner().clone(), op.clone());
+    }
     //     // pub fn select<'a, E: Entity>(&'a self, conds: Vec<Cond>) -> SelectBuilder<'a, E> {
     //     //     SelectBuilder::<'a, E> {
     //     //         pool: &self.pool,
@@ -102,6 +114,84 @@ impl DB {
     //     //         phantom: PhantomData,
     //     //     }
     //     // }
+}
+
+pub struct Session<'a, C>
+    where C: GenericConnection + 'a
+{
+    conn: &'a mut C,
+}
+
+impl<'a, C> Session<'a, C>
+    where C: GenericConnection + 'a
+{
+    pub fn new(conn: &'a mut C) -> Session<'a, C> {
+        Session { conn: conn }
+    }
+    pub fn handle(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
+        {
+            let pointer_map = &a_rc.borrow().pointer_map;
+            let pointer_fields = self.each_handle_refer(a_rc.clone(), pointer_map, op.clone());
+            pointer_fields.into_iter().map(|(field, b_rc)| {
+                a_rc.borrow_mut().set_pointer(&field, Some(b_rc));
+            });
+        }
+        {
+            self.handle_self(a_rc.clone(), op.clone());
+        }
+    }
+    fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
+        match op {
+            Cascade::Insert => a_rc.borrow_mut().do_insert(self.conn),
+            Cascade::Update => a_rc.borrow_mut().do_update(self.conn),
+            Cascade::Delete => a_rc.borrow_mut().do_delete(self.conn),
+            Cascade::NULL => Ok(()),
+        };
+    }
+    fn each_handle_refer(&mut self,
+                         a_rc: EntityInnerPointer,
+                         map: &HashMap<String, Option<EntityInnerPointer>>,
+                         op: Cascade)
+                         -> Vec<(String, EntityInnerPointer)> {
+        map.iter()
+            .map(|(field, opt)| {
+                opt.clone().map(|b_rc| {
+                    self.handle_refer(a_rc.clone(), b_rc.clone(), field, op.clone());
+                    (field.to_string(), b_rc.clone())
+                })
+            })
+            .filter(Option::is_some)
+            .map(Option::unwrap)
+            .collect::<Vec<_>>()
+    }
+    fn handle_refer(&mut self,
+                    a_rc: EntityInnerPointer,
+                    b_rc: EntityInnerPointer,
+                    field: &str,
+                    op: Cascade) {
+        let a = a_rc.borrow();
+        let cascade = b_rc.borrow_mut().cascade.take().map_or(Cascade::NULL, |c| c);
+        if cascade != Cascade::NULL {
+            // 动态级联
+            return self.handle(b_rc, cascade);
+        }
+        let a_b_meta = a.meta.field_map.get(field).unwrap();
+        let cascade = Self::calc_cascade(a_b_meta, op.clone());
+        if cascade != Cascade::NULL {
+            return self.handle(b_rc, cascade);
+        }
+    }
+    fn calc_cascade(a_b_meta: &FieldMeta, op: Cascade) -> Cascade {
+        if a_b_meta.has_cascade_insert() && op == Cascade::Insert {
+            return Cascade::Insert;
+        } else if a_b_meta.has_cascade_update() && op == Cascade::Update {
+            return Cascade::Update;
+        } else if a_b_meta.has_cascade_delete() && op == Cascade::Delete {
+            return Cascade::Delete;
+        } else {
+            return Cascade::NULL;
+        }
+    }
 }
 
 

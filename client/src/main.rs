@@ -3,6 +3,10 @@ extern crate ast;
 use ast::Entity;
 use ast::EntityMeta;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::mem;
+
 mod entity;
 use entity::*;
 
@@ -23,26 +27,26 @@ fn refer_test(db: &ast::DB) {
     person.set_addr(&addr);
     addr.set_road("中原路");
     person.get_addr().set_no(123);
-    person.debug();
+    // person.debug();
 
     let mut account = Account::default();
     account.set_bank("中国银行");
     person.set_account(&account);
-    person.debug();
+    // person.debug();
 
     db.insert(&person).unwrap();
     person.debug();
 
-    person.set_name("Bob");
-    db.update(&person).unwrap();
-    person.debug();
+    // person.set_name("Bob");
+    // db.update(&person).unwrap();
+    // person.debug();
 
-    person.clear_addr();
-    person.debug();
+    // person.clear_addr();
+    // person.debug();
 
-    person.clear_account();
-    person.debug();
-    account.debug();
+    // person.clear_account();
+    // person.debug();
+    // account.debug();
 }
 
 fn curd_test(db: &ast::DB) {

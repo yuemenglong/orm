@@ -3,7 +3,7 @@ use rustc_serialize::json;
 use attr::Attr;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Clone, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
     NULL,
     Insert,
@@ -255,7 +255,7 @@ impl FieldMeta {
         }
         return false;
     }
-    pub fn has_refer_cascade_delete(&self) -> bool {
+    pub fn has_cascade_delete(&self) -> bool {
         for cascade in self.get_refer_cascade() {
             match cascade {
                 &Cascade::Delete => return true,
