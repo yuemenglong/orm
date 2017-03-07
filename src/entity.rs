@@ -29,13 +29,20 @@ pub struct EntityInner {
     pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 
     pub cascade: Option<Cascade>,
-
-    pub refers: HashMap<String, EntityInnerPointer>,
-    pub bulks: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 }
 
 impl EntityInner {
     pub fn new(meta: &'static EntityMeta) -> EntityInner {
+        EntityInner {
+            meta: meta,
+            field_map: HashMap::new(),
+            pointer_map: HashMap::new(),
+            one_one_map: HashMap::new(),
+            one_many_map: HashMap::new(),
+            cascade: None,
+        }
+    }
+    pub fn default(meta: &'static EntityMeta) -> EntityInner {
         let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
             .into_iter()
             .map(|meta| (meta.get_field_name(), Value::NULL))
@@ -55,26 +62,21 @@ impl EntityInner {
             one_one_map: one_one_map,
             one_many_map: HashMap::new(),
             cascade: None,
-            refers: HashMap::new(),
-            bulks: HashMap::new(),
         }
     }
 
     pub fn set<V>(&mut self, key: &str, value: Option<V>)
-        where Value: From<Option<V>>
+        where Value: From<V>
     {
         match value {
             None => self.field_map.remove(key),
-            Some(v) => self.field_map.insert(key.to_string(), Value::from(Some(v))),
+            Some(v) => self.field_map.insert(key.to_string(), Value::from(v)),
         };
     }
     pub fn get<V>(&self, key: &str) -> Option<V>
         where V: FromValue
     {
         self.field_map.get(key).map(|value| value::from_value(value.clone()))
-    }
-    pub fn has(&self, key: &str) -> bool {
-        self.field_map.contains_key(key) && self.field_map.get(key).unwrap() != &Value::NULL
     }
 
     pub fn set_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
@@ -322,18 +324,25 @@ pub trait Entity {
         cb(&mut inner)
     }
 
-    fn inner_get<V>(&self, key: &str) -> Option<V>
+    fn inner_get<V>(&self, key: &str) -> V
         where V: FromValue
     {
-        self.do_inner(|inner| inner.get::<V>(key))
+        self.do_inner(|inner| inner.get::<V>(key)).unwrap()
     }
-    fn inner_set<V>(&self, key: &str, value: Option<V>)
-        where Value: From<Option<V>>
+    fn inner_set<V>(&self, key: &str, value: V)
+        where Value: From<V>
     {
-        self.do_inner_mut(|inner| inner.set(key, value));
+        self.do_inner_mut(|inner| inner.set::<V>(key, Some(value)));
     }
-    fn inner_has(&self, key: &str) -> bool {
-        self.do_inner(|inner| inner.has(key))
+    fn inner_has<V>(&self, key: &str) -> bool
+        where V: FromValue
+    {
+        self.do_inner(|inner| inner.get::<V>(key)).is_some()
+    }
+    fn inner_clear<V>(&self, key: &str)
+        where Value: From<V>
+    {
+        self.do_inner_mut(|inner| inner.set::<V>(key, None));
     }
 
     fn inner_get_pointer<E>(&self, key: &str) -> E
@@ -371,14 +380,18 @@ pub trait Entity {
     }
 
     fn set_id(&mut self, id: u64) {
-        self.inner_set("id", Some(id));
+        self.inner_set("id", id);
     }
     fn get_id(&self) -> u64 {
-        self.inner_get("id").unwrap()
+        self.inner_get("id")
     }
     fn has_id(&self) -> bool {
-        self.inner_has("id")
+        self.inner_has::<u64>("id")
     }
+    fn clear_id(&self) {
+        self.inner_clear::<u64>("id")
+    }
+
 
 
     // fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;

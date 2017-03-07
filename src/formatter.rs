@@ -45,15 +45,19 @@ impl ${ENTITY_NAME} {${IMPL_FIELDS}
 static TPL_IMPL_FIELD: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.inner_get("${FIELD}").unwrap()
+        self.inner_get("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set("${FIELD}", Some(value));
+        self.inner_set("${FIELD}", value);
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has("${FIELD}")
+        self.inner_has::<${TYPE}>("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear::<${TYPE}>("${FIELD}");
     }"#;
 
 static TPL_IMPL_POINTER: &'static str = r#"
@@ -99,7 +103,7 @@ impl ast::Entity for ${ENTITY_NAME} {
     }
     fn default() -> Self {
         ${ENTITY_NAME} {
-            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::new(Self::meta())))
+            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::default(Self::meta())))
         }
     }
     fn new(inner: ast::EntityInnerPointer) -> ${ENTITY_NAME} {

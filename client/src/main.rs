@@ -9,9 +9,9 @@ use entity::*;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
-    select(Person::meta());
-    // refer_test(&db);
+    let db = ast::open("root", "root", "172.16.16.241", 3306, "test").unwrap();
+    // select(Person::meta());
+    refer_test(&db);
 }
 
 fn refer_test(db: &ast::DB) {
