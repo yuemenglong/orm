@@ -35,7 +35,8 @@ fn refer_test(db: &ast::DB) {
     // person.debug();
 
     db.insert(&person).unwrap();
-    person.debug();
+    // person.debug();
+    account.debug();
 
     // person.set_name("Bob");
     // db.update(&person).unwrap();

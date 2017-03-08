@@ -130,14 +130,21 @@ impl<'a, C> Session<'a, C>
     }
     pub fn handle(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
         {
-            let pointer_map = &a_rc.borrow().pointer_map;
-            let pointer_fields = self.each_handle_refer(a_rc.clone(), pointer_map, op.clone());
-            pointer_fields.into_iter().map(|(field, b_rc)| {
+            let pointer_fields = Self::map_to_vec(&a_rc.borrow().pointer_map);
+            let pointer_fields = self.each_handle_refer(a_rc.clone(), pointer_fields, op.clone());
+            for (field, b_rc) in pointer_fields {
                 a_rc.borrow_mut().set_pointer(&field, Some(b_rc));
-            });
+            }
         }
         {
             self.handle_self(a_rc.clone(), op.clone());
+        }
+        {
+            let one_one_fields = Self::map_to_vec(&a_rc.borrow().one_one_map);
+            for &(ref field, ref b_rc) in one_one_fields.iter() {
+                a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
+            }
+            self.each_handle_refer(a_rc.clone(), one_one_fields, op.clone());
         }
     }
     fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
@@ -148,20 +155,24 @@ impl<'a, C> Session<'a, C>
             Cascade::NULL => Ok(()),
         };
     }
-    fn each_handle_refer(&mut self,
-                         a_rc: EntityInnerPointer,
-                         map: &HashMap<String, Option<EntityInnerPointer>>,
-                         op: Cascade)
-                         -> Vec<(String, EntityInnerPointer)> {
+    fn map_to_vec(map: &HashMap<String, Option<EntityInnerPointer>>)
+                  -> Vec<(String, EntityInnerPointer)> {
         map.iter()
-            .map(|(field, opt)| {
-                opt.clone().map(|b_rc| {
-                    self.handle_refer(a_rc.clone(), b_rc.clone(), field, op.clone());
-                    (field.to_string(), b_rc.clone())
-                })
-            })
+            .map(|(field, opt)| opt.clone().map(|b_rc| (field.to_string(), b_rc.clone())))
             .filter(Option::is_some)
             .map(Option::unwrap)
+            .collect::<Vec<_>>()
+    }
+    fn each_handle_refer(&mut self,
+                         a_rc: EntityInnerPointer,
+                         vec: Vec<(String, EntityInnerPointer)>,
+                         op: Cascade)
+                         -> Vec<(String, EntityInnerPointer)> {
+        vec.into_iter()
+            .map(|(field, b_rc)| {
+                self.handle_refer(a_rc.clone(), b_rc.clone(), &field, op.clone());
+                (field, b_rc)
+            })
             .collect::<Vec<_>>()
     }
     fn handle_refer(&mut self,
@@ -172,12 +183,13 @@ impl<'a, C> Session<'a, C>
         let a = a_rc.borrow();
         let cascade = b_rc.borrow_mut().cascade.take().map_or(Cascade::NULL, |c| c);
         if cascade != Cascade::NULL {
-            // 动态级联
+            // 动态级联，优先级最高
             return self.handle(b_rc, cascade);
         }
         let a_b_meta = a.meta.field_map.get(field).unwrap();
         let cascade = Self::calc_cascade(a_b_meta, op.clone());
         if cascade != Cascade::NULL {
+            // 配置级联，优先级较低
             return self.handle(b_rc, cascade);
         }
     }
