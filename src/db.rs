@@ -118,36 +118,37 @@ impl<'a, C> Session<'a, C>
     pub fn new(conn: &'a mut C) -> Session<'a, C> {
         Session { conn: conn }
     }
-    pub fn handle(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
+    pub fn handle(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         {
             let pointer_fields = Self::map_to_vec(&a_rc.borrow().pointer_map);
-            let pointer_fields = self.each_handle_refer(a_rc.clone(), pointer_fields, op.clone());
+            try!(self.each_handle_refer(a_rc.clone(), &pointer_fields, op.clone()));
             for (field, b_rc) in pointer_fields {
                 a_rc.borrow_mut().set_pointer(&field, Some(b_rc));
             }
         }
         {
-            self.handle_self(a_rc.clone(), op.clone());
+            try!(self.handle_self(a_rc.clone(), op.clone()));
         }
         {
             let one_one_fields = Self::map_to_vec(&a_rc.borrow().one_one_map);
             for &(ref field, ref b_rc) in one_one_fields.iter() {
                 a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
             }
-            self.each_handle_refer(a_rc.clone(), one_one_fields, op.clone());
+            try!(self.each_handle_refer(a_rc.clone(), &one_one_fields, op.clone()));
         }
         {
             let cache = mem::replace(&mut a_rc.borrow_mut().cache, Vec::new());
-            self.each_handle_refer(a_rc.clone(), cache, op.clone());
+            try!(self.each_handle_refer(a_rc.clone(), &cache, op.clone()));
         }
+        Ok(())
     }
-    fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
+    fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         match op {
             Cascade::Insert => a_rc.borrow_mut().do_insert(self.conn),
             Cascade::Update => a_rc.borrow_mut().do_update(self.conn),
             Cascade::Delete => a_rc.borrow_mut().do_delete(self.conn),
             Cascade::NULL => Ok(()),
-        };
+        }
     }
     fn map_to_vec(map: &HashMap<String, Option<EntityInnerPointer>>)
                   -> Vec<(String, EntityInnerPointer)> {
@@ -159,26 +160,25 @@ impl<'a, C> Session<'a, C>
     }
     fn each_handle_refer(&mut self,
                          a_rc: EntityInnerPointer,
-                         vec: Vec<(String, EntityInnerPointer)>,
+                         vec: &Vec<(String, EntityInnerPointer)>,
                          op: Cascade)
-                         -> Vec<(String, EntityInnerPointer)> {
-        vec.into_iter()
-            .map(|(field, b_rc)| {
-                self.handle_refer(a_rc.clone(), b_rc.clone(), &field, op.clone());
-                (field, b_rc)
-            })
-            .collect::<Vec<_>>()
+                         -> Result<(), Error> {
+        for &(ref field, ref b_rc) in vec.iter() {
+            try!(self.handle_refer(a_rc.clone(), b_rc.clone(), field, op.clone()));
+        }
+        Ok(())
     }
     fn handle_refer(&mut self,
                     a_rc: EntityInnerPointer,
                     b_rc: EntityInnerPointer,
                     field: &str,
-                    op: Cascade) {
+                    op: Cascade)
+                    -> Result<(), Error> {
         let a = a_rc.borrow();
         let cascade = Self::take_cascade(b_rc.clone());
         if cascade == Some(Cascade::NULL) {
             // 已经执行过
-            return;
+            return Ok(());
         }
         if cascade.is_some() {
             // 动态级联，优先级高
@@ -190,6 +190,7 @@ impl<'a, C> Session<'a, C>
             // 配置级联，优先级较低
             return self.handle(b_rc, cascade);
         }
+        Ok(())
     }
     fn take_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
         mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
