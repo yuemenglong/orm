@@ -211,6 +211,12 @@ impl FieldMeta {
             _ => false,
         }
     }
+    pub fn is_refer_one_many(&self) -> bool {
+        match self.ty {
+            TypeMeta::OneToMany{ .. } => true,
+            _ => false,
+        }
+    }
     pub fn get_pointer_id(&self) -> String {
         match self.ty {
             TypeMeta::Pointer { refer_id: ref refer_id, .. } => refer_id.to_string(),
@@ -419,6 +425,12 @@ impl EntityMeta {
         self.fields
             .iter()
             .filter(|field| field.is_refer_one_one())
+            .collect::<Vec<_>>()
+    }
+    pub fn get_one_many_fields(&self) -> Vec<&FieldMeta> {
+        self.fields
+            .iter()
+            .filter(|field| field.is_refer_one_many())
             .collect::<Vec<_>>()
     }
 

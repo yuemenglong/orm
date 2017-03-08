@@ -26,7 +26,7 @@ pub struct EntityInner {
     pub field_map: HashMap<String, Value>,
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
-    pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
+    pub one_many_map: HashMap<String, Vec<EntityInnerPointer>>,
 
     pub cascade: Option<Cascade>,
     pub cache: Vec<(String, EntityInnerPointer)>,
@@ -57,12 +57,16 @@ impl EntityInner {
             .into_iter()
             .map(|meta| (meta.get_field_name(), None))
             .collect();
+        let one_many_map: HashMap<String, Vec<EntityInnerPointer>> = meta.get_one_many_fields()
+            .into_iter()
+            .map(|meta| (meta.get_field_name(), Vec::new()))
+            .collect();
         EntityInner {
             meta: meta,
             field_map: field_map,
             pointer_map: pointer_map,
             one_one_map: one_one_map,
-            one_many_map: HashMap::new(),
+            one_many_map: one_many_map,
             cascade: Some(Cascade::Insert),
             cache: Vec::new(),
         }
@@ -123,25 +127,51 @@ impl EntityInner {
         }
         // b.a_id = a.id;
         let a_id = a.field_map.get("id").unwrap();
-        let b = value.clone();
-        if b.is_some() {
-            let b = b.unwrap();
+        if value.is_some() {
+            let b = value.as_ref().unwrap().clone();
             b.borrow_mut().field_map.insert(b_a_id_field, a_id.clone());
         }
         // a.b = b;
-        let a_b_field = a_b_meta.get_field_name();
-        a.one_one_map.insert(a_b_field, value);
+        a.one_one_map.insert(key.to_string(), value);
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let mut a = &self;
         let a_b_meta = self.meta.field_map.get(key).unwrap();
-        let a_b_field = a_b_meta.get_field_name();
-        let a_b = a.one_one_map.get(&a_b_field);
+        let a_b = a.one_one_map.get(key);
         if a_b.is_none() {
             // lazy load
             unimplemented!();
         }
-        a.one_one_map.get(&a_b_field).unwrap().clone()
+        a.one_one_map.get(key).unwrap().clone()
+    }
+
+    pub fn set_one_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
+        let mut a = self;
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_a_id_field = a_b_meta.get_one_many_id();
+        let old_b_vec = a.get_one_many(key);
+        // old_b.a_id = NULL;
+        for b in old_b_vec {
+            b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
+            a.cache.push((key.to_string(), b));
+        }
+        // b.a_id = a.id;
+        let a_id = a.field_map.get("id").unwrap();
+        for b in value.iter() {
+            b.borrow_mut().field_map.insert(b_a_id_field.to_string(), a_id.clone());
+        }
+        // a.b = b;
+        a.one_many_map.insert(key.to_string(), value);
+    }
+    pub fn get_one_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
+        let mut a = &self;
+        let a_b_field = key;
+        let a_b = a.one_many_map.get(a_b_field);
+        if a_b.is_none() {
+            // lazy load
+            unimplemented!();
+        }
+        a.one_many_map.get(a_b_field).unwrap().clone()
     }
 
     pub fn cascade_insert(&mut self) {
@@ -412,6 +442,23 @@ pub trait Entity {
     }
     fn inner_clear_one_one(&self, key: &str) {
         self.do_inner_mut(|inner| inner.set_one_one(key, None));
+    }
+
+    fn inner_get_one_many<E>(&self, key: &str) -> Vec<E>
+        where E: Entity
+    {
+        self.do_inner_mut(|inner| inner.get_one_many(key)).map(|vec| E::new(rc))
+    }
+    fn inner_set_one_many<E>(&self, key: &str, value: &E)
+        where E: Entity
+    {
+        self.do_inner_mut(|inner| inner.set_one_many(key, Some(value.inner())));
+    }
+    fn inner_has_one_many(&self, key: &str) -> bool {
+        self.do_inner_mut(|inner| inner.get_one_many(key)).is_some()
+    }
+    fn inner_clear_one_many(&self, key: &str) {
+        self.do_inner_mut(|inner| inner.set_one_many(key, None));
     }
 
     fn set_id(&self, id: u64) {
