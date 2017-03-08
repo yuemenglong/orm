@@ -29,6 +29,7 @@ pub struct EntityInner {
     pub one_many_map: HashMap<String, Option<Vec<EntityInnerPointer>>>,
 
     pub cascade: Option<Cascade>,
+    pub cache: Vec<(String, EntityInnerPointer)>,
 }
 
 impl EntityInner {
@@ -40,6 +41,7 @@ impl EntityInner {
             one_one_map: HashMap::new(),
             one_many_map: HashMap::new(),
             cascade: None,
+            cache: Vec::new(),
         }
     }
     pub fn default(meta: &'static EntityMeta) -> EntityInner {
@@ -61,7 +63,8 @@ impl EntityInner {
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: HashMap::new(),
-            cascade: None,
+            cascade: Some(Cascade::Insert),
+            cache: Vec::new(),
         }
     }
 
@@ -89,7 +92,6 @@ impl EntityInner {
             Some(ref rc) => rc.borrow().field_map.get("id").unwrap().clone(),
         };
         a.field_map.insert(a_b_id_field, b_id);
-
         // a.b = b;
         let b = value;
         let a_b_field = a_b_meta.get_field_name();
@@ -117,6 +119,7 @@ impl EntityInner {
         if old_b.is_some() {
             let old_b = old_b.unwrap();
             old_b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
+            a.cache.push((key.to_string(), old_b));
         }
         // b.a_id = a.id;
         let a_id = a.field_map.get("id").unwrap();
@@ -139,6 +142,36 @@ impl EntityInner {
             unimplemented!();
         }
         a.one_one_map.get(&a_b_field).unwrap().clone()
+    }
+
+    pub fn cascade_insert(&mut self) {
+        self.cascade = Some(Cascade::Insert);
+    }
+    pub fn cascade_update(&mut self) {
+        self.cascade = Some(Cascade::Update);
+    }
+    pub fn cascade_delete(&mut self) {
+        self.cascade = Some(Cascade::Delete);
+    }
+    pub fn cascade_null(&mut self) {
+        self.cascade = Some(Cascade::NULL);
+    }
+    pub fn cascade_reset(&mut self) {
+        self.cascade = None;
+        for (_, b_rc) in &self.pointer_map {
+            let b_rc = b_rc.clone();
+            if b_rc.is_some() {
+                let b_rc = b_rc.unwrap();
+                b_rc.borrow_mut().cascade_reset();
+            }
+        }
+        for (_, b_rc) in &self.one_one_map {
+            let b_rc = b_rc.clone();
+            if b_rc.is_some() {
+                let b_rc = b_rc.unwrap();
+                b_rc.borrow_mut().cascade_reset();
+            }
+        }
     }
 
     pub fn get_values(&self) -> Vec<Value> {
@@ -206,7 +239,7 @@ impl EntityInner {
     {
         // let sql = E::meta().sql_get();
         // println!("{}", sql);
-        // let res = self.pool.prep_exec(sql, vec![("id", id)]);
+        // let res = self.cache.prep_exec(sql, vec![("id", id)]);
         // if let Err(err) = res {
         //     return Err(err);
         // }
@@ -381,7 +414,7 @@ pub trait Entity {
         self.do_inner_mut(|inner| inner.set_one_one(key, None));
     }
 
-    fn set_id(&mut self, id: u64) {
+    fn set_id(&self, id: u64) {
         self.inner_set("id", id);
     }
     fn get_id(&self) -> u64 {
@@ -394,7 +427,21 @@ pub trait Entity {
         self.inner_clear::<u64>("id")
     }
 
-
+    fn cascade_insert(&self) {
+        self.do_inner_mut(|inner| inner.cascade_insert());
+    }
+    fn cascade_update(&self) {
+        self.do_inner_mut(|inner| inner.cascade_update());
+    }
+    fn cascade_delete(&self) {
+        self.do_inner_mut(|inner| inner.cascade_delete());
+    }
+    fn cascade_null(&self) {
+        self.do_inner_mut(|inner| inner.cascade_null());
+    }
+    fn cascade_reset(&self) {
+        self.do_inner_mut(|inner| inner.cascade_reset());
+    }
 
     // fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;
     // fn set_refer(&mut self, field: &str, e: Option<Entity>);

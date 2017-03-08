@@ -10,6 +10,7 @@ use std::ops::DerefMut;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::mem;
 
 // use cond::Cond;
 use entity::Entity;
@@ -74,17 +75,13 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
-        // let inner_rc = entity.inner();
-        // let mut inner = inner_rc.borrow_mut();
-        // do_insert(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
         self.handle(entity, Cascade::Insert);
+        entity.cascade_reset();
         Ok(())
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        // let inner_rc = entity.inner();
-        // let mut inner = inner_rc.borrow_mut();
-        // do_update(inner.deref_mut(), self.pool.get_conn().as_mut().unwrap())
-        self.handle(entity, Cascade::Insert);
+        self.handle(entity, Cascade::Update);
+        entity.cascade_reset();
         Ok(())
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
@@ -107,13 +104,6 @@ impl DB {
         let mut session = Session::new(conn.as_mut().unwrap());
         session.handle(entity.inner().clone(), op.clone());
     }
-    //     // pub fn select<'a, E: Entity>(&'a self, conds: Vec<Cond>) -> SelectBuilder<'a, E> {
-    //     //     SelectBuilder::<'a, E> {
-    //     //         pool: &self.pool,
-    //     //         conds: RefCell::new(conds),
-    //     //         phantom: PhantomData,
-    //     //     }
-    //     // }
 }
 
 pub struct Session<'a, C>
@@ -145,6 +135,10 @@ impl<'a, C> Session<'a, C>
                 a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
             }
             self.each_handle_refer(a_rc.clone(), one_one_fields, op.clone());
+        }
+        {
+            let cache = mem::replace(&mut a_rc.borrow_mut().cache, Vec::new());
+            self.each_handle_refer(a_rc.clone(), cache, op.clone());
         }
     }
     fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) {
@@ -181,10 +175,14 @@ impl<'a, C> Session<'a, C>
                     field: &str,
                     op: Cascade) {
         let a = a_rc.borrow();
-        let cascade = b_rc.borrow_mut().cascade.take().map_or(Cascade::NULL, |c| c);
-        if cascade != Cascade::NULL {
-            // 动态级联，优先级最高
-            return self.handle(b_rc, cascade);
+        let cascade = Self::take_cascade(b_rc.clone());
+        if cascade == Some(Cascade::NULL) {
+            // 已经执行过
+            return;
+        }
+        if cascade.is_some() {
+            // 动态级联，优先级高
+            return self.handle(b_rc, cascade.unwrap());
         }
         let a_b_meta = a.meta.field_map.get(field).unwrap();
         let cascade = Self::calc_cascade(a_b_meta, op.clone());
@@ -192,6 +190,9 @@ impl<'a, C> Session<'a, C>
             // 配置级联，优先级较低
             return self.handle(b_rc, cascade);
         }
+    }
+    fn take_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
+        mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
     }
     fn calc_cascade(a_b_meta: &FieldMeta, op: Cascade) -> Cascade {
         if a_b_meta.has_cascade_insert() && op == Cascade::Insert {

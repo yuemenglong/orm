@@ -36,13 +36,19 @@ fn refer_test(db: &ast::DB) {
 
     db.insert(&person).unwrap();
     // person.debug();
-    account.debug();
+    // account.debug();
 
-    // person.set_name("Bob");
-    // db.update(&person).unwrap();
+    person.set_name("Bob");
+    person.get_addr().cascade_null();
+    person.get_account().cascade_null();
+    db.update(&person).unwrap();
     // person.debug();
 
-    // person.clear_addr();
+    let mut account = Account::default();
+    account.set_no("123456");
+    person.set_account(&account);
+    person.clear_addr();
+    db.update(&person).unwrap();
     // person.debug();
 
     // person.clear_account();
