@@ -67,7 +67,7 @@ impl EntityInner {
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: one_many_map,
-            cascade: Some(Cascade::Insert),
+            cascade: None,
             cache: Vec::new(),
         }
     }

@@ -6,6 +6,8 @@ struct Person {
     #[pointer]
     #[cascade(insert, update, delete)]
     addr: Address,
+    #[pointer]
+    addr2: Address,
     #[one_one]
     #[cascade(insert, update, delete)]
     account: Account,

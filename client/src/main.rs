@@ -27,22 +27,17 @@ fn refer_test(db: &ast::DB) {
     person.set_addr(&addr);
     addr.set_road("中原路");
     person.get_addr().set_no(123);
-    // person.debug();
 
     let mut account = Account::default();
     account.set_bank("中国银行");
     person.set_account(&account);
-    // person.debug();
-
     db.insert(&person).unwrap();
-    // person.debug();
-    // account.debug();
 
     person.set_name("Bob");
     person.get_addr().cascade_null();
     person.get_account().cascade_null();
     db.update(&person).unwrap();
-    // person.debug();
+    person.debug();
 
     let mut account = Account::default();
     account.set_no("123456");
@@ -62,6 +57,13 @@ fn refer_test(db: &ast::DB) {
     person.set_children(vec![]);
     person.get_account().cascade_null();
     person.cascade_addr_null();
+    db.update(&person).unwrap();
+
+    person.set_addr2(&Address::default());
+    person.get_addr2().set_road("1");
+    person.cascade_addr_null();
+    person.cascade_account_null();
+    person.cascade_children_null();
     db.update(&person).unwrap();
     person.debug();
 
