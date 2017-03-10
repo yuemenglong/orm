@@ -96,6 +96,24 @@ static TPL_IMPL_ONE_ONE: &'static str = r#"
         self.inner_clear_one_one("${FIELD}")
     }"#;
 
+static TPL_IMPL_ONE_MANY: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
+        Box::new(self.inner_get_one_many("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
+        self.inner_set_one_many("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_one_many("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_one_many("${FIELD}")
+    }"#;
+
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn meta() -> &'static ast::meta::EntityMeta {
@@ -173,10 +191,18 @@ fn format_entity_define(meta: &EntityMeta) -> String {
         .replace("${ENTITY_NAME}", &meta.entity_name)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
-    let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
-    let pointer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
+    // let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
+    // let pointer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
+    let normal_fields = do_spec_fields(meta.get_normal_fields(), "", &format_entity_impl_field);
+    let pointer_fields = do_spec_fields(meta.get_pointer_fields(), "", &format_entity_impl_pointer);
     let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
-    let fields = format!("{}\n{}\n{}", normal_fields, pointer_fields, one_one_fields);
+    let one_many_fields =
+        do_spec_fields(meta.get_one_many_fields(), "", &format_entity_impl_one_many);
+    let fields = format!("{}\n{}\n{}\n{}",
+                         normal_fields,
+                         pointer_fields,
+                         one_one_fields,
+                         one_many_fields);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
@@ -207,6 +233,12 @@ fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
 }
 fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
     TPL_IMPL_ONE_ONE.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_one_many(meta: &FieldMeta) -> String {
+    TPL_IMPL_ONE_MANY.to_string()
         .replace("${FIELD}", &meta.get_field_name())
         .replace("${TYPE}", &meta.get_type_name())
         .replace("${SET_TYPE}", &meta.get_type_name_set())

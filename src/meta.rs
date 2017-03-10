@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::cell::Cell;
 use rustc_serialize::json;
 use attr::Attr;
 use std::str::FromStr;
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
@@ -29,19 +31,22 @@ enum TypeMeta {
         entity: String,
         table: String,
         refer_id: String,
-        cascade: Vec<Cascade>,
+        cascades: Vec<Cascade>,
+        cascade: Option<Cascade>,
     },
     OneToOne {
         entity: String,
         table: String,
         id: String,
-        cascade: Vec<Cascade>,
+        cascades: Vec<Cascade>,
+        cascade: Option<Cascade>,
     },
     OneToMany {
         entity: String,
         table: String,
         id: String,
-        cascade: Vec<Cascade>,
+        cascades: Vec<Cascade>,
+        cascade: Option<Cascade>,
     },
     ManyToMany {
         entity: String,
@@ -49,7 +54,8 @@ enum TypeMeta {
         mid: String,
         id: String,
         refer_id: String,
-        cascade: Vec<Cascade>,
+        cascades: Vec<Cascade>,
+        cascade: Option<Cell<Cascade>>,
     },
 }
 
@@ -120,7 +126,7 @@ impl FieldMeta {
             false => " NOT NULL",
         };
         match self.ty {
-            TypeMeta::Id => "`id` BIGINT PRIMARY KEY AUTO_INCREMENT".to_string(),
+            TypeMeta::Id => "`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT".to_string(),
             TypeMeta::Number { number: ref number, column: ref column, nullable: ref nullable } => {
                 format!("`{}` {}{}",
                         column,
@@ -190,12 +196,21 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn get_refer_cascade(&self) -> &Vec<Cascade> {
+    pub fn get_refer_cascades(&self) -> &Vec<Cascade> {
         match self.ty {
-            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade,
-            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade,
-            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade,
-            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade,
+            TypeMeta::Pointer { cascades: ref cascades, .. } => cascades,
+            TypeMeta::OneToOne { cascades: ref cascades, .. } => cascades,
+            TypeMeta::OneToMany { cascades: ref cascades, .. } => cascades,
+            TypeMeta::ManyToMany { cascades: ref cascades, .. } => cascades,
+            _ => unreachable!(),
+        }
+    }
+    pub fn get_refer_cascade(&self) -> Option<Cascade> {
+        match self.ty {
+            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.clone(),
+            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.clone(),
+            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.clone(),
+            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.clone(),
             _ => unreachable!(),
         }
     }
@@ -213,7 +228,7 @@ impl FieldMeta {
     }
     pub fn is_refer_one_many(&self) -> bool {
         match self.ty {
-            TypeMeta::OneToMany{ .. } => true,
+            TypeMeta::OneToMany { .. } => true,
             _ => false,
         }
     }
@@ -240,7 +255,7 @@ impl FieldMeta {
     }
 
     pub fn has_cascade_insert(&self) -> bool {
-        for cascade in self.get_refer_cascade() {
+        for cascade in self.get_refer_cascades() {
             match cascade {
                 &Cascade::Insert => return true,
                 _ => {
@@ -251,7 +266,7 @@ impl FieldMeta {
         return false;
     }
     pub fn has_cascade_update(&self) -> bool {
-        for cascade in self.get_refer_cascade() {
+        for cascade in self.get_refer_cascades() {
             match cascade {
                 &Cascade::Update => return true,
                 _ => {
@@ -262,7 +277,7 @@ impl FieldMeta {
         return false;
     }
     pub fn has_cascade_delete(&self) -> bool {
-        for cascade in self.get_refer_cascade() {
+        for cascade in self.get_refer_cascades() {
             match cascade {
                 &Cascade::Delete => return true,
                 _ => {
@@ -290,7 +305,7 @@ impl FieldMeta {
         let default = 64;
         attr.get("len").map_or(default, |str| u64::from_str(str).unwrap())
     }
-    fn pick_cascade(attr: &Attr) -> Vec<Cascade> {
+    fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
         attr.get_attr("cascade").map_or(Vec::new(), |attr| {
             attr.values.as_ref().map_or(Vec::new(), |values| {
                 values.iter()
@@ -332,6 +347,8 @@ impl FieldMeta {
             return Self::new_pointer(entity, field, ty, attr);
         } else if attr.has("one_one") {
             return Self::new_one_one(entity, field, ty, attr);
+        } else if attr.has("one_many") {
+            return Self::new_one_many(entity, field, ty, attr);
         }
         unreachable!()
     }
@@ -370,7 +387,8 @@ impl FieldMeta {
                 refer_id: refer_id_field.to_string(),
                 entity: entity_name,
                 table: table_name,
-                cascade: Self::pick_cascade(attr),
+                cascades: Self::pick_cascades(attr),
+                cascade: None,
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -379,16 +397,41 @@ impl FieldMeta {
     fn new_one_one(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
-        let entity_name = ty.to_string();
-        let table_name = entity_name.to_string();
-        let mut ret = FieldMeta::new_number(ty, refer_id_field.as_ref(), "u64", attr);
+        let refer_entity = ty.to_string();
+        let refer_table = refer_entity.to_string();
+        let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToOne {
                 id: refer_id_field.to_string(),
-                entity: entity_name,
-                table: table_name,
-                cascade: Self::pick_cascade(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
+                entity: refer_entity,
+                table: refer_table,
+                cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
+                cascade: None,
+            },
+        };
+        ret.push((entity.to_string(), refer_object));
+        ret
+    }
+    fn new_one_many(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        let re = Regex::new(r"^Vec<(.+)>$").unwrap();
+        if !re.is_match(ty) {
+            unreachable!();
+        }
+        let caps = re.captures(ty).unwrap();
+        // 对象挂在A上，id挂在B上
+        let refer_id_field = format!("{}_id", entity.to_lowercase());
+        let refer_entity = caps.get(1).unwrap().as_str().to_string();
+        let refer_table = refer_entity.to_string();
+        let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
+        let refer_object = FieldMeta {
+            field: field.to_string(),
+            ty: TypeMeta::OneToMany {
+                id: refer_id_field.to_string(),
+                entity: refer_entity,
+                table: refer_table,
+                cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
+                cascade: None,
             },
         };
         ret.push((entity.to_string(), refer_object));

@@ -9,6 +9,13 @@ struct Person {
     #[one_one]
     #[cascade(insert, update, delete)]
     account: Account,
+    #[one_many]
+    #[cascade(insert, update, delete)]
+    children: Vec<Child>,
+}
+
+struct Child {
+    name:String,
 }
 
 struct Address {

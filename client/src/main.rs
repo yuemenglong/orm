@@ -49,7 +49,21 @@ fn refer_test(db: &ast::DB) {
     person.set_account(&account);
     person.clear_addr();
     db.update(&person).unwrap();
-    // person.debug();
+
+    let mut child1 = Child::default();
+    child1.set_name("xuan");
+    child1.cascade_insert();
+    let mut child2 = Child::default();
+    child2.set_name("yuan");
+    child2.cascade_insert();
+    person.set_children(vec![child1, child2]);
+    db.update(&person).unwrap();
+
+    person.set_children(vec![]);
+    person.get_account().cascade_null();
+    person.get_addr().cascade_null();
+    db.update(&person).unwrap();
+    person.debug();
 
     // person.clear_account();
     // person.debug();

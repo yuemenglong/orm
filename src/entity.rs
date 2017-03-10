@@ -202,6 +202,11 @@ impl EntityInner {
                 b_rc.borrow_mut().cascade_reset();
             }
         }
+        for (_, vec) in &self.one_many_map {
+            for b_rc in vec{
+                b_rc.borrow_mut().cascade_reset();
+            }
+        }
     }
 
     pub fn get_values(&self) -> Vec<Value> {
@@ -267,27 +272,6 @@ impl EntityInner {
     pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
         where C: GenericConnection
     {
-        // let sql = E::meta().sql_get();
-        // println!("{}", sql);
-        // let res = self.cache.prep_exec(sql, vec![("id", id)]);
-        // if let Err(err) = res {
-        //     return Err(err);
-        // }
-        // let mut res = res.unwrap();
-        // let option = res.next();
-        // if let None = option {
-        //     return Ok(None);
-        // }
-        // let row_res = option.unwrap();
-        // if let Err(err) = row_res {
-        //     return Err(err);
-        // }
-        // let mut row = row_res.unwrap();
-        // let mut entity = E::default();
-        // entity.do_inner_mut(|inner| inner.set_values(&res, &mut row, ""));
-        // Ok(Some(entity))
-
-
         let sql = self.meta.sql_get();
         let id = self.field_map.get("id").unwrap().clone();
         let params = vec![("id".to_string(), id.clone())];
@@ -328,31 +312,38 @@ impl EntityInner {
         format!("{:?}", inner)
     }
     fn fmt_map_value(map: &HashMap<String, Value>) -> String {
-        let content = map.iter()
+        map.iter()
             .map(|(key, value)| format!("{}: \"{:?}\"", key, value))
             .collect::<Vec<_>>()
-            .join(", ");
-        // format!("{{{}}}", content)
-        content
+            .join(", ")
     }
-    fn fmt_map_single(map: &HashMap<String, Option<EntityInnerPointer>>) -> String {
-        let content = map.iter()
+    fn fmt_map_opt(map: &HashMap<String, Option<EntityInnerPointer>>) -> String {
+        map.iter()
             .map(|(key, value)| {
                 let value_string = value.as_ref().map_or("NULL".to_string(), Self::fmt_rc);
                 format!("{}: {}", key, value_string)
             })
             .collect::<Vec<_>>()
-            .join(", ");
-        // format!("{{{}}}", content)
-        content
+            .join(", ")
+    }
+    fn fmt_map_vec(map: &HashMap<String, Vec<EntityInnerPointer>>) -> String {
+        map.iter()
+            .map(|(key, vec)| {
+                // let value_string = value.as_ref().map_or("NULL".to_string(), Self::fmt_rc);
+                let value_string = vec.iter().map(Self::fmt_rc).collect::<Vec<_>>().join(", ");
+                format!("{}: [{}]", key, value_string)
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner = vec![Self::fmt_map_value(&self.field_map),
-                         Self::fmt_map_single(&self.pointer_map),
-                         Self::fmt_map_single(&self.one_one_map)]
+                         Self::fmt_map_opt(&self.pointer_map),
+                         Self::fmt_map_opt(&self.one_one_map),
+                         Self::fmt_map_vec(&self.one_many_map)]
             .into_iter()
             .filter(|s| s.len() > 0)
             .collect::<Vec<_>>()
@@ -392,7 +383,8 @@ pub trait Entity {
     fn inner_get<V>(&self, key: &str) -> V
         where V: FromValue
     {
-        self.do_inner(|inner| inner.get::<V>(key)).unwrap()
+        let opt = self.do_inner(|inner| inner.get::<V>(key));
+        opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
     fn inner_set<V>(&self, key: &str, value: V)
         where Value: From<V>
@@ -413,7 +405,8 @@ pub trait Entity {
     fn inner_get_pointer<E>(&self, key: &str) -> E
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::new(rc)).expect("")
+        let opt = self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::new(rc));
+        opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
     fn inner_set_pointer<E>(&self, key: &str, value: &E)
         where E: Entity
@@ -430,7 +423,8 @@ pub trait Entity {
     fn inner_get_one_one<E>(&self, key: &str) -> E
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc)).expect("")
+        let opt = self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc));
+        opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
     fn inner_set_one_one<E>(&self, key: &str, value: &E)
         where E: Entity
@@ -447,18 +441,20 @@ pub trait Entity {
     fn inner_get_one_many<E>(&self, key: &str) -> Vec<E>
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.get_one_many(key)).map(|vec| E::new(rc))
+        let vec = self.do_inner_mut(|inner| inner.get_one_many(key));
+        vec.into_iter().map(E::new).collect::<Vec<_>>()
     }
-    fn inner_set_one_many<E>(&self, key: &str, value: &E)
+    fn inner_set_one_many<E>(&self, key: &str, value: Vec<E>)
         where E: Entity
     {
-        self.do_inner_mut(|inner| inner.set_one_many(key, Some(value.inner())));
+        let vec = value.iter().map(E::inner).collect::<Vec<_>>();
+        self.do_inner_mut(|inner| inner.set_one_many(key, vec));
     }
     fn inner_has_one_many(&self, key: &str) -> bool {
-        self.do_inner_mut(|inner| inner.get_one_many(key)).is_some()
+        self.do_inner_mut(|inner| inner.get_one_many(key)).len() > 0
     }
     fn inner_clear_one_many(&self, key: &str) {
-        self.do_inner_mut(|inner| inner.set_one_many(key, None));
+        self.do_inner_mut(|inner| inner.set_one_many(key, Vec::new()));
     }
 
     fn set_id(&self, id: u64) {
