@@ -61,7 +61,7 @@ fn refer_test(db: &ast::DB) {
 
     person.set_children(vec![]);
     person.get_account().cascade_null();
-    person.get_addr().cascade_null();
+    person.cascade_addr_null();
     db.update(&person).unwrap();
     person.debug();
 
@@ -77,15 +77,12 @@ fn curd_test(db: &ast::DB) {
     db.drop_table::<Person>().unwrap();
     let ret = db.create_table::<Person>().unwrap();
     db.insert(&p).unwrap();
-    println!("{:?}", p);
     let id = p.get_id();
     p.set_name("Dick");
     let ret = db.update(&p).unwrap();
     let p = db.get::<Person>(p.get_id()).unwrap();
-    println!("{:?}", p);
     db.delete(p).unwrap();
     let p = db.get::<Person>(id).unwrap();
-    println!("{:?}", p);
 }
 
 fn select_field(meta: &EntityMeta, alias: &str) -> String {

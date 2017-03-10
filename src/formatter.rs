@@ -114,6 +114,24 @@ static TPL_IMPL_ONE_MANY: &'static str = r#"
         self.inner_clear_one_many("${FIELD}")
     }"#;
 
+static TPL_IMPL_CASCADE: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_insert(&self) {
+        self.inner_cascade_field_insert("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_update(&self) {
+        self.inner_cascade_field_update("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_delete(&self) {
+        self.inner_cascade_field_delete("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_null(&self) {
+        self.inner_cascade_field_null("${FIELD}");
+    }"#;
+
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
     fn meta() -> &'static ast::meta::EntityMeta {
@@ -183,26 +201,22 @@ fn format_entity(meta: &EntityMeta) -> String {
     format!("{}{}{}", entity, implt, treit)
 }
 fn format_entity_define(meta: &EntityMeta) -> String {
-    // let id_fields = do_id_fields(meta, "", &format_entity_define_field);
-    // let normal_fields = do_normal_fields(meta, "", &format_entity_define_field);
-    // let refer_fields = do_pointer_fields(meta, "", &format_entity_define_field);
-    // let fields = format!("{}{}\n{}", id_fields, normal_fields, refer_fields);
     TPL_STRUCT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
-    // let normal_fields = do_normal_fields(meta, "", &format_entity_impl_field);
-    // let pointer_fields = do_pointer_fields(meta, "", &format_entity_impl_pointer);
     let normal_fields = do_spec_fields(meta.get_normal_fields(), "", &format_entity_impl_field);
     let pointer_fields = do_spec_fields(meta.get_pointer_fields(), "", &format_entity_impl_pointer);
     let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
     let one_many_fields =
         do_spec_fields(meta.get_one_many_fields(), "", &format_entity_impl_one_many);
-    let fields = format!("{}\n{}\n{}\n{}",
+    let cascade_detail = do_spec_fields(meta.get_refer_fields(), "", &format_entity_impl_cascade);
+    let fields = format!("{}\n{}\n{}\n{}\n{}",
                          normal_fields,
                          pointer_fields,
                          one_one_fields,
-                         one_many_fields);
+                         one_many_fields,
+                         cascade_detail);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
@@ -242,4 +256,7 @@ fn format_entity_impl_one_many(meta: &FieldMeta) -> String {
         .replace("${FIELD}", &meta.get_field_name())
         .replace("${TYPE}", &meta.get_type_name())
         .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_cascade(meta: &FieldMeta) -> String {
+    TPL_IMPL_CASCADE.to_string().replace("${FIELD}", &meta.get_field_name())
 }

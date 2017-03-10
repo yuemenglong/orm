@@ -174,6 +174,22 @@ impl EntityInner {
         a.one_many_map.get(a_b_field).unwrap().clone()
     }
 
+    pub fn cascade_field_insert(&mut self, field: &str) {
+        let a_b_meta = self.meta.field_map.get(field).unwrap();
+        a_b_meta.set_refer_cascade(Some(Cascade::Insert));
+    }
+    pub fn cascade_field_update(&mut self, field: &str) {
+        let a_b_meta = self.meta.field_map.get(field).unwrap();
+        a_b_meta.set_refer_cascade(Some(Cascade::Update));
+    }
+    pub fn cascade_field_delete(&mut self, field: &str) {
+        let a_b_meta = self.meta.field_map.get(field).unwrap();
+        a_b_meta.set_refer_cascade(Some(Cascade::Delete));
+    }
+    pub fn cascade_field_null(&mut self, field: &str) {
+        let a_b_meta = self.meta.field_map.get(field).unwrap();
+        a_b_meta.set_refer_cascade(Some(Cascade::NULL));
+    }
     pub fn cascade_insert(&mut self) {
         self.cascade = Some(Cascade::Insert);
     }
@@ -203,9 +219,12 @@ impl EntityInner {
             }
         }
         for (_, vec) in &self.one_many_map {
-            for b_rc in vec{
+            for b_rc in vec {
                 b_rc.borrow_mut().cascade_reset();
             }
+        }
+        for a_b_meta in &self.meta.get_refer_fields() {
+            a_b_meta.set_refer_cascade(None);
         }
     }
 
@@ -484,6 +503,18 @@ pub trait Entity {
     }
     fn cascade_reset(&self) {
         self.do_inner_mut(|inner| inner.cascade_reset());
+    }
+    fn inner_cascade_field_insert(&self, field:&str) {
+        self.do_inner_mut(|inner| inner.cascade_field_insert(field));
+    }
+    fn inner_cascade_field_update(&self, field:&str) {
+        self.do_inner_mut(|inner| inner.cascade_field_update(field));
+    }
+    fn inner_cascade_field_delete(&self, field:&str) {
+        self.do_inner_mut(|inner| inner.cascade_field_delete(field));
+    }
+    fn inner_cascade_field_null(&self, field:&str) {
+        self.do_inner_mut(|inner| inner.cascade_field_null(field));
     }
 
     // fn get_refer<E:Entity>(&self, field: &str) -> Option<&E>;

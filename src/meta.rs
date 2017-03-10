@@ -5,7 +5,7 @@ use attr::Attr;
 use std::str::FromStr;
 use regex::Regex;
 
-#[derive(Debug, Clone, PartialEq, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
     NULL,
     Insert,
@@ -32,21 +32,21 @@ enum TypeMeta {
         table: String,
         refer_id: String,
         cascades: Vec<Cascade>,
-        cascade: Option<Cascade>,
+        cascade: Cell<Option<Cascade>>,
     },
     OneToOne {
         entity: String,
         table: String,
         id: String,
         cascades: Vec<Cascade>,
-        cascade: Option<Cascade>,
+        cascade: Cell<Option<Cascade>>,
     },
     OneToMany {
         entity: String,
         table: String,
         id: String,
         cascades: Vec<Cascade>,
-        cascade: Option<Cascade>,
+        cascade: Cell<Option<Cascade>>,
     },
     ManyToMany {
         entity: String,
@@ -55,7 +55,7 @@ enum TypeMeta {
         id: String,
         refer_id: String,
         cascades: Vec<Cascade>,
-        cascade: Option<Cell<Cascade>>,
+        cascade: Cell<Option<Cascade>>,
     },
 }
 
@@ -207,12 +207,21 @@ impl FieldMeta {
     }
     pub fn get_refer_cascade(&self) -> Option<Cascade> {
         match self.ty {
-            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.clone(),
-            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.clone(),
-            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.clone(),
-            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.clone(),
+            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.get(),
+            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.get(),
+            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.get(),
+            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.get(),
             _ => unreachable!(),
         }
+    }
+    pub fn set_refer_cascade(&self, value: Option<Cascade>) {
+        match self.ty {
+            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.set(value),
+            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.set(value),
+            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.set(value),
+            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.set(value),
+            _ => unreachable!(),
+        };
     }
     pub fn is_refer_pointer(&self) -> bool {
         match self.ty {
@@ -229,6 +238,12 @@ impl FieldMeta {
     pub fn is_refer_one_many(&self) -> bool {
         match self.ty {
             TypeMeta::OneToMany { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_many_many(&self) -> bool {
+        match self.ty {
+            TypeMeta::ManyToMany { .. } => true,
             _ => false,
         }
     }
@@ -388,7 +403,7 @@ impl FieldMeta {
                 entity: entity_name,
                 table: table_name,
                 cascades: Self::pick_cascades(attr),
-                cascade: None,
+                cascade: Cell::new(None),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -407,7 +422,7 @@ impl FieldMeta {
                 entity: refer_entity,
                 table: refer_table,
                 cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
-                cascade: None,
+                cascade: Cell::new(None),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -431,7 +446,7 @@ impl FieldMeta {
                 entity: refer_entity,
                 table: refer_table,
                 cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
-                cascade: None,
+                cascade: Cell::new(None),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -451,6 +466,9 @@ impl EntityMeta {
             .iter()
             .filter(|field| field.is_type_normal())
             .collect::<Vec<_>>()
+    }
+    pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
+        self.fields.iter().filter(|field| field.is_type_refer()).collect::<Vec<_>>()
     }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
         self.fields
@@ -474,6 +492,12 @@ impl EntityMeta {
         self.fields
             .iter()
             .filter(|field| field.is_refer_one_many())
+            .collect::<Vec<_>>()
+    }
+    pub fn get_many_many_fields(&self) -> Vec<&FieldMeta> {
+        self.fields
+            .iter()
+            .filter(|field| field.is_refer_many_many())
             .collect::<Vec<_>>()
     }
 
