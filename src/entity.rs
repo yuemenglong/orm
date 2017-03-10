@@ -223,8 +223,15 @@ impl EntityInner {
                 b_rc.borrow_mut().cascade_reset();
             }
         }
+        // cache cascade
+        for &(_, ref b_rc) in &self.cache {
+            b_rc.borrow_mut().cascade_reset();
+        }
+        // 字段cascade
         for a_b_meta in &self.meta.get_refer_fields() {
+            println!("{:?} reset", a_b_meta.get_field_name());
             a_b_meta.set_refer_cascade(None);
+            println!("{:?} reset after", a_b_meta.get_refer_cascade());
         }
     }
 
@@ -320,7 +327,11 @@ impl EntityInner {
     pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
         where C: GenericConnection
     {
-        Ok(())
+        let sql = self.meta.sql_delete();
+        let id = self.field_map.get("id").unwrap().clone();
+        let params = vec![("id".to_string(), id)];
+        println!("{}, {:?}", sql, params);
+        conn.prep_exec(sql, params).map(|res| ())
     }
 }
 
@@ -504,16 +515,16 @@ pub trait Entity {
     fn cascade_reset(&self) {
         self.do_inner_mut(|inner| inner.cascade_reset());
     }
-    fn inner_cascade_field_insert(&self, field:&str) {
+    fn inner_cascade_field_insert(&self, field: &str) {
         self.do_inner_mut(|inner| inner.cascade_field_insert(field));
     }
-    fn inner_cascade_field_update(&self, field:&str) {
+    fn inner_cascade_field_update(&self, field: &str) {
         self.do_inner_mut(|inner| inner.cascade_field_update(field));
     }
-    fn inner_cascade_field_delete(&self, field:&str) {
+    fn inner_cascade_field_delete(&self, field: &str) {
         self.do_inner_mut(|inner| inner.cascade_field_delete(field));
     }
-    fn inner_cascade_field_null(&self, field:&str) {
+    fn inner_cascade_field_null(&self, field: &str) {
         self.do_inner_mut(|inner| inner.cascade_field_null(field));
     }
 

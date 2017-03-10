@@ -65,7 +65,10 @@ fn refer_test(db: &ast::DB) {
     person.cascade_account_null();
     person.cascade_children_null();
     db.update(&person).unwrap();
+
     person.debug();
+    println!("{:?}", "=======================");
+    db.delete(person).unwrap();
 
     // person.clear_account();
     // person.debug();
