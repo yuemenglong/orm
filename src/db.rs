@@ -30,7 +30,7 @@ impl DB {
     }
     pub fn create_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
-        for entity_meta in meta.entities.iter() {
+        for entity_meta in meta.get_entities().iter() {
             let sql = entity_meta.sql_create_table();
             println!("{}", sql);
             match self.pool.prep_exec(sql, ()) {
@@ -44,7 +44,7 @@ impl DB {
     }
     pub fn drop_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
-        for entity_meta in meta.entities.iter() {
+        for entity_meta in meta.get_entities().iter() {
             let sql = entity_meta.sql_drop_table();
             println!("{}", sql);
             match self.pool.prep_exec(sql, ()) {
@@ -207,7 +207,6 @@ impl<'a, C> Session<'a, C>
         }
         let a_b_meta = a.meta.field_map.get(field).unwrap();
         let cascade = Self::calc_cascade(a_b_meta, op.clone());
-        println!("{} =====> {:?}", field, cascade);
         if cascade != Cascade::NULL {
             // 配置级联，优先级较低
             return self.handle(b_rc, cascade);
@@ -218,11 +217,6 @@ impl<'a, C> Session<'a, C>
         mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
     }
     fn calc_cascade(a_b_meta: &FieldMeta, op: Cascade) -> Cascade {
-        println!("{:?}", a_b_meta.get_field_name());
-        println!("{:?} ------- {:?}", a_b_meta.get_refer_cascades(), op);
-        println!("{:?}", a_b_meta.has_cascade_delete());
-        println!("{:?}", op == Cascade::Delete);
-        println!("{:?}", a_b_meta.get_refer_cascade());
         if a_b_meta.get_refer_cascade().is_some() {
             return a_b_meta.get_refer_cascade().clone().unwrap();
         } else if a_b_meta.has_cascade_insert() && op == Cascade::Insert {

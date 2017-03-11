@@ -69,13 +69,13 @@ pub struct FieldMeta {
 pub struct EntityMeta {
     pub entity_name: String,
     pub table_name: String,
-    pub fields: Vec<FieldMeta>,
+    pub field_vec: Vec<String>,
     pub field_map: HashMap<String, FieldMeta>, // pub column_map: HashMap<String, FieldMeta>,
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct OrmMeta {
-    pub entities: Vec<EntityMeta>,
+    pub entity_vec: Vec<String>,
     pub entity_map: HashMap<String, EntityMeta>, // pub table_map: HashMap<String, EntityMeta>,
 }
 
@@ -455,48 +455,54 @@ impl FieldMeta {
 }
 
 impl EntityMeta {
+    pub fn get_fields(&self) -> Vec<&FieldMeta> {
+        self.field_vec.iter().map(|field_name| self.field_map.get(field_name).unwrap()).collect()
+    }
     pub fn get_id_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_type_id())
             .collect::<Vec<_>>()
     }
     pub fn get_normal_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_type_normal())
             .collect::<Vec<_>>()
     }
     pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields.iter().filter(|field| field.is_type_refer()).collect::<Vec<_>>()
+        self.get_fields()
+            .into_iter()
+            .filter(|field| field.is_type_refer())
+            .collect::<Vec<_>>()
     }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| !field.is_type_refer())
             .collect::<Vec<_>>()
     }
     pub fn get_pointer_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_refer_pointer())
             .collect::<Vec<_>>()
     }
     pub fn get_one_one_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_refer_one_one())
             .collect::<Vec<_>>()
     }
     pub fn get_one_many_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_refer_one_many())
             .collect::<Vec<_>>()
     }
     pub fn get_many_many_fields(&self) -> Vec<&FieldMeta> {
-        self.fields
-            .iter()
+        self.get_fields()
+            .into_iter()
             .filter(|field| field.is_refer_many_many())
             .collect::<Vec<_>>()
     }
@@ -547,5 +553,14 @@ impl EntityMeta {
     }
     pub fn sql_delete(&self) -> String {
         format!("DELETE FROM `{}` WHERE id = :id", &self.table_name)
+    }
+}
+
+impl OrmMeta {
+    pub fn get_entities(&self) -> Vec<&EntityMeta> {
+        self.entity_vec
+            .iter()
+            .map(|entity_name| self.entity_map.get(entity_name).unwrap())
+            .collect()
     }
 }

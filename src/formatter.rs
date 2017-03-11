@@ -153,14 +153,6 @@ impl ast::Entity for ${ENTITY_NAME} {
 }
 "#;
 
-fn do_id_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.get_id_fields()
-        .into_iter()
-        .map(cb)
-        .collect::<Vec<_>>()
-        .join(join)
-}
-
 fn do_spec_fields(fields: Vec<&FieldMeta>, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
     fields.into_iter()
         .map(cb)
@@ -168,26 +160,10 @@ fn do_spec_fields(fields: Vec<&FieldMeta>, join: &str, cb: &Fn(&FieldMeta) -> St
         .join(join)
 }
 
-fn do_normal_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.get_normal_fields()
-        .into_iter()
-        .map(cb)
-        .collect::<Vec<_>>()
-        .join(join)
-}
-
-fn do_pointer_fields(meta: &EntityMeta, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    meta.get_pointer_fields()
-        .into_iter()
-        .map(cb)
-        .collect::<Vec<_>>()
-        .join(join)
-}
-
 pub fn format_meta(meta: &OrmMeta) -> String {
     let json = format!("\"{}\"", rustc_serialize::json::encode(&meta).unwrap());
-    let entities = meta.entities
-        .iter()
+    let entities = meta.get_entities()
+        .into_iter()
         .map(format_entity)
         .collect::<Vec<_>>()
         .join("");

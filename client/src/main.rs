@@ -13,7 +13,7 @@ use entity::*;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    let db = ast::open("root", "root", "172.16.16.241", 3306, "test").unwrap();
+    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
     // select(Person::meta());
     refer_test(&db);
 }
@@ -41,6 +41,7 @@ fn refer_test(db: &ast::DB) {
 
     let mut account = Account::default();
     account.set_no("123456");
+    account.cascade_insert();
     person.set_account(&account);
     person.clear_addr();
     db.update(&person).unwrap();
@@ -67,7 +68,6 @@ fn refer_test(db: &ast::DB) {
     db.update(&person).unwrap();
 
     person.debug();
-    println!("{:?}", "=======================");
     db.delete(person).unwrap();
 
     // person.clear_account();

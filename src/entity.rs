@@ -229,9 +229,7 @@ impl EntityInner {
         }
         // 字段cascade
         for a_b_meta in &self.meta.get_refer_fields() {
-            println!("{:?} reset", a_b_meta.get_field_name());
             a_b_meta.set_refer_cascade(None);
-            println!("{:?} reset after", a_b_meta.get_refer_cascade());
         }
     }
 
