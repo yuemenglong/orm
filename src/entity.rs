@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::ops::DerefMut;
 use std::fmt;
 
 use mysql::Value;
@@ -14,6 +13,7 @@ use mysql::QueryResult;
 use mysql::Row;
 use mysql::prelude::GenericConnection;
 
+use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
 use meta::Cascade;
@@ -27,6 +27,7 @@ pub struct EntityInner {
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_one_map: HashMap<String, Option<EntityInnerPointer>>,
     pub one_many_map: HashMap<String, Vec<EntityInnerPointer>>,
+    pub many_many_map: HashMap<String, Vec<(EntityInnerPointer, EntityInnerPointer)>>,
 
     pub cascade: Option<Cascade>,
     pub cache: Vec<(String, EntityInnerPointer)>,
@@ -40,6 +41,7 @@ impl EntityInner {
             pointer_map: HashMap::new(),
             one_one_map: HashMap::new(),
             one_many_map: HashMap::new(),
+            many_many_map: HashMap::new(),
             cascade: None,
             cache: Vec::new(),
         }
@@ -61,12 +63,18 @@ impl EntityInner {
             .into_iter()
             .map(|meta| (meta.get_field_name(), Vec::new()))
             .collect();
+        let many_many_map: HashMap<String, Vec<(EntityInnerPointer, EntityInnerPointer)>> =
+            meta.get_many_many_fields()
+                .into_iter()
+                .map(|meta| (meta.get_field_name(), Vec::new()))
+                .collect();
         EntityInner {
             meta: meta,
             field_map: field_map,
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: one_many_map,
+            many_many_map: many_many_map,
             cascade: None,
             cache: Vec::new(),
         }
@@ -136,10 +144,10 @@ impl EntityInner {
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let mut a = &self;
-        let a_b_meta = self.meta.field_map.get(key).unwrap();
         let a_b = a.one_one_map.get(key);
         if a_b.is_none() {
             // lazy load
+            // let a_b_meta = self.meta.field_map.get(key).unwrap();
             unimplemented!();
         }
         a.one_one_map.get(key).unwrap().clone()
@@ -172,6 +180,14 @@ impl EntityInner {
             unimplemented!();
         }
         a.one_many_map.get(a_b_field).unwrap().clone()
+    }
+
+    pub fn set_many_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
+        let a = self;
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+    }
+    pub fn get_many_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
+        Vec::new()
     }
 
     pub fn cascade_field_insert(&mut self, field: &str) {
@@ -381,6 +397,7 @@ impl fmt::Debug for EntityInner {
 }
 
 pub trait Entity {
+    fn orm_meta() -> &'static OrmMeta;
     fn meta() -> &'static EntityMeta;
     fn default() -> Self;
     fn new(inner: EntityInnerPointer) -> Self;

@@ -14,10 +14,16 @@ struct Person {
     #[one_many]
     #[cascade(insert, update, delete)]
     children: Vec<Child>,
+    #[many_many]
+    teachers: Vec<Teacher>,
+}
+
+struct Teacher {
+    name: String,
 }
 
 struct Child {
-    name:String,
+    name: String,
 }
 
 struct Address {

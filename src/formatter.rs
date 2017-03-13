@@ -1,11 +1,3 @@
-use std;
-use std::cell::Cell;
-use std::ops::Deref;
-
-use syntax;
-use syntax::ast::ItemKind;
-use syntax::print::pprust::*;
-use syntax::ast::VariantData;
 use rustc_serialize;
 
 use meta::*;
@@ -33,9 +25,6 @@ pub struct ${ENTITY_NAME} {
     inner: ast::EntityInnerPointer,
 }
 "#;
-
-static TPL_STRUCT_FIELD: &'static str = r#"
-    pub ${FIELD}: Option<${TYPE}>, "#;
 
 static TPL_IMPL: &'static str = r#"
 impl ${ENTITY_NAME} {${IMPL_FIELDS}
@@ -134,6 +123,9 @@ static TPL_IMPL_CASCADE: &'static str = r#"
 
 static TPL_TRAIT: &'static str = r#"
 impl ast::Entity for ${ENTITY_NAME} {
+    fn orm_meta() -> &'static ast::meta::OrmMeta {
+        orm_meta()
+    }
     fn meta() -> &'static ast::meta::EntityMeta {
         orm_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
@@ -167,7 +159,7 @@ pub fn format_meta(meta: &OrmMeta) -> String {
         .map(format_entity)
         .collect::<Vec<_>>()
         .join("");
-    let mut tpl = TPL.to_string();
+    let tpl = TPL.to_string();
     tpl.replace("${JSON}", &json).replace("${ENTITIES}", &entities)
 }
 fn format_entity(meta: &EntityMeta) -> String {
@@ -197,17 +189,9 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
 }
-fn format_entity_trait_get_value(meta: &FieldMeta) -> String {
-    format!("ast::Value::from(&self.{})", meta.get_field_name())
-}
 fn format_entity_trait(meta: &EntityMeta) -> String {
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-}
-fn format_entity_define_field(meta: &FieldMeta) -> String {
-    TPL_STRUCT_FIELD.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
 }
 fn format_entity_impl_field(meta: &FieldMeta) -> String {
     TPL_IMPL_FIELD.to_string()

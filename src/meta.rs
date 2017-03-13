@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::cell::Cell;
-use rustc_serialize::json;
+use std::rc::Rc;
 use attr::Attr;
 use std::str::FromStr;
 use regex::Regex;
@@ -29,29 +29,25 @@ enum TypeMeta {
     },
     Pointer {
         entity: String,
-        table: String,
         refer_id: String,
         cascades: Vec<Cascade>,
         cascade: Cell<Option<Cascade>>,
     },
     OneToOne {
         entity: String,
-        table: String,
         id: String,
         cascades: Vec<Cascade>,
         cascade: Cell<Option<Cascade>>,
     },
     OneToMany {
         entity: String,
-        table: String,
         id: String,
         cascades: Vec<Cascade>,
         cascade: Cell<Option<Cascade>>,
     },
     ManyToMany {
         entity: String,
-        table: String,
-        mid: String,
+        middle: String,
         id: String,
         refer_id: String,
         cascades: Vec<Cascade>,
@@ -85,14 +81,12 @@ impl Default for TypeMeta {
     }
 }
 
-impl TypeMeta {}
-
 impl FieldMeta {
     pub fn get_column_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "id".to_string(),
-            TypeMeta::Number { column: ref column, .. } => column.to_string(),
-            TypeMeta::String { column: ref column, .. } => column.to_string(),
+            TypeMeta::Number { ref column, .. } => column.to_string(),
+            TypeMeta::String { ref column, .. } => column.to_string(),
             _ => unreachable!(),
         }
     }
@@ -102,12 +96,12 @@ impl FieldMeta {
     pub fn get_type_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "u64".to_string(),
-            TypeMeta::Number { number: ref number, .. } => number.to_string(),
+            TypeMeta::Number { ref number, .. } => number.to_string(),
             TypeMeta::String { .. } => "String".to_string(),
-            TypeMeta::Pointer { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::OneToOne { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::OneToMany { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::ManyToMany { entity: ref entity, .. } => entity.to_string(),
+            TypeMeta::Pointer { ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToOne { ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToMany { ref entity, .. } => entity.to_string(),
+            TypeMeta::ManyToMany { ref entity, .. } => entity.to_string(),
             TypeMeta::NULL => unreachable!(),
         }
     }
@@ -121,23 +115,23 @@ impl FieldMeta {
         }
     }
     fn get_db_type(&self) -> String {
-        let nullableFn = |nullable| match nullable {
+        let nullable_fn = |nullable| match nullable {
             true => "",
             false => " NOT NULL",
         };
         match self.ty {
             TypeMeta::Id => "`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT".to_string(),
-            TypeMeta::Number { number: ref number, column: ref column, nullable: ref nullable } => {
+            TypeMeta::Number { ref number, ref column, ref nullable } => {
                 format!("`{}` {}{}",
                         column,
                         Self::get_db_type_number(number),
-                        nullableFn(nullable.clone()))
+                        nullable_fn(nullable.clone()))
             }
-            TypeMeta::String { len: ref len, column: ref column, nullable: ref nullable } => {
+            TypeMeta::String { ref len, ref column, ref nullable } => {
                 format!("`{}` VARCHAR({}){}",
                         column,
                         len,
-                        nullableFn(nullable.clone()))
+                        nullable_fn(nullable.clone()))
             }
             _ => unreachable!(),
         }
@@ -147,10 +141,10 @@ impl FieldMeta {
             TypeMeta::Id => self.get_type_name(),
             TypeMeta::Number { .. } => self.get_type_name(),
             TypeMeta::String { .. } => "&str".to_string(),
-            TypeMeta::Pointer { entity: ref entity, .. } => format!("&{}", entity),
-            TypeMeta::OneToOne { entity: ref entity, .. } => format!("&{}", entity),
-            TypeMeta::OneToMany { entity: ref entity, .. } => format!("&{}", entity),
-            TypeMeta::ManyToMany { entity: ref entity, .. } => format!("&{}", entity),
+            TypeMeta::Pointer { ref entity, .. } => format!("&{}", entity),
+            TypeMeta::OneToOne { ref entity, .. } => format!("&{}", entity),
+            TypeMeta::OneToMany { ref entity, .. } => format!("&{}", entity),
+            TypeMeta::ManyToMany { ref entity, .. } => format!("&{}", entity),
             TypeMeta::NULL => unreachable!(),
         }
     }
@@ -180,46 +174,37 @@ impl FieldMeta {
 
     pub fn get_refer_entity(&self) -> String {
         match self.ty {
-            TypeMeta::Pointer { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::OneToOne { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::OneToMany { entity: ref entity, .. } => entity.to_string(),
-            TypeMeta::ManyToMany { entity: ref entity, .. } => entity.to_string(),
-            _ => unreachable!(),
-        }
-    }
-    pub fn get_refer_table(&self) -> String {
-        match self.ty {
-            TypeMeta::Pointer { table: ref table, .. } => table.to_string(),
-            TypeMeta::OneToOne { table: ref table, .. } => table.to_string(),
-            TypeMeta::OneToMany { table: ref table, .. } => table.to_string(),
-            TypeMeta::ManyToMany { table: ref table, .. } => table.to_string(),
+            TypeMeta::Pointer { ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToOne { ref entity, .. } => entity.to_string(),
+            TypeMeta::OneToMany { ref entity, .. } => entity.to_string(),
+            TypeMeta::ManyToMany { ref entity, .. } => entity.to_string(),
             _ => unreachable!(),
         }
     }
     pub fn get_refer_cascades(&self) -> &Vec<Cascade> {
         match self.ty {
-            TypeMeta::Pointer { cascades: ref cascades, .. } => cascades,
-            TypeMeta::OneToOne { cascades: ref cascades, .. } => cascades,
-            TypeMeta::OneToMany { cascades: ref cascades, .. } => cascades,
-            TypeMeta::ManyToMany { cascades: ref cascades, .. } => cascades,
+            TypeMeta::Pointer { ref cascades, .. } => cascades,
+            TypeMeta::OneToOne { ref cascades, .. } => cascades,
+            TypeMeta::OneToMany { ref cascades, .. } => cascades,
+            TypeMeta::ManyToMany { ref cascades, .. } => cascades,
             _ => unreachable!(),
         }
     }
     pub fn get_refer_cascade(&self) -> Option<Cascade> {
         match self.ty {
-            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.get(),
-            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.get(),
-            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.get(),
-            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.get(),
+            TypeMeta::Pointer { ref cascade, .. } => cascade.get(),
+            TypeMeta::OneToOne { ref cascade, .. } => cascade.get(),
+            TypeMeta::OneToMany { ref cascade, .. } => cascade.get(),
+            TypeMeta::ManyToMany { ref cascade, .. } => cascade.get(),
             _ => unreachable!(),
         }
     }
     pub fn set_refer_cascade(&self, value: Option<Cascade>) {
         match self.ty {
-            TypeMeta::Pointer { cascade: ref cascade, .. } => cascade.set(value),
-            TypeMeta::OneToOne { cascade: ref cascade, .. } => cascade.set(value),
-            TypeMeta::OneToMany { cascade: ref cascade, .. } => cascade.set(value),
-            TypeMeta::ManyToMany { cascade: ref cascade, .. } => cascade.set(value),
+            TypeMeta::Pointer { ref cascade, .. } => cascade.set(value),
+            TypeMeta::OneToOne { ref cascade, .. } => cascade.set(value),
+            TypeMeta::OneToMany { ref cascade, .. } => cascade.set(value),
+            TypeMeta::ManyToMany { ref cascade, .. } => cascade.set(value),
             _ => unreachable!(),
         };
     }
@@ -249,24 +234,33 @@ impl FieldMeta {
     }
     pub fn get_pointer_id(&self) -> String {
         match self.ty {
-            TypeMeta::Pointer { refer_id: ref refer_id, .. } => refer_id.to_string(),
+            TypeMeta::Pointer { ref refer_id, .. } => refer_id.to_string(),
             _ => unreachable!(),
         }
     }
     pub fn get_one_one_id(&self) -> String {
         match self.ty {
-            TypeMeta::OneToOne { id: ref id, .. } => id.to_string(),
+            TypeMeta::OneToOne { ref id, .. } => id.to_string(),
             _ => unreachable!(),
         }
     }
     pub fn get_one_many_id(&self) -> String {
         match self.ty {
-            TypeMeta::OneToMany { id: ref id, .. } => id.to_string(),
+            TypeMeta::OneToMany { ref id, .. } => id.to_string(),
             _ => unreachable!(),
         }
     }
-    pub fn get_bulk_one_many_id(&self) -> String {
-        unimplemented!()
+    pub fn get_many_many_id(&self) -> String {
+        match self.ty {
+            TypeMeta::ManyToMany { ref refer_id, .. } => refer_id.to_string(),
+            _ => unreachable!(),
+        }
+    }
+    pub fn get_many_many_refer_id(&self) -> String {
+        match self.ty {
+            TypeMeta::ManyToMany { ref refer_id, .. } => refer_id.to_string(),
+            _ => unreachable!(),
+        }
     }
 
     pub fn has_cascade_insert(&self) -> bool {
@@ -364,6 +358,8 @@ impl FieldMeta {
             return Self::new_one_one(entity, field, ty, attr);
         } else if attr.has("one_many") {
             return Self::new_one_many(entity, field, ty, attr);
+        } else if attr.has("many_many") {
+            return Self::new_many_many(entity, field, ty, attr);
         }
         unreachable!()
     }
@@ -393,7 +389,6 @@ impl FieldMeta {
     fn new_pointer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let refer_id_field = format!("{}_id", field);
         let entity_name = ty.to_string();
-        let table_name = entity_name.to_string();
         // 对象与id都挂在A上
         let mut ret = FieldMeta::new_number(entity, refer_id_field.as_ref(), "u64", attr);
         let refer_object = FieldMeta {
@@ -401,7 +396,6 @@ impl FieldMeta {
             ty: TypeMeta::Pointer {
                 refer_id: refer_id_field.to_string(),
                 entity: entity_name,
-                table: table_name,
                 cascades: Self::pick_cascades(attr),
                 cascade: Cell::new(None),
             },
@@ -413,15 +407,13 @@ impl FieldMeta {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
         let refer_entity = ty.to_string();
-        let refer_table = refer_entity.to_string();
         let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToOne {
                 id: refer_id_field.to_string(),
                 entity: refer_entity,
-                table: refer_table,
-                cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
+                cascades: Self::pick_cascades(attr),
                 cascade: Cell::new(None),
             },
         };
@@ -437,19 +429,47 @@ impl FieldMeta {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
         let refer_entity = caps.get(1).unwrap().as_str().to_string();
-        let refer_table = refer_entity.to_string();
         let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToMany {
                 id: refer_id_field.to_string(),
                 entity: refer_entity,
-                table: refer_table,
-                cascades: Self::pick_cascades(attr), /* refer: TypeReferMeta::OneToOne { id: refer_id_field.to_string() }, */
+                cascades: Self::pick_cascades(attr),
                 cascade: Cell::new(None),
             },
         };
         ret.push((entity.to_string(), refer_object));
+        ret
+    }
+    fn new_many_many(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+        let re = Regex::new(r"^Vec<(.+)>$").unwrap();
+        if !re.is_match(ty) {
+            unreachable!();
+        }
+        let caps = re.captures(ty).unwrap();
+        let a = entity.to_string();
+        let b = caps.get(1).unwrap().as_str().to_string();
+        let a_id = format!("{}_id", a.to_lowercase());
+        let b_id = format!("{}_id", b.to_lowercase());
+        // 生成中间表
+        let middle = format!("{}{}", a, b);
+        let a_id_vec = FieldMeta::new_number(&middle, &a_id, "u64", attr);
+        let b_id_vec = FieldMeta::new_number(&middle, &b_id, "u64", attr);
+        let a_b_meta = FieldMeta {
+            field: field.to_string(),
+            ty: TypeMeta::ManyToMany {
+                id: a_id.to_string(),
+                refer_id: b_id.to_string(),
+                entity: b.to_string(),
+                middle: middle.to_string(),
+                cascades: Self::pick_cascades(attr),
+                cascade: Cell::new(None),
+            },
+        };
+        let mut ret = vec![(a, a_b_meta)];
+        ret.extend(a_id_vec);
+        ret.extend(b_id_vec);
         ret
     }
 }

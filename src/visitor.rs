@@ -32,12 +32,24 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         .iter()
         .map(|item| visit_item(item.deref()))
         .unzip();
+    let fields = fields.into_iter().flat_map(|item| item).collect::<Vec<_>>();
     // 根据entity聚合field_vec
     orm_meta.entity_vec = entities.iter().map(|entity| entity.entity_name.to_string()).collect();
     for entity in entities {
         orm_meta.entity_map.insert(entity.entity_name.to_string(), entity);
     }
-    for (entity_name, field_meta) in fields.into_iter().flat_map(|item| item) {
+    // 自动生成ManyToMany的中间表
+    for &(ref entity, _) in fields.iter(){
+        if orm_meta.entity_map.contains_key(entity){
+            continue;
+        }
+        let mut entity_meta = EntityMeta::default();
+        entity_meta.entity_name = entity.to_string();
+        entity_meta.table_name = entity.to_string();
+        orm_meta.entity_vec.push(entity.to_string());
+        orm_meta.entity_map.insert(entity.to_string(), entity_meta);
+    }
+    for (entity_name, field_meta) in fields.into_iter() {
         let mut entity_meta = orm_meta.entity_map.get_mut(&entity_name).unwrap();
         entity_meta.field_vec.push(field_meta.get_field_name());
         entity_meta.field_map.insert(field_meta.get_field_name(), field_meta);

@@ -4,9 +4,6 @@ use mysql::Value;
 
 use mysql::prelude::GenericConnection;
 use meta;
-use std::fmt::Debug;
-use std::ops::Deref;
-use std::ops::DerefMut;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -75,19 +72,19 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
-        self.handle(entity, Cascade::Insert);
+        let ret = self.handle(entity, Cascade::Insert);
         entity.cascade_reset();
-        Ok(())
+        ret
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        self.handle(entity, Cascade::Update);
+        let ret = self.handle(entity, Cascade::Update);
         entity.cascade_reset();
-        Ok(())
+        ret
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<(), Error> {
-        self.handle(&entity, Cascade::Delete);
+        let ret = self.handle(&entity, Cascade::Delete);
         entity.cascade_reset();
-        Ok(())
+        ret
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
         let mut inner = EntityInner::default(E::meta());
@@ -95,10 +92,10 @@ impl DB {
         try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
         Ok(E::new(Rc::new(RefCell::new(inner))))
     }
-    pub fn handle<E: Entity>(&self, entity: &E, op: Cascade) {
+    pub fn handle<E: Entity>(&self, entity: &E, op: Cascade)->Result<(), Error> {
         let mut conn = self.pool.get_conn();
         let mut session = Session::new(conn.as_mut().unwrap());
-        session.handle(entity.inner().clone(), op.clone());
+        session.handle(entity.inner().clone(), op.clone())
     }
 }
 
@@ -143,6 +140,10 @@ impl<'a, C> Session<'a, C>
                 a_rc.borrow_mut().set_one_many(field, vec.clone());
             }
             try!(self.each_handle_refer_vec(a_rc.clone(), one_many_fields, op.clone()));
+        }
+        {
+            // many many
+
         }
         {
             // cache
