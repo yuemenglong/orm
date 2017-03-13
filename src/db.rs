@@ -87,7 +87,7 @@ impl DB {
         ret
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
-        let mut inner = EntityInner::default(E::meta());
+        let mut inner = EntityInner::default(E::meta(), E::orm_meta());
         inner.field_map.insert("id".to_string(), Value::from(id));
         try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
         Ok(E::new(Rc::new(RefCell::new(inner))))

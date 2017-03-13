@@ -22,6 +22,7 @@ pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
 #[derive(Clone)]
 pub struct EntityInner {
+    pub orm_meta: &'static OrmMeta,
     pub meta: &'static EntityMeta,
     pub field_map: HashMap<String, Value>,
     pub pointer_map: HashMap<String, Option<EntityInnerPointer>>,
@@ -34,8 +35,9 @@ pub struct EntityInner {
 }
 
 impl EntityInner {
-    pub fn new(meta: &'static EntityMeta) -> EntityInner {
+    pub fn new(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
         EntityInner {
+            orm_meta: orm_meta,
             meta: meta,
             field_map: HashMap::new(),
             pointer_map: HashMap::new(),
@@ -46,7 +48,7 @@ impl EntityInner {
             cache: Vec::new(),
         }
     }
-    pub fn default(meta: &'static EntityMeta) -> EntityInner {
+    pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
         let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
             .into_iter()
             .map(|meta| (meta.get_field_name(), Value::NULL))
@@ -69,6 +71,7 @@ impl EntityInner {
                 .map(|meta| (meta.get_field_name(), Vec::new()))
                 .collect();
         EntityInner {
+            orm_meta: orm_meta,
             meta: meta,
             field_map: field_map,
             pointer_map: pointer_map,
