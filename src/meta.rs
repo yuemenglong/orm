@@ -262,6 +262,12 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
+    pub fn get_many_many_middle_name(&self) -> String {
+        match self.ty {
+            TypeMeta::ManyToMany { ref middle, .. } => middle.to_string(),
+            _ => unreachable!(),
+        }
+    }
 
     pub fn has_cascade_insert(&self) -> bool {
         for cascade in self.get_refer_cascades() {

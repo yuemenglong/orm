@@ -44,6 +44,12 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
             continue;
         }
         let mut entity_meta = EntityMeta::default();
+        let id_pairs = FieldMeta::new_pkey(&entity);
+        entity_meta.field_vec.push("id".to_string());
+        for (_, id_field_meta) in id_pairs{
+            entity_meta.field_map.insert("id".to_string(), id_field_meta);
+        }
+
         entity_meta.entity_name = entity.to_string();
         entity_meta.table_name = entity.to_string();
         orm_meta.entity_vec.push(entity.to_string());

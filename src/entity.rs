@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -49,10 +50,11 @@ impl EntityInner {
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
-        let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
-            .into_iter()
-            .map(|meta| (meta.get_field_name(), Value::NULL))
-            .collect();
+        // 用默认值
+        // let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
+        //     .into_iter()
+        //     .map(|meta| (meta.get_field_name(), Value::NULL))
+        //     .collect();
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
             .into_iter()
             .map(|meta| (meta.get_field_name(), None))
@@ -73,7 +75,7 @@ impl EntityInner {
         EntityInner {
             orm_meta: orm_meta,
             meta: meta,
-            field_map: field_map,
+            field_map: HashMap::new(),
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: one_many_map,
@@ -81,6 +83,10 @@ impl EntityInner {
             cascade: None,
             cache: Vec::new(),
         }
+    }
+
+    pub fn get_id_value(&self) -> Value {
+        self.field_map.get("id").map_or(Value::NULL, |id| id.clone())
     }
 
     pub fn set<V>(&mut self, key: &str, value: Option<V>)
@@ -187,7 +193,71 @@ impl EntityInner {
 
     pub fn set_many_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
         let a = self;
+        // 确保中间表信息存在
+        a.get_many_many(key);
+
+        // mid.a_id = a.id
+        // mid.b_id = b.id
         let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let a_id = a.field_map.get("id").map_or(Value::NULL, |id| id.clone());
+        let middle_name = a_b_meta.get_many_many_middle_name();
+        let middle_meta = a.orm_meta.entity_map.get(&middle_name).unwrap();
+        let a_id_field = a_b_meta.get_many_many_id();
+        let b_id_field = a_b_meta.get_many_many_refer_id();
+        let orm_meta = a.orm_meta;
+        let middle_inner_fn = |b_id: Value|{
+                let mut middle_inner = EntityInner::default(middle_meta, orm_meta);
+                middle_inner.field_map.insert(a_id_field.to_string(), a_id.clone());
+                middle_inner.field_map.insert(b_id_field.to_string(), b_id.clone());
+                Rc::new(RefCell::new(middle_inner))
+        };
+
+        let new_b_id_set = value.iter()
+            .filter_map(|b_rc| {
+                let b = b_rc.borrow();
+                b.field_map.get("id").map(|b_id| value::from_value::<u64>(b_id.clone()))
+            })
+            .collect::<HashSet<u64>>();
+
+        // temp insert
+        let old_b_vec = a.many_many_map.insert(key.to_string(), Vec::new()).unwrap();
+        let old_b_id_map = old_b_vec.iter()
+            .filter_map(|&(ref m_rc, ref b_rc)| {
+                let b = b_rc.borrow();
+                b.field_map.get("id").map(|b_id| {
+                    let b_id = value::from_value::<u64>(b_id.clone());
+                    (b_id, m_rc.clone())
+                })
+            })
+            .collect::<HashMap<u64, EntityInnerPointer>>();
+        let new_b_vec = value.into_iter().map(|b_rc|{
+            let b = b_rc.borrow();
+            //1. 没有id或id为NULL，生成的中间表也没id
+            //2. 有id，但是不在老中间表中，按照新b_id
+            //3. 有id，在老中间表里，直接用
+            let m_rc = match b.field_map.get("id").map_or(Value::NULL, |id|id.clone()){
+                Value::NULL=>middle_inner_fn(Value::NULL),
+                b_id_value @ _ =>{
+                    let b_id = value::from_value::<u64>(b_id_value.clone());
+                    old_b_id_map.get(&b_id).map_or(middle_inner_fn(b_id_value),|m_rc| m_rc.clone())
+                }
+            };
+        });
+        for (middle, b_rc) in old_b_vec.into_iter() {
+            // 不在新value里的删除，在新value里的留下
+            let b = b_rc.borrow();
+            let b_id = b.field_map.get("id");
+            if b_id.is_none() {
+                continue;
+            }
+            let b_id = value::from_value::<u64>(b_id.unwrap().clone());
+            if new_b_id_set.contains(&b_id) {
+                continue;
+            }
+            middle.borrow_mut().cascade_delete();
+            a.cache.push((key.to_string(), middle));
+            a.cache.push((key.to_string(), b_rc.clone()));
+        }
     }
     pub fn get_many_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
         Vec::new()

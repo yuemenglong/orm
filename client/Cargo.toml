@@ -8,6 +8,7 @@ build = "build.rs"
 path = ".."
 
 [dependencies]
+mysql = "*"
 
 [dependencies.ast]
 path = ".."
