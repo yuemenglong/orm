@@ -479,10 +479,20 @@ impl EntityInner {
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let many_many_map = self.many_many_map
+            .iter()
+            .map(|(ref key, ref vec_pair)| {
+                println!("{:?}", vec_pair);
+                let vec = vec_pair.iter().map(|&(_, ref b_rc)| b_rc.clone()).collect::<Vec<_>>();
+                (key.to_string(), vec)
+                // (key.to_string(), vec.iter().map(&|(_, ref b_rc)| b_rc.clone()).collect::<Vec<_>>())
+            })
+            .collect::<HashMap<_, _>>();
         let inner = vec![Self::fmt_map_value(&self.field_map),
                          Self::fmt_map_opt(&self.pointer_map),
                          Self::fmt_map_opt(&self.one_one_map),
-                         Self::fmt_map_vec(&self.one_many_map)]
+                         Self::fmt_map_vec(&self.one_many_map),
+                         Self::fmt_map_vec(&many_many_map)]
             .into_iter()
             .filter(|s| s.len() > 0)
             .collect::<Vec<_>>()
