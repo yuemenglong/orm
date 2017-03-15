@@ -17,13 +17,14 @@ use entity::*;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    println!("{:?}", mysql::from_value::<u64>(Value::NULL));
     let db = ast::open("root", "root", "172.16.16.241", 3306, "test").unwrap();
     // select(Person::meta());
     // refer_test(&db);
     let mut p = Person::default();
     let inner = p.inner();
-    inner.borrow_mut().set_many_many("teachers", Vec::new());
+    let mut t1 = Teacher::default();
+    inner.borrow_mut().set_many_many("teachers", vec![t1.inner()]);
+    println!("{:?}", p);
 }
 
 fn refer_test(db: &ast::DB) {
