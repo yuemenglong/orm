@@ -252,7 +252,7 @@ impl FieldMeta {
     }
     pub fn get_many_many_id(&self) -> String {
         match self.ty {
-            TypeMeta::ManyToMany { ref refer_id, .. } => refer_id.to_string(),
+            TypeMeta::ManyToMany { ref id, .. } => id.to_string(),
             _ => unreachable!(),
         }
     }

@@ -55,6 +55,7 @@ impl EntityInner {
         //     .into_iter()
         //     .map(|meta| (meta.get_field_name(), Value::NULL))
         //     .collect();
+        // 避免lazy load
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
             .into_iter()
             .map(|meta| (meta.get_field_name(), None))
@@ -322,6 +323,12 @@ impl EntityInner {
         }
         for (_, vec) in &self.one_many_map {
             for b_rc in vec {
+                b_rc.borrow_mut().cascade_reset();
+            }
+        }
+        for (_, vec) in &self.many_many_map {
+            for &(ref m_rc, ref b_rc) in vec {
+                m_rc.borrow_mut().cascade_reset();
                 b_rc.borrow_mut().cascade_reset();
             }
         }
@@ -602,6 +609,25 @@ pub trait Entity {
     }
     fn inner_clear_one_many(&self, key: &str) {
         self.do_inner_mut(|inner| inner.set_one_many(key, Vec::new()));
+    }
+
+    fn inner_get_many_many<E>(&self, key: &str) -> Vec<E>
+        where E: Entity
+    {
+        let vec = self.do_inner_mut(|inner| inner.get_many_many(key));
+        vec.into_iter().map(E::new).collect::<Vec<_>>()
+    }
+    fn inner_set_many_many<E>(&self, key: &str, value: Vec<E>)
+        where E: Entity
+    {
+        let vec = value.iter().map(E::inner).collect::<Vec<_>>();
+        self.do_inner_mut(|inner| inner.set_many_many(key, vec));
+    }
+    fn inner_has_many_many(&self, key: &str) -> bool {
+        self.do_inner_mut(|inner| inner.get_many_many(key)).len() > 0
+    }
+    fn inner_clear_many_many(&self, key: &str) {
+        self.do_inner_mut(|inner| inner.set_many_many(key, Vec::new()));
     }
 
     fn set_id(&self, id: u64) {

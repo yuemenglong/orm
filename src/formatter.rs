@@ -103,6 +103,24 @@ static TPL_IMPL_ONE_MANY: &'static str = r#"
         self.inner_clear_one_many("${FIELD}")
     }"#;
 
+static TPL_IMPL_MANY_MANY: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
+        Box::new(self.inner_get_many_many("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
+        self.inner_set_many_many("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_many_many("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_many_many("${FIELD}")
+    }"#;
+
 static TPL_IMPL_CASCADE: &'static str = r#"
     #[allow(dead_code)]
     pub fn cascade_${FIELD}_insert(&self) {
@@ -178,12 +196,16 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
     let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
     let one_many_fields =
         do_spec_fields(meta.get_one_many_fields(), "", &format_entity_impl_one_many);
+    let many_many_fields = do_spec_fields(meta.get_many_many_fields(),
+                                          "",
+                                          &format_entity_impl_many_many);
     let cascade_detail = do_spec_fields(meta.get_refer_fields(), "", &format_entity_impl_cascade);
-    let fields = format!("{}\n{}\n{}\n{}\n{}",
+    let fields = format!("{}\n{}\n{}\n{}\n{}\n{}",
                          normal_fields,
                          pointer_fields,
                          one_one_fields,
                          one_many_fields,
+                         many_many_fields,
                          cascade_detail);
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
@@ -213,6 +235,12 @@ fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
 }
 fn format_entity_impl_one_many(meta: &FieldMeta) -> String {
     TPL_IMPL_ONE_MANY.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_many_many(meta: &FieldMeta) -> String {
+    TPL_IMPL_MANY_MANY.to_string()
         .replace("${FIELD}", &meta.get_field_name())
         .replace("${TYPE}", &meta.get_type_name())
         .replace("${SET_TYPE}", &meta.get_type_name_set())
