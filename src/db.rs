@@ -270,16 +270,55 @@ impl<'a, C> Session<'a, C>
                meta: &'static EntityMeta,
                orm_meta: &'static OrmMeta)
                -> Result<EntityInnerPointer, Error> {
-        Self::do_get(meta, orm_meta, "");
+        let mut tables = Vec::new();
+        let mut fields = Vec::new();
+        Self::do_get(&meta.entity_name,
+                     &meta.table_name,
+                     orm_meta,
+                     &mut tables,
+                     &mut fields);
+        println!("{:?}", tables);
+        println!("{:?}", fields);
+        tables.insert(0, meta.table_name.clone());
+        let fields = fields.into_iter().flat_map(|vec| vec).collect::<Vec<_>>().join(", ");
+        let tables = tables.join(" ");
+        let cond = format!("{}.id = {}", &meta.table_name, id);
+        let sql = format!("SELECT {} FROM {} WHERE {}", fields, tables, cond);
+        println!("{:?}", sql);
         Ok(Rc::new(RefCell::new(EntityInner::default(meta, orm_meta))))
     }
-    fn do_get(meta: &'static EntityMeta, orm_meta: &'static OrmMeta, prefix: &str) {
-        let table_name = &meta.table_name;
-        let fields = Self::get_fields(meta, prefix).join(", ");
-        let sql = format!("SELECT {} FROM {}", fields, table_name);
-        println!("{:?}", sql);
+    fn do_get(entity: &str,
+              table_alias: &str,
+              orm_meta: &'static OrmMeta,
+              mut tables: &mut Vec<String>,
+              mut fields: &mut Vec<Vec<String>>) {
+        let meta = orm_meta.entity_map.get(entity).unwrap();
+        let self_fields = Self::get_fields(meta, table_alias);
+        fields.push(self_fields);
+        for field_meta in meta.get_pointer_fields().into_iter() {
+            let refer_field_name = field_meta.get_field_name();
+            let refer_entity_name = field_meta.get_refer_entity();
+            let refer_entity_meta = orm_meta.entity_map.get(&refer_entity_name).unwrap();
+            let refer_table_name = &refer_entity_meta.table_name;
+            let refer_id_field = field_meta.get_pointer_id();
+            let refer_id_meta = meta.field_map.get(&refer_id_field).unwrap();
+            let refer_id_column = refer_id_meta.get_column_name();
+            let refer_table_alias = format!("{}_{}", &table_alias, &refer_field_name);
+            let join_table = format!("LEFT JOIN {} AS {} ON {}.{} = {}.id",
+                                     &refer_table_name,
+                                     &refer_table_alias,
+                                     &table_alias,
+                                     &refer_id_column,
+                                     &refer_table_alias);
+            tables.push(join_table);
+            Self::do_get(&refer_entity_name,
+                   &refer_table_alias,
+                   orm_meta,
+                   &mut tables,
+                   &mut fields);
+        }
     }
-    fn get_fields(meta: &'static EntityMeta, prefix: &str) -> Vec<String> {
+    fn get_fields(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
         let table_name = &meta.table_name;
         let entity_name = &meta.entity_name;
         meta.get_non_refer_fields()
@@ -287,11 +326,10 @@ impl<'a, C> Session<'a, C>
             .map(|field_meta| {
                 let column_name = field_meta.get_column_name();
                 let field_name = field_meta.get_field_name();
-                format!("{}.{} as {}{}${}",
-                        &table_name,
+                format!("{}.{} as {}${}",
+                        &table_alias,
                         &column_name,
-                        prefix,
-                        &entity_name,
+                        &table_alias,
                         &field_name)
             })
             .collect()
