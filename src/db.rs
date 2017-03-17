@@ -72,17 +72,17 @@ impl DB {
         }
     }
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
-        let ret = self.handle(entity, Cascade::Insert);
+        let ret = self.execute(entity, Cascade::Insert);
         entity.cascade_reset();
         ret
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let ret = self.handle(entity, Cascade::Update);
+        let ret = self.execute(entity, Cascade::Update);
         entity.cascade_reset();
         ret
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<(), Error> {
-        let ret = self.handle(&entity, Cascade::Delete);
+        let ret = self.execute(&entity, Cascade::Delete);
         entity.cascade_reset();
         ret
     }
@@ -92,10 +92,10 @@ impl DB {
         try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
         Ok(E::new(Rc::new(RefCell::new(inner))))
     }
-    pub fn handle<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
+    pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
         let mut session = Session::new(conn.as_mut().unwrap());
-        session.handle(entity.inner().clone(), op.clone())
+        session.execute(entity.inner().clone(), op.clone())
     }
 }
 
@@ -111,21 +111,21 @@ impl<'a, C> Session<'a, C>
     pub fn new(conn: &'a mut C) -> Session<'a, C> {
         Session { conn: conn }
     }
-    pub fn handle(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+    pub fn execute(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         if op == Cascade::NULL {
             return Ok(());
         }
         {
             // pointer
             let pointer_fields = Self::map_to_vec(&a_rc.borrow().pointer_map);
-            try!(self.each_handle_refer(a_rc.clone(), &pointer_fields, op.clone()));
+            try!(self.each_execute_refer(a_rc.clone(), &pointer_fields, op.clone()));
             for (field, b_rc) in pointer_fields {
                 a_rc.borrow_mut().set_pointer(&field, Some(b_rc));
             }
         }
         {
             // self
-            try!(self.handle_self(a_rc.clone(), op.clone()));
+            try!(self.execute_self(a_rc.clone(), op.clone()));
         }
         {
             // one one
@@ -133,7 +133,7 @@ impl<'a, C> Session<'a, C>
             for &(ref field, ref b_rc) in one_one_fields.iter() {
                 a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
             }
-            try!(self.each_handle_refer(a_rc.clone(), &one_one_fields, op.clone()));
+            try!(self.each_execute_refer(a_rc.clone(), &one_one_fields, op.clone()));
         }
         {
             // one many
@@ -142,7 +142,7 @@ impl<'a, C> Session<'a, C>
             for &(ref field, ref vec) in one_many_fields.iter() {
                 a_rc.borrow_mut().set_one_many(field, vec.clone());
             }
-            try!(self.each_handle_refer_vec(a_rc.clone(), &one_many_fields, op.clone()));
+            try!(self.each_execute_refer_vec(a_rc.clone(), &one_many_fields, op.clone()));
         }
         {
             // many many
@@ -156,7 +156,7 @@ impl<'a, C> Session<'a, C>
                     (field, b_vec)
                 })
                 .collect::<Vec<_>>();
-            try!(self.each_handle_refer_vec(a_rc.clone(), &many_many_fields, op.clone()));
+            try!(self.each_execute_refer_vec(a_rc.clone(), &many_many_fields, op.clone()));
             for (ref field, ref b_vec) in many_many_fields {
                 a_rc.borrow_mut().set_many_many(field, b_vec.clone());
             }
@@ -170,16 +170,16 @@ impl<'a, C> Session<'a, C>
                     (field, m_vec)
                 })
                 .collect::<Vec<_>>();
-            try!(self.each_handle_refer_vec(a_rc.clone(), &middle_fields, op.clone()));
+            try!(self.each_execute_refer_vec(a_rc.clone(), &middle_fields, op.clone()));
         }
         {
             // cache
             let cache = mem::replace(&mut a_rc.borrow_mut().cache, Vec::new());
-            try!(self.each_handle_refer(a_rc.clone(), &cache, op.clone()));
+            try!(self.each_execute_refer(a_rc.clone(), &cache, op.clone()));
         }
         Ok(())
     }
-    fn handle_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+    fn execute_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         match op {
             Cascade::Insert => a_rc.borrow_mut().do_insert(self.conn),
             Cascade::Update => a_rc.borrow_mut().do_update(self.conn),
@@ -195,17 +195,17 @@ impl<'a, C> Session<'a, C>
             .map(Option::unwrap)
             .collect::<Vec<_>>()
     }
-    fn each_handle_refer(&mut self,
+    fn each_execute_refer(&mut self,
                          a_rc: EntityInnerPointer,
                          vec: &Vec<(String, EntityInnerPointer)>,
                          op: Cascade)
                          -> Result<(), Error> {
         for &(ref field, ref b_rc) in vec.iter() {
-            try!(self.handle_refer(a_rc.clone(), b_rc.clone(), field, op.clone()));
+            try!(self.execute_refer(a_rc.clone(), b_rc.clone(), field, op.clone()));
         }
         Ok(())
     }
-    fn each_handle_refer_vec(&mut self,
+    fn each_execute_refer_vec(&mut self,
                              a_rc: EntityInnerPointer,
                              vecs: &Vec<(String, Vec<EntityInnerPointer>)>,
                              op: Cascade)
@@ -213,11 +213,11 @@ impl<'a, C> Session<'a, C>
         for &(ref field, ref vec) in vecs.iter() {
             let pairs =
                 vec.iter().map(|b_rc| (field.to_string(), b_rc.clone())).collect::<Vec<_>>();
-            try!(self.each_handle_refer(a_rc.clone(), &pairs, op.clone()));
+            try!(self.each_execute_refer(a_rc.clone(), &pairs, op.clone()));
         }
         Ok(())
     }
-    fn handle_refer(&mut self,
+    fn execute_refer(&mut self,
                     a_rc: EntityInnerPointer,
                     b_rc: EntityInnerPointer,
                     field: &str,
@@ -225,7 +225,7 @@ impl<'a, C> Session<'a, C>
                     -> Result<(), Error> {
         let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op);
         Self::take_cascade(b_rc.clone());
-        self.handle(b_rc, cascade)
+        self.execute(b_rc, cascade)
     }
     fn take_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
         mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
