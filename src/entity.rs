@@ -117,7 +117,7 @@ impl EntityInner {
         let a_b_id_field = a_b_meta.get_pointer_id();
         let b_id = match value {
             None => Value::NULL,
-            Some(ref rc) => rc.borrow().field_map.get("id").unwrap().clone(),
+            Some(ref rc) => rc.borrow().get_id_value(),
         };
         a.field_map.insert(a_b_id_field, b_id);
         // a.b = b;
@@ -150,7 +150,7 @@ impl EntityInner {
             a.cache.push((key.to_string(), old_b));
         }
         // b.a_id = a.id;
-        let a_id = a.field_map.get("id").unwrap();
+        let a_id = a.get_id_value();
         if value.is_some() {
             let b = value.as_ref().unwrap().clone();
             b.borrow_mut().field_map.insert(b_a_id_field, a_id.clone());
@@ -180,7 +180,7 @@ impl EntityInner {
             a.cache.push((key.to_string(), b));
         }
         // b.a_id = a.id;
-        let a_id = a.field_map.get("id").unwrap();
+        let a_id = a.get_id_value();
         for b in value.iter() {
             b.borrow_mut().field_map.insert(b_a_id_field.to_string(), a_id.clone());
         }
@@ -397,7 +397,7 @@ impl EntityInner {
     {
         let sql = self.meta.sql_update();
         let mut params = self.get_params();
-        let id = self.field_map.get("id").unwrap().clone();
+        let id = self.get_id_value();
         params.insert(0, ("id".to_string(), id));
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
@@ -406,7 +406,7 @@ impl EntityInner {
         where C: GenericConnection
     {
         let sql = self.meta.sql_get();
-        let id = self.field_map.get("id").unwrap().clone();
+        let id = self.get_id_value();
         let params = vec![("id".to_string(), id.clone())];
         println!("{}, {:?}", sql, params);
         let res = conn.prep_exec(sql, params);
@@ -435,7 +435,7 @@ impl EntityInner {
         where C: GenericConnection
     {
         let sql = self.meta.sql_delete();
-        let id = self.field_map.get("id").unwrap().clone();
+        let id = self.get_id_value();
         let params = vec![("id".to_string(), id)];
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())

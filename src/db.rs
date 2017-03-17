@@ -13,6 +13,8 @@ use std::mem;
 use entity::Entity;
 use entity::EntityInner;
 use entity::EntityInnerPointer;
+use meta::OrmMeta;
+use meta::EntityMeta;
 use meta::FieldMeta;
 use meta::Cascade;
 
@@ -87,10 +89,14 @@ impl DB {
         ret
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
-        let mut inner = EntityInner::default(E::meta(), E::orm_meta());
-        inner.field_map.insert("id".to_string(), Value::from(id));
-        try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
-        Ok(E::new(Rc::new(RefCell::new(inner))))
+        // let mut inner = EntityInner::default(E::meta(), E::orm_meta());
+        // inner.field_map.insert("id".to_string(), Value::from(id));
+        // try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
+        // Ok(E::new(Rc::new(RefCell::new(inner))))
+
+        let mut conn = self.pool.get_conn();
+        let mut session = Session::new(conn.as_mut().unwrap());
+        session.get(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
@@ -196,20 +202,20 @@ impl<'a, C> Session<'a, C>
             .collect::<Vec<_>>()
     }
     fn each_execute_refer(&mut self,
-                         a_rc: EntityInnerPointer,
-                         vec: &Vec<(String, EntityInnerPointer)>,
-                         op: Cascade)
-                         -> Result<(), Error> {
+                          a_rc: EntityInnerPointer,
+                          vec: &Vec<(String, EntityInnerPointer)>,
+                          op: Cascade)
+                          -> Result<(), Error> {
         for &(ref field, ref b_rc) in vec.iter() {
             try!(self.execute_refer(a_rc.clone(), b_rc.clone(), field, op.clone()));
         }
         Ok(())
     }
     fn each_execute_refer_vec(&mut self,
-                             a_rc: EntityInnerPointer,
-                             vecs: &Vec<(String, Vec<EntityInnerPointer>)>,
-                             op: Cascade)
-                             -> Result<(), Error> {
+                              a_rc: EntityInnerPointer,
+                              vecs: &Vec<(String, Vec<EntityInnerPointer>)>,
+                              op: Cascade)
+                              -> Result<(), Error> {
         for &(ref field, ref vec) in vecs.iter() {
             let pairs =
                 vec.iter().map(|b_rc| (field.to_string(), b_rc.clone())).collect::<Vec<_>>();
@@ -218,11 +224,11 @@ impl<'a, C> Session<'a, C>
         Ok(())
     }
     fn execute_refer(&mut self,
-                    a_rc: EntityInnerPointer,
-                    b_rc: EntityInnerPointer,
-                    field: &str,
-                    op: Cascade)
-                    -> Result<(), Error> {
+                     a_rc: EntityInnerPointer,
+                     b_rc: EntityInnerPointer,
+                     field: &str,
+                     op: Cascade)
+                     -> Result<(), Error> {
         let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op);
         Self::take_cascade(b_rc.clone());
         self.execute(b_rc, cascade)
@@ -256,9 +262,38 @@ impl<'a, C> Session<'a, C>
     }
 }
 
-fn do_get<C>(inner: &mut EntityInner, conn: &mut C) -> Result<(), Error>
-    where C: GenericConnection
+impl<'a, C> Session<'a, C>
+    where C: GenericConnection + 'a
 {
-    try!(inner.do_get(conn));
-    Ok(())
+    pub fn get(&self,
+               id: u64,
+               meta: &'static EntityMeta,
+               orm_meta: &'static OrmMeta)
+               -> Result<EntityInnerPointer, Error> {
+        Self::do_get(meta, orm_meta, "");
+        Ok(Rc::new(RefCell::new(EntityInner::default(meta, orm_meta))))
+    }
+    fn do_get(meta: &'static EntityMeta, orm_meta: &'static OrmMeta, prefix: &str) {
+        let table_name = &meta.table_name;
+        let fields = Self::get_fields(meta, prefix).join(", ");
+        let sql = format!("SELECT {} FROM {}", fields, table_name);
+        println!("{:?}", sql);
+    }
+    fn get_fields(meta: &'static EntityMeta, prefix: &str) -> Vec<String> {
+        let table_name = &meta.table_name;
+        let entity_name = &meta.entity_name;
+        meta.get_non_refer_fields()
+            .iter()
+            .map(|field_meta| {
+                let column_name = field_meta.get_column_name();
+                let field_name = field_meta.get_field_name();
+                format!("{}.{} as {}{}${}",
+                        &table_name,
+                        &column_name,
+                        prefix,
+                        &entity_name,
+                        &field_name)
+            })
+            .collect()
+    }
 }

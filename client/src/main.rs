@@ -18,13 +18,8 @@ use entity::*;
 // flush privileges;
 fn main() {
     let db = ast::open("root", "root", "172.16.16.236", 3306, "test").unwrap();
-    // select(Person::meta());
-    // refer_test(&db);
-    let mut p = Person::default();
-    let inner = p.inner();
-    let mut t1 = Teacher::default();
-    inner.borrow_mut().set_many_many("teachers", vec![t1.inner()]);
-    println!("{:?}", p);
+    refer_test(&db);
+    db.get::<Person>(1).unwrap();
 }
 
 fn refer_test(db: &ast::DB) {
@@ -48,36 +43,36 @@ fn refer_test(db: &ast::DB) {
     db.update(&person).unwrap();
     person.debug();
 
-    let mut account = Account::default();
-    account.set_no("123456");
-    account.cascade_insert();
-    person.set_account(&account);
-    person.clear_addr();
-    db.update(&person).unwrap();
+    // let mut account = Account::default();
+    // account.set_no("123456");
+    // account.cascade_insert();
+    // person.set_account(&account);
+    // person.clear_addr();
+    // db.update(&person).unwrap();
 
-    let mut child1 = Child::default();
-    child1.set_name("xuan");
-    child1.cascade_insert();
-    let mut child2 = Child::default();
-    child2.set_name("yuan");
-    child2.cascade_insert();
-    person.set_children(vec![child1, child2]);
-    db.update(&person).unwrap();
+    // let mut child1 = Child::default();
+    // child1.set_name("xuan");
+    // child1.cascade_insert();
+    // let mut child2 = Child::default();
+    // child2.set_name("yuan");
+    // child2.cascade_insert();
+    // person.set_children(vec![child1, child2]);
+    // db.update(&person).unwrap();
 
-    person.set_children(vec![]);
-    person.get_account().cascade_null();
-    person.cascade_addr_null();
-    db.update(&person).unwrap();
+    // person.set_children(vec![]);
+    // person.get_account().cascade_null();
+    // person.cascade_addr_null();
+    // db.update(&person).unwrap();
 
-    person.set_addr2(&Address::default());
-    person.get_addr2().set_road("1");
-    person.cascade_addr_null();
-    person.cascade_account_null();
-    person.cascade_children_null();
-    db.update(&person).unwrap();
+    // person.set_addr2(&Address::default());
+    // person.get_addr2().set_road("1");
+    // person.cascade_addr_null();
+    // person.cascade_account_null();
+    // person.cascade_children_null();
+    // db.update(&person).unwrap();
 
-    person.debug();
-    db.delete(person).unwrap();
+    // person.debug();
+    // db.delete(person).unwrap();
 
     // person.clear_account();
     // person.debug();
