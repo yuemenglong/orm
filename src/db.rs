@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
+use std::ops::DerefMut;
 
 // use cond::Cond;
 use entity::Entity;
@@ -95,29 +96,29 @@ impl DB {
         // Ok(E::new(Rc::new(RefCell::new(inner))))
 
         let mut conn = self.pool.get_conn();
-        let mut session = Session::new(conn.unwrap());
+        let session = Session::new(conn.unwrap());
         session.get(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
-        let mut session = Session::new(conn.unwrap());
+        let session = Session::new(conn.unwrap());
         session.execute(entity.inner().clone(), op.clone())
     }
 }
 
-pub struct Session<'a, C>
-    where C: GenericConnection + 'a
+pub struct Session<C>
+    where C: GenericConnection
 {
     conn: RefCell<C>,
 }
 
-impl<'a, C> Session<'a, C>
-    where C: GenericConnection + 'a
+impl<C> Session<C>
+    where C: GenericConnection
 {
-    pub fn new(conn: C) -> Session<'a, C> {
+    pub fn new(conn: C) -> Session<C> {
         Session { conn: RefCell::new(conn) }
     }
-    pub fn execute(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+    pub fn execute(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         if op == Cascade::NULL {
             return Ok(());
         }
@@ -185,11 +186,11 @@ impl<'a, C> Session<'a, C>
         }
         Ok(())
     }
-    fn execute_self(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+    fn execute_self(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         match op {
-            Cascade::Insert => a_rc.borrow_mut().do_insert(self.conn),
-            Cascade::Update => a_rc.borrow_mut().do_update(self.conn),
-            Cascade::Delete => a_rc.borrow_mut().do_delete(self.conn),
+            Cascade::Insert => a_rc.borrow_mut().do_insert(self.conn.borrow_mut().deref_mut()),
+            Cascade::Update => a_rc.borrow_mut().do_update(self.conn.borrow_mut().deref_mut()),
+            Cascade::Delete => a_rc.borrow_mut().do_delete(self.conn.borrow_mut().deref_mut()),
             Cascade::NULL => Ok(()),
         }
     }
@@ -201,7 +202,7 @@ impl<'a, C> Session<'a, C>
             .map(Option::unwrap)
             .collect::<Vec<_>>()
     }
-    fn each_execute_refer(&mut self,
+    fn each_execute_refer(&self,
                           a_rc: EntityInnerPointer,
                           vec: &Vec<(String, EntityInnerPointer)>,
                           op: Cascade)
@@ -211,7 +212,7 @@ impl<'a, C> Session<'a, C>
         }
         Ok(())
     }
-    fn each_execute_refer_vec(&mut self,
+    fn each_execute_refer_vec(&self,
                               a_rc: EntityInnerPointer,
                               vecs: &Vec<(String, Vec<EntityInnerPointer>)>,
                               op: Cascade)
@@ -223,7 +224,7 @@ impl<'a, C> Session<'a, C>
         }
         Ok(())
     }
-    fn execute_refer(&mut self,
+    fn execute_refer(&self,
                      a_rc: EntityInnerPointer,
                      b_rc: EntityInnerPointer,
                      field: &str,
@@ -262,8 +263,8 @@ impl<'a, C> Session<'a, C>
     }
 }
 
-impl<'a, C> Session<'a, C>
-    where C: GenericConnection + 'a
+impl<C> Session<C>
+    where C: GenericConnection
 {
     pub fn get(&self,
                id: u64,
@@ -273,25 +274,27 @@ impl<'a, C> Session<'a, C>
         let mut tables = Vec::new();
         let mut fields = Vec::new();
         Self::recursive_sql(&meta.entity_name,
-                     &meta.table_name,
-                     orm_meta,
-                     &mut tables,
-                     &mut fields);
+                            &meta.table_name,
+                            orm_meta,
+                            &mut tables,
+                            &mut fields);
         tables.insert(0, meta.table_name.clone());
-        let fields = fields.into_iter().map(|vec| vec.join(",\n")).collect::<Vec<_>>().join(",\n\n");
+        let fields =
+            fields.into_iter().map(|vec| vec.join(",\n")).collect::<Vec<_>>().join(",\n\n");
         let tables = tables.join("\n");
         let cond = format!("{}.id = {}", &meta.table_name, id);
         let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n{}", fields, tables, cond);
         println!("{}", sql);
-        let res = self.conn.query(sql).unwrap();
+        let mut conn = self.conn.borrow_mut();
+        let res = conn.query(sql).unwrap();
         println!("{:?}", res);
         Ok(Rc::new(RefCell::new(EntityInner::default(meta, orm_meta))))
     }
     fn recursive_sql(entity: &str,
-              table_alias: &str,
-              orm_meta: &'static OrmMeta,
-              mut tables: &mut Vec<String>,
-              mut fields: &mut Vec<Vec<String>>) {
+                     table_alias: &str,
+                     orm_meta: &'static OrmMeta,
+                     mut tables: &mut Vec<String>,
+                     mut fields: &mut Vec<Vec<String>>) {
         let meta = orm_meta.entity_map.get(entity).unwrap();
         let self_fields = Self::get_fields(meta, table_alias);
         fields.push(self_fields);
@@ -312,10 +315,10 @@ impl<'a, C> Session<'a, C>
                                      &refer_table_alias);
             tables.push(join_table);
             Self::recursive_sql(&refer_entity_name,
-                   &refer_table_alias,
-                   orm_meta,
-                   &mut tables,
-                   &mut fields);
+                                &refer_table_alias,
+                                orm_meta,
+                                &mut tables,
+                                &mut fields);
         }
     }
     fn get_fields(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
