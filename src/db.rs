@@ -110,6 +110,7 @@ pub struct Session<C>
     conn: RefCell<C>,
 }
 
+// insert update delete
 impl<C> Session<C>
     where C: GenericConnection
 {
@@ -261,6 +262,7 @@ impl<C> Session<C>
     }
 }
 
+// select
 impl<C> Session<C>
     where C: GenericConnection
 {
@@ -291,18 +293,40 @@ impl<C> Session<C>
         let query_result = try!(conn.query(sql));
 
         // let mut a = EntityInner::new(meta, orm_meta);
-        let mut vec = Vec::new();
+        // let mut vec = Vec::new();
+
+        let mut select_result = SelectResult::default();
+        let pick_id =
+            |id: u64| select_result.vec.iter().filter(|res| res.id == id).collect::<Vec<_>>();
         for row_result in query_result {
             let mut row = try!(row_result);
-            vec.push(Self::take_entity(&mut row, &table_alias, meta, orm_meta));
+            // vec.push(Self::take_entity(&mut row, &table_alias, meta, orm_meta));
+            let b = Self::take_entity(&mut row, &table_alias, meta, orm_meta);
+            match b.borrow().get_id_u64() {
+                None => continue,
+                Some(id) => {match pick_id(id){
+                    
+                }}
+            }
         }
-        Ok(vec[0].clone())
+        // Ok(vec[0].clone())
+        Ok(Rc::new(RefCell::new(EntityInner::new(meta, orm_meta))))
     }
     fn take_entity(mut row: &mut Row,
                    table_alias: &str,
                    meta: &'static EntityMeta,
-                   orm_meta: &'static OrmMeta)
-                   -> EntityInnerPointer {
+                   orm_meta: &'static OrmMeta) {
+        let mut a = EntityInner::new(meta, orm_meta);
+        a.set_values(&mut row, &table_alias);
+        Rc::new(RefCell::new(a));
+    }
+    fn take_entity_pointer(mut row: &mut Row,
+                           table_alias: &str,
+                           meta: &'static EntityMeta,
+                           orm_meta: &'static OrmMeta,
+                           mut select_result: &mut SelectResult)
+                           -> EntityInnerPointer {
+        // select_result 表示上级结果
         let mut a = EntityInner::new(meta, orm_meta);
         a.set_values(&mut row, &table_alias);
         for a_b_meta in meta.get_pointer_fields() {
@@ -310,7 +334,11 @@ impl<C> Session<C>
             let b_field = a_b_meta.get_field_name();
             let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
             let b_table_alias = format!("{}_{}", table_alias, b_field);
-            let b = Self::take_entity(&mut row, &b_table_alias, &b_meta, &orm_meta);
+            let b = Self::take_entity(&mut row,
+                                      &b_table_alias,
+                                      &b_meta,
+                                      &orm_meta,
+                                      &mut select_result);
             if b.borrow().get_id_value() != Value::NULL {
                 a.set_pointer(&b_field, Some(b));
             } else {
@@ -325,32 +353,71 @@ impl<C> Session<C>
                mut tables: &mut Vec<String>,
                mut fields: &mut Vec<Vec<String>>) {
         let meta = orm_meta.entity_map.get(entity).unwrap();
-        let self_fields = Self::get_fields(meta, table_alias);
+        let self_fields = Self::get_columns(meta, table_alias);
         fields.push(self_fields);
-        for field_meta in meta.get_pointer_fields().into_iter() {
-            let refer_field_name = field_meta.get_field_name();
-            let refer_entity_name = field_meta.get_refer_entity();
-            let refer_entity_meta = orm_meta.entity_map.get(&refer_entity_name).unwrap();
-            let refer_table_name = &refer_entity_meta.table_name;
-            let refer_id_field = field_meta.get_pointer_id();
-            let refer_id_meta = meta.field_map.get(&refer_id_field).unwrap();
-            let refer_id_column = refer_id_meta.get_column_name();
-            let refer_table_alias = format!("{}_{}", &table_alias, &refer_field_name);
+
+        Self::gen_sql_pointer(table_alias, meta, orm_meta, tables, fields);
+        Self::gen_sql_one_many(table_alias, meta, orm_meta, tables, fields);
+    }
+    fn gen_sql_pointer(table_alias: &str,
+                       meta: &'static EntityMeta,
+                       orm_meta: &'static OrmMeta,
+                       mut tables: &mut Vec<String>,
+                       mut fields: &mut Vec<Vec<String>>) {
+        for a_b_meta in meta.get_pointer_fields().into_iter() {
+            // a join b on a.b_id = b.id
+            let a_b_field = a_b_meta.get_field_name();
+            let b_entity = a_b_meta.get_refer_entity();
+            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_name = &b_meta.table_name;
+            let a_b_id_field = a_b_meta.get_pointer_id();
+            let a_b_id_meta = meta.field_map.get(&a_b_id_field).unwrap();
+            let a_b_id_column = a_b_id_meta.get_column_name();
+            let b_table_alias = format!("{}_{}", &table_alias, &a_b_field);
             let join_table = format!("LEFT JOIN {} AS {} ON {}.{} = {}.id",
-                                     &refer_table_name,
-                                     &refer_table_alias,
+                                     &b_table_name,
+                                     &b_table_alias,
                                      &table_alias,
-                                     &refer_id_column,
-                                     &refer_table_alias);
+                                     &a_b_id_column,
+                                     &b_table_alias);
             tables.push(join_table);
-            Self::gen_sql(&refer_entity_name,
-                          &refer_table_alias,
+            Self::gen_sql(&b_entity,
+                          &b_table_alias,
                           orm_meta,
                           &mut tables,
                           &mut fields);
         }
     }
-    fn get_fields(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
+    fn gen_sql_one_many(table_alias: &str,
+                        meta: &'static EntityMeta,
+                        orm_meta: &'static OrmMeta,
+                        mut tables: &mut Vec<String>,
+                        mut fields: &mut Vec<Vec<String>>) {
+        for a_b_meta in meta.get_one_many_fields().into_iter() {
+            // a join b on a.id = b.a_id
+            let a_b_field = a_b_meta.get_field_name();
+            let b_entity = a_b_meta.get_refer_entity();
+            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_name = &b_meta.table_name;
+            let b_a_id_field = a_b_meta.get_one_many_id();
+            let b_a_id_meta = b_meta.field_map.get(&b_a_id_field).unwrap();
+            let b_a_id_column = b_a_id_meta.get_column_name();
+            let b_table_alias = format!("{}_{}", &table_alias, &a_b_field);
+            let join_table = format!("LEFT JOIN {} AS {} ON {}.id = {}.{}",
+                                     &b_table_name,
+                                     &b_table_alias,
+                                     &table_alias,
+                                     &b_table_alias,
+                                     &b_a_id_column);
+            tables.push(join_table);
+            Self::gen_sql(&b_entity,
+                          &b_table_alias,
+                          orm_meta,
+                          &mut tables,
+                          &mut fields);
+        }
+    }
+    fn get_columns(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
         let table_name = &meta.table_name;
         let entity_name = &meta.entity_name;
         meta.get_non_refer_fields()
@@ -366,4 +433,11 @@ impl<C> Session<C>
             })
             .collect()
     }
+}
+
+#[derive(Debug, Default)]
+struct SelectResult {
+    id: u64,
+    entity: Option<EntityInnerPointer>,
+    vec: Vec<SelectResult>,
 }

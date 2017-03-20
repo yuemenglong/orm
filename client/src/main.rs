@@ -28,8 +28,12 @@ fn select_test(db: &ast::DB) {
     p.get_addr().set_road("123");
     p.set_name("Tom");
     p.set_age(100);
+    p.set_children(vec![Child::default(), Child::default()]);
+    p.get_children().get_mut(0).unwrap().set_name("Alice");
+    p.get_children().get_mut(1).unwrap().set_name("Bob");
     db.insert(&p).unwrap();
     let id = p.get_id();
+
     let p: Person = db.get(id).unwrap();
     p.debug();
 }
