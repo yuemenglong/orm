@@ -95,12 +95,12 @@ impl DB {
         // Ok(E::new(Rc::new(RefCell::new(inner))))
 
         let mut conn = self.pool.get_conn();
-        let mut session = Session::new(conn.as_mut().unwrap());
+        let mut session = Session::new(conn.unwrap());
         session.get(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
-        let mut session = Session::new(conn.as_mut().unwrap());
+        let mut session = Session::new(conn.unwrap());
         session.execute(entity.inner().clone(), op.clone())
     }
 }
@@ -108,14 +108,14 @@ impl DB {
 pub struct Session<'a, C>
     where C: GenericConnection + 'a
 {
-    conn: &'a mut C,
+    conn: RefCell<C>,
 }
 
 impl<'a, C> Session<'a, C>
     where C: GenericConnection + 'a
 {
-    pub fn new(conn: &'a mut C) -> Session<'a, C> {
-        Session { conn: conn }
+    pub fn new(conn: C) -> Session<'a, C> {
+        Session { conn: RefCell::new(conn) }
     }
     pub fn execute(&mut self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         if op == Cascade::NULL {
@@ -272,22 +272,22 @@ impl<'a, C> Session<'a, C>
                -> Result<EntityInnerPointer, Error> {
         let mut tables = Vec::new();
         let mut fields = Vec::new();
-        Self::do_get(&meta.entity_name,
+        Self::recursive_sql(&meta.entity_name,
                      &meta.table_name,
                      orm_meta,
                      &mut tables,
                      &mut fields);
-        println!("{:?}", tables);
-        println!("{:?}", fields);
         tables.insert(0, meta.table_name.clone());
-        let fields = fields.into_iter().flat_map(|vec| vec).collect::<Vec<_>>().join(", ");
-        let tables = tables.join(" ");
+        let fields = fields.into_iter().map(|vec| vec.join(",\n")).collect::<Vec<_>>().join(",\n\n");
+        let tables = tables.join("\n");
         let cond = format!("{}.id = {}", &meta.table_name, id);
-        let sql = format!("SELECT {} FROM {} WHERE {}", fields, tables, cond);
-        println!("{:?}", sql);
+        let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n{}", fields, tables, cond);
+        println!("{}", sql);
+        let res = self.conn.query(sql).unwrap();
+        println!("{:?}", res);
         Ok(Rc::new(RefCell::new(EntityInner::default(meta, orm_meta))))
     }
-    fn do_get(entity: &str,
+    fn recursive_sql(entity: &str,
               table_alias: &str,
               orm_meta: &'static OrmMeta,
               mut tables: &mut Vec<String>,
@@ -311,7 +311,7 @@ impl<'a, C> Session<'a, C>
                                      &refer_id_column,
                                      &refer_table_alias);
             tables.push(join_table);
-            Self::do_get(&refer_entity_name,
+            Self::recursive_sql(&refer_entity_name,
                    &refer_table_alias,
                    orm_meta,
                    &mut tables,
