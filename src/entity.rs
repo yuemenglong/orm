@@ -35,6 +35,7 @@ pub struct EntityInner {
     pub cache: Vec<(String, EntityInnerPointer)>,
 }
 
+// 和字段编辑相关
 impl EntityInner {
     pub fn new(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
         EntityInner {
@@ -96,7 +97,7 @@ impl EntityInner {
         })
     }
 
-    pub fn set<V>(&mut self, key: &str, value: Option<V>)
+    pub fn set_value<V>(&mut self, key: &str, value: Option<V>)
         where Value: From<V>
     {
         match value {
@@ -104,7 +105,7 @@ impl EntityInner {
             Some(v) => self.field_map.insert(key.to_string(), Value::from(v)),
         };
     }
-    pub fn get<V>(&self, key: &str) -> Option<V>
+    pub fn get_value<V>(&self, key: &str) -> Option<V>
         where V: FromValue
     {
         self.field_map.get(key).map(|value| value::from_value(value.clone()))
@@ -276,7 +277,10 @@ impl EntityInner {
             .map(|&(_, ref b_rc)| b_rc.clone())
             .collect::<Vec<_>>()
     }
+}
 
+// 和级联相关
+impl EntityInner {
     pub fn cascade_field_insert(&mut self, field: &str) {
         let a_b_meta = self.meta.field_map.get(field).unwrap();
         a_b_meta.set_refer_cascade(Some(Cascade::Insert));
@@ -341,7 +345,10 @@ impl EntityInner {
             a_b_meta.set_refer_cascade(None);
         }
     }
+}
 
+// 和数据库操作相关
+impl EntityInner {
     pub fn get_values(&self) -> Vec<Value> {
         // 不包括id
         self.meta
@@ -371,12 +378,13 @@ impl EntityInner {
             })
             .collect::<Vec<_>>()
     }
-    pub fn set_values(&mut self, result: &QueryResult, row: &mut Row, prefix: &str) {
+    pub fn set_values(&mut self, row: &mut Row, alias: &str) {
         // 包括id
-        for field in self.meta.get_non_refer_fields() {
-            let key = &field.get_field_name();
-            result.column_index(key).map(|idx| {
-                self.field_map.insert(field.get_field_name(), row.as_ref(idx).unwrap().clone());
+        for field_meta in self.meta.get_non_refer_fields() {
+            let field = field_meta.get_field_name();
+            let key = format!("{}${}", alias, field);
+            row.get::<Value, &str>(&key).map(|value| {
+                self.set_value(&field, Some(value));
             });
         }
     }
@@ -402,35 +410,6 @@ impl EntityInner {
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
     }
-    pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
-        where C: GenericConnection
-    {
-        let sql = self.meta.sql_get();
-        let id = self.get_id_value();
-        let params = vec![("id".to_string(), id.clone())];
-        println!("{}, {:?}", sql, params);
-        let res = conn.prep_exec(sql, params);
-        if let Err(err) = res {
-            return Err(err);
-        }
-        let mut res = res.unwrap();
-        let row = res.next();
-        if row.is_none() {
-            // 没有读取到，返回id无效
-            return Err(Error::MySqlError(MySqlError {
-                state: "ID_NOT_EXIST".to_string(),
-                message: id.into_str(),
-                code: 60001,
-            }));
-        }
-        let row = row.unwrap();
-        if let Err(err) = row {
-            return Err(err);
-        }
-        let mut row = row.unwrap();
-        self.set_values(&res, &mut row, "");
-        Ok(())
-    }
     pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
         where C: GenericConnection
     {
@@ -440,8 +419,38 @@ impl EntityInner {
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
     }
+    // pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
+    //     where C: GenericConnection
+    // {
+    //     let sql = self.meta.sql_get();
+    //     let id = self.get_id_value();
+    //     let params = vec![("id".to_string(), id.clone())];
+    //     println!("{}, {:?}", sql, params);
+    //     let res = conn.prep_exec(sql, params);
+    //     if let Err(err) = res {
+    //         return Err(err);
+    //     }
+    //     let mut res = res.unwrap();
+    //     let row = res.next();
+    //     if row.is_none() {
+    //         // 没有读取到，返回id无效
+    //         return Err(Error::MySqlError(MySqlError {
+    //             state: "ID_NOT_EXIST".to_string(),
+    //             message: id.into_str(),
+    //             code: 60001,
+    //         }));
+    //     }
+    //     let row = row.unwrap();
+    //     if let Err(err) = row {
+    //         return Err(err);
+    //     }
+    //     let mut row = row.unwrap();
+    //     self.set_values(&res, &mut row, "");
+    //     Ok(())
+    // }
 }
 
+// 和debug相关
 impl EntityInner {
     fn fmt_rc(rc: &EntityInnerPointer) -> String {
         let rc = rc.clone();
@@ -450,7 +459,7 @@ impl EntityInner {
     }
     fn fmt_map_value(map: &HashMap<String, Value>) -> String {
         map.iter()
-            .map(|(key, value)| format!("{}: \"{:?}\"", key, value))
+            .map(|(key, value)| format!("{}: {:?}", key, value))
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -466,7 +475,6 @@ impl EntityInner {
     fn fmt_map_vec(map: &HashMap<String, Vec<EntityInnerPointer>>) -> String {
         map.iter()
             .map(|(key, vec)| {
-                // let value_string = value.as_ref().map_or("NULL".to_string(), Self::fmt_rc);
                 let value_string = vec.iter().map(Self::fmt_rc).collect::<Vec<_>>().join(", ");
                 format!("{}: [{}]", key, value_string)
             })
@@ -534,26 +542,26 @@ pub trait Entity {
         cb(&mut inner)
     }
 
-    fn inner_get<V>(&self, key: &str) -> V
+    fn inner_get_value<V>(&self, key: &str) -> V
         where V: FromValue
     {
-        let opt = self.do_inner(|inner| inner.get::<V>(key));
+        let opt = self.do_inner(|inner| inner.get_value::<V>(key));
         opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
-    fn inner_set<V>(&self, key: &str, value: V)
+    fn inner_set_value<V>(&self, key: &str, value: V)
         where Value: From<V>
     {
-        self.do_inner_mut(|inner| inner.set::<V>(key, Some(value)));
+        self.do_inner_mut(|inner| inner.set_value::<V>(key, Some(value)));
     }
-    fn inner_has<V>(&self, key: &str) -> bool
+    fn inner_has_value<V>(&self, key: &str) -> bool
         where V: FromValue
     {
-        self.do_inner(|inner| inner.get::<V>(key)).is_some()
+        self.do_inner(|inner| inner.get_value::<V>(key)).is_some()
     }
-    fn inner_clear<V>(&self, key: &str)
+    fn inner_clear_value<V>(&self, key: &str)
         where Value: From<V>
     {
-        self.do_inner_mut(|inner| inner.set::<V>(key, None));
+        self.do_inner_mut(|inner| inner.set_value::<V>(key, None));
     }
 
     fn inner_get_pointer<E>(&self, key: &str) -> E
@@ -631,16 +639,16 @@ pub trait Entity {
     }
 
     fn set_id(&self, id: u64) {
-        self.inner_set("id", id);
+        self.inner_set_value("id", id);
     }
     fn get_id(&self) -> u64 {
-        self.inner_get("id")
+        self.inner_get_value("id")
     }
     fn has_id(&self) -> bool {
-        self.inner_has::<u64>("id")
+        self.inner_has_value::<u64>("id")
     }
     fn clear_id(&self) {
-        self.inner_clear::<u64>("id")
+        self.inner_clear_value::<u64>("id")
     }
 
     fn cascade_insert(&self) {

@@ -34,19 +34,19 @@ impl ${ENTITY_NAME} {${IMPL_FIELDS}
 static TPL_IMPL_FIELD: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.inner_get("${FIELD}")
+        self.inner_get_value("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set("${FIELD}", value);
+        self.inner_set_value("${FIELD}", value);
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has::<${TYPE}>("${FIELD}")
+        self.inner_has_value::<${TYPE}>("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn clear_${FIELD}(&self) {
-        self.inner_clear::<${TYPE}>("${FIELD}");
+        self.inner_clear_value::<${TYPE}>("${FIELD}");
     }"#;
 
 static TPL_IMPL_POINTER: &'static str = r#"

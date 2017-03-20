@@ -1,9 +1,10 @@
 use mysql::Pool;
 use mysql::Error;
 use mysql::Value;
+use mysql::Row;
 
 use mysql::prelude::GenericConnection;
-use meta;
+
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -14,6 +15,8 @@ use std::ops::DerefMut;
 use entity::Entity;
 use entity::EntityInner;
 use entity::EntityInnerPointer;
+
+use meta;
 use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
@@ -90,14 +93,9 @@ impl DB {
         ret
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
-        // let mut inner = EntityInner::default(E::meta(), E::orm_meta());
-        // inner.field_map.insert("id".to_string(), Value::from(id));
-        // try!(do_get(&mut inner, self.pool.get_conn().as_mut().unwrap()));
-        // Ok(E::new(Rc::new(RefCell::new(inner))))
-
         let mut conn = self.pool.get_conn();
         let session = Session::new(conn.unwrap());
-        session.get(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
+        session.select(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
@@ -266,35 +264,66 @@ impl<C> Session<C>
 impl<C> Session<C>
     where C: GenericConnection
 {
-    pub fn get(&self,
-               id: u64,
-               meta: &'static EntityMeta,
-               orm_meta: &'static OrmMeta)
-               -> Result<EntityInnerPointer, Error> {
+    pub fn select(&self,
+                  id: u64,
+                  meta: &'static EntityMeta,
+                  orm_meta: &'static OrmMeta)
+                  -> Result<EntityInnerPointer, Error> {
+        let table_alias = &meta.table_name;
         let mut tables = Vec::new();
         let mut fields = Vec::new();
-        Self::recursive_sql(&meta.entity_name,
-                            &meta.table_name,
-                            orm_meta,
-                            &mut tables,
-                            &mut fields);
+        Self::gen_sql(&meta.entity_name,
+                      &table_alias,
+                      orm_meta,
+                      &mut tables,
+                      &mut fields);
+
+        let fields = fields.into_iter()
+            .map(|vec| vec.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join(",\n"))
+            .collect::<Vec<_>>()
+            .join(",\n\n");
         tables.insert(0, meta.table_name.clone());
-        let fields =
-            fields.into_iter().map(|vec| vec.join(",\n")).collect::<Vec<_>>().join(",\n\n");
-        let tables = tables.join("\n");
-        let cond = format!("{}.id = {}", &meta.table_name, id);
+        let tables = tables.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join("\n");
+        let cond = format!("\t{}.id = {}", &meta.table_name, id);
         let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n{}", fields, tables, cond);
         println!("{}", sql);
         let mut conn = self.conn.borrow_mut();
-        let res = conn.query(sql).unwrap();
-        println!("{:?}", res);
-        Ok(Rc::new(RefCell::new(EntityInner::default(meta, orm_meta))))
+        let query_result = try!(conn.query(sql));
+
+        // let mut a = EntityInner::new(meta, orm_meta);
+        let mut vec = Vec::new();
+        for row_result in query_result {
+            let mut row = try!(row_result);
+            vec.push(Self::take_entity(&mut row, &table_alias, meta, orm_meta));
+        }
+        Ok(vec[0].clone())
     }
-    fn recursive_sql(entity: &str,
-                     table_alias: &str,
-                     orm_meta: &'static OrmMeta,
-                     mut tables: &mut Vec<String>,
-                     mut fields: &mut Vec<Vec<String>>) {
+    fn take_entity(mut row: &mut Row,
+                   table_alias: &str,
+                   meta: &'static EntityMeta,
+                   orm_meta: &'static OrmMeta)
+                   -> EntityInnerPointer {
+        let mut a = EntityInner::new(meta, orm_meta);
+        a.set_values(&mut row, &table_alias);
+        for a_b_meta in meta.get_pointer_fields() {
+            let b_entity = a_b_meta.get_refer_entity();
+            let b_field = a_b_meta.get_field_name();
+            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_alias = format!("{}_{}", table_alias, b_field);
+            let b = Self::take_entity(&mut row, &b_table_alias, &b_meta, &orm_meta);
+            if b.borrow().get_id_value() != Value::NULL {
+                a.set_pointer(&b_field, Some(b));
+            } else {
+                a.set_pointer(&b_field, None);
+            }
+        }
+        Rc::new(RefCell::new(a))
+    }
+    fn gen_sql(entity: &str,
+               table_alias: &str,
+               orm_meta: &'static OrmMeta,
+               mut tables: &mut Vec<String>,
+               mut fields: &mut Vec<Vec<String>>) {
         let meta = orm_meta.entity_map.get(entity).unwrap();
         let self_fields = Self::get_fields(meta, table_alias);
         fields.push(self_fields);
@@ -314,11 +343,11 @@ impl<C> Session<C>
                                      &refer_id_column,
                                      &refer_table_alias);
             tables.push(join_table);
-            Self::recursive_sql(&refer_entity_name,
-                                &refer_table_alias,
-                                orm_meta,
-                                &mut tables,
-                                &mut fields);
+            Self::gen_sql(&refer_entity_name,
+                          &refer_table_alias,
+                          orm_meta,
+                          &mut tables,
+                          &mut fields);
         }
     }
     fn get_fields(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
