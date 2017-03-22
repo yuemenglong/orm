@@ -5,6 +5,8 @@ use mysql::Row;
 
 use mysql::prelude::GenericConnection;
 
+use itertools::Itertools;
+
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -289,64 +291,98 @@ impl<C> Session<C>
         let cond = format!("\t{}.id = {}", &meta.table_name, id);
         let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n{}", fields, tables, cond);
         println!("{}", sql);
+
         let mut conn = self.conn.borrow_mut();
         let query_result = try!(conn.query(sql));
 
         // let mut a = EntityInner::new(meta, orm_meta);
-        // let mut vec = Vec::new();
-
-        let mut select_result = SelectResult::default();
-        let pick_id =
-            |id: u64| select_result.vec.iter().filter(|res| res.id == id).collect::<Vec<_>>();
-        for row_result in query_result {
-            let mut row = try!(row_result);
-            // vec.push(Self::take_entity(&mut row, &table_alias, meta, orm_meta));
-            let b = Self::take_entity(&mut row, &table_alias, meta, orm_meta);
-            match b.borrow().get_id_u64() {
-                None => continue,
-                Some(id) => {match pick_id(id){
-                    
-                }}
+        let mut map: HashMap<String, EntityInnerPointer> = HashMap::new();
+        let mut vec = Vec::new();
+        for row in query_result {
+            let mut row = try!(row);
+            match Self::take_entity(&mut row, table_alias, meta, orm_meta, &mut map) {
+                Some(rc) => vec.push(rc), 
+                None => {}
             }
         }
-        // Ok(vec[0].clone())
-        Ok(Rc::new(RefCell::new(EntityInner::new(meta, orm_meta))))
+        let vec =
+            vec.into_iter().unique_by(|rc| rc.borrow().get_id_u64().unwrap()).collect::<Vec<_>>();
+        Ok(vec[0].clone())
+        // Ok(Rc::new(RefCell::new(EntityInner::new(meta, orm_meta))))
     }
     fn take_entity(mut row: &mut Row,
                    table_alias: &str,
                    meta: &'static EntityMeta,
-                   orm_meta: &'static OrmMeta) {
+                   orm_meta: &'static OrmMeta,
+                   mut map: &mut HashMap<String, EntityInnerPointer>)
+                   -> Option<EntityInnerPointer> {
         let mut a = EntityInner::new(meta, orm_meta);
         a.set_values(&mut row, &table_alias);
-        Rc::new(RefCell::new(a));
+        let id = a.get_id_u64();
+        if id.is_none() {
+            return None;
+        }
+        let id = id.unwrap();
+        let key = format!("{}_{}", table_alias, id);
+        let a_rc = match map.get(&key) {
+            Some(rc) => rc.clone(),
+            None => Rc::new(RefCell::new(a)),
+        };
+        map.insert(key, a_rc.clone());
+        Self::take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
+        Some(a_rc)
     }
-    fn take_entity_pointer(mut row: &mut Row,
+    fn take_entity_pointer(a_rc: EntityInnerPointer,
+                           mut row: &mut Row,
                            table_alias: &str,
-                           meta: &'static EntityMeta,
-                           orm_meta: &'static OrmMeta,
-                           mut select_result: &mut SelectResult)
-                           -> EntityInnerPointer {
-        // select_result 表示上级结果
-        let mut a = EntityInner::new(meta, orm_meta);
-        a.set_values(&mut row, &table_alias);
-        for a_b_meta in meta.get_pointer_fields() {
+                           mut map: &mut HashMap<String, EntityInnerPointer>) {
+        let mut a = a_rc.borrow_mut();
+        for a_b_meta in a.meta.get_pointer_fields() {
             let b_entity = a_b_meta.get_refer_entity();
-            let b_field = a_b_meta.get_field_name();
-            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
-            let b_table_alias = format!("{}_{}", table_alias, b_field);
-            let b = Self::take_entity(&mut row,
-                                      &b_table_alias,
-                                      &b_meta,
-                                      &orm_meta,
-                                      &mut select_result);
-            if b.borrow().get_id_value() != Value::NULL {
-                a.set_pointer(&b_field, Some(b));
-            } else {
-                a.set_pointer(&b_field, None);
+            let a_b_field = a_b_meta.get_field_name();
+            let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_alias = format!("{}_{}", table_alias, a_b_field);
+            match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
+                Some(b_rc) => a.set_pointer(&a_b_field, Some(b_rc)),
+                None => a.set_pointer(&a_b_field, None),
             }
         }
-        Rc::new(RefCell::new(a))
     }
+    // fn take_entity_field(mut row: &mut Row,
+    //                table_alias: &str,
+    //                meta: &'static EntityMeta,
+    //                orm_meta: &'static OrmMeta) {
+    //     let mut a = EntityInner::new(meta, orm_meta);
+    //     a.set_values(&mut row, &table_alias);
+    //     Rc::new(RefCell::new(a));
+    // }
+    // fn take_entity_pointer(mut row: &mut Row,
+    //                        table_alias: &str,
+    //                        meta: &'static EntityMeta,
+    //                        orm_meta: &'static OrmMeta,
+    //                        mut select_result: &mut SelectResult)
+    //                        -> EntityInnerPointer {
+    //     // select_result 表示上级结果
+    //     let mut a = EntityInner::new(meta, orm_meta);
+    //     a.set_values(&mut row, &table_alias);
+    //     for a_b_meta in meta.get_pointer_fields() {
+    //         let b_entity = a_b_meta.get_refer_entity();
+    //         let b_field = a_b_meta.get_field_name();
+    //         let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+    //         let b_table_alias = format!("{}_{}", table_alias, b_field);
+    //         let b = Self::take_entity_field(&mut row,
+    //                                   &b_table_alias,
+    //                                   &b_meta,
+    //                                   &orm_meta,
+    //                                   &mut select_result);
+    //         if b.borrow().get_id_value() != Value::NULL {
+    //             a.set_pointer(&b_field, Some(b));
+    //         } else {
+    //             a.set_pointer(&b_field, None);
+    //         }
+    //     }
+    //     Rc::new(RefCell::new(a))
+    // }
     fn gen_sql(entity: &str,
                table_alias: &str,
                orm_meta: &'static OrmMeta,

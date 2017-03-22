@@ -3,6 +3,8 @@ extern crate syntex_errors as errors;
 extern crate regex;
 extern crate mysql;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate itertools;
 
 pub use rustc_serialize::json;
 

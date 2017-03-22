@@ -39,14 +39,14 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         orm_meta.entity_map.insert(entity.entity_name.to_string(), entity);
     }
     // 自动生成ManyToMany的中间表
-    for &(ref entity, _) in fields.iter(){
-        if orm_meta.entity_map.contains_key(entity){
+    for &(ref entity, _) in fields.iter() {
+        if orm_meta.entity_map.contains_key(entity) {
             continue;
         }
         let mut entity_meta = EntityMeta::default();
         let id_pairs = FieldMeta::new_pkey(&entity);
         entity_meta.field_vec.push("id".to_string());
-        for (_, id_field_meta) in id_pairs{
+        for (_, id_field_meta) in id_pairs {
             entity_meta.field_map.insert("id".to_string(), id_field_meta);
         }
 
