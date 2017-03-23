@@ -100,7 +100,7 @@ impl DB {
         let vec = try!(session.select(id, E::meta(), E::orm_meta()));
         match vec.len() {
             0 => Ok(None),
-            _ => Ok(Some(E::new(vec[0].clone()))),
+            _ => Ok(Some(E::from_inner(vec[0].clone()))),
         }
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
@@ -116,7 +116,7 @@ pub struct Session<C>
     conn: RefCell<C>,
 }
 
-// insert update delete
+// execute insert update delete
 impl<C> Session<C>
     where C: GenericConnection
 {

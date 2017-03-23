@@ -152,7 +152,12 @@ impl ast::Entity for ${ENTITY_NAME} {
             inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::default(Self::meta(), Self::orm_meta())))
         }
     }
-    fn new(inner: ast::EntityInnerPointer) -> ${ENTITY_NAME} {
+    fn new() -> Self {
+        ${ENTITY_NAME} {
+            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::new(Self::meta(), Self::orm_meta())))
+        }
+    }
+    fn from_inner(inner: ast::EntityInnerPointer) -> ${ENTITY_NAME} {
         ${ENTITY_NAME} {
             inner: inner,
         }

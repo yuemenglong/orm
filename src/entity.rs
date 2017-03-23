@@ -517,7 +517,8 @@ pub trait Entity {
     fn orm_meta() -> &'static OrmMeta;
     fn meta() -> &'static EntityMeta;
     fn default() -> Self;
-    fn new(inner: EntityInnerPointer) -> Self;
+    fn new() -> Self;
+    fn from_inner(inner: EntityInnerPointer) -> Self;
     fn inner(&self) -> EntityInnerPointer;
     fn debug(&self) {
         let inner = self.inner();
@@ -567,7 +568,7 @@ pub trait Entity {
     fn inner_get_pointer<E>(&self, key: &str) -> E
         where E: Entity
     {
-        let opt = self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::new(rc));
+        let opt = self.do_inner_mut(|inner| inner.get_pointer(key)).map(|rc| E::from_inner(rc));
         opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
     fn inner_set_pointer<E>(&self, key: &str, value: &E)
@@ -585,7 +586,7 @@ pub trait Entity {
     fn inner_get_one_one<E>(&self, key: &str) -> E
         where E: Entity
     {
-        let opt = self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::new(rc));
+        let opt = self.do_inner_mut(|inner| inner.get_one_one(key)).map(|rc| E::from_inner(rc));
         opt.expect(&format!("[{}] Get [{}] Of None", Self::meta().entity_name, key))
     }
     fn inner_set_one_one<E>(&self, key: &str, value: &E)
@@ -604,7 +605,7 @@ pub trait Entity {
         where E: Entity
     {
         let vec = self.do_inner_mut(|inner| inner.get_one_many(key));
-        vec.into_iter().map(E::new).collect::<Vec<_>>()
+        vec.into_iter().map(E::from_inner).collect::<Vec<_>>()
     }
     fn inner_set_one_many<E>(&self, key: &str, value: Vec<E>)
         where E: Entity
@@ -623,7 +624,7 @@ pub trait Entity {
         where E: Entity
     {
         let vec = self.do_inner_mut(|inner| inner.get_many_many(key));
-        vec.into_iter().map(E::new).collect::<Vec<_>>()
+        vec.into_iter().map(E::from_inner).collect::<Vec<_>>()
     }
     fn inner_set_many_many<E>(&self, key: &str, value: Vec<E>)
         where E: Entity
