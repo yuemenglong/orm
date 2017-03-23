@@ -94,10 +94,14 @@ impl DB {
         entity.cascade_reset();
         ret
     }
-    pub fn get<E: Entity>(&self, id: u64) -> Result<E, Error> {
+    pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
         let mut conn = self.pool.get_conn();
         let session = Session::new(conn.unwrap());
-        session.select(id, E::meta(), E::orm_meta()).map(|inner| Entity::new(inner))
+        let vec = try!(session.select(id, E::meta(), E::orm_meta()));
+        match vec.len() {
+            0 => Ok(None),
+            _ => Ok(Some(E::new(vec[0].clone()))),
+        }
     }
     pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
         let mut conn = self.pool.get_conn();
@@ -272,7 +276,7 @@ impl<C> Session<C>
                   id: u64,
                   meta: &'static EntityMeta,
                   orm_meta: &'static OrmMeta)
-                  -> Result<EntityInnerPointer, Error> {
+                  -> Result<Vec<EntityInnerPointer>, Error> {
         let table_alias = &meta.table_name;
         let mut tables = Vec::new();
         let mut fields = Vec::new();
@@ -307,8 +311,7 @@ impl<C> Session<C>
         }
         let vec =
             vec.into_iter().unique_by(|rc| rc.borrow().get_id_u64().unwrap()).collect::<Vec<_>>();
-        Ok(vec[0].clone())
-        // Ok(Rc::new(RefCell::new(EntityInner::new(meta, orm_meta))))
+        Ok(vec)
     }
     fn take_entity(mut row: &mut Row,
                    table_alias: &str,
@@ -329,6 +332,7 @@ impl<C> Session<C>
             None => Rc::new(RefCell::new(a)),
         };
         map.insert(key, a_rc.clone());
+
         Self::take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
         Some(a_rc)
     }

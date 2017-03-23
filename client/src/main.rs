@@ -34,7 +34,7 @@ fn select_test(db: &ast::DB) {
     db.insert(&p).unwrap();
     let id = p.get_id();
 
-    let p: Person = db.get(id).unwrap();
+    let p: Person = db.get(id).unwrap().unwrap();
     p.debug();
 }
 
@@ -101,7 +101,7 @@ fn curd_test(db: &ast::DB) {
     let id = p.get_id();
     p.set_name("Dick");
     let ret = db.update(&p).unwrap();
-    let p = db.get::<Person>(p.get_id()).unwrap();
+    let p = db.get::<Person>(p.get_id()).unwrap().unwrap();
     db.delete(p).unwrap();
     let p = db.get::<Person>(id).unwrap();
 }
