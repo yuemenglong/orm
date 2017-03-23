@@ -262,7 +262,7 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn get_many_many_middle_name(&self) -> String {
+    pub fn get_many_many_middle_entity(&self) -> String {
         match self.ty {
             TypeMeta::ManyToMany { ref middle, .. } => middle.to_string(),
             _ => unreachable!(),

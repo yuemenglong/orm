@@ -391,19 +391,21 @@ impl<C> Session<C>
                table_alias: &str,
                orm_meta: &'static OrmMeta,
                mut tables: &mut Vec<String>,
-               mut fields: &mut Vec<Vec<String>>) {
+               mut columns: &mut Vec<Vec<String>>) {
         let meta = orm_meta.entity_map.get(entity).unwrap();
-        let self_fields = Self::get_columns(meta, table_alias);
-        fields.push(self_fields);
+        let self_columns = Self::gen_sql_columns(meta, table_alias);
+        columns.push(self_columns);
 
-        Self::gen_sql_pointer(table_alias, meta, orm_meta, tables, fields);
-        Self::gen_sql_one_many(table_alias, meta, orm_meta, tables, fields);
+        Self::gen_sql_pointer(table_alias, meta, orm_meta, tables, columns);
+        Self::gen_sql_one_one(table_alias, meta, orm_meta, tables, columns);
+        Self::gen_sql_one_many(table_alias, meta, orm_meta, tables, columns);
+        Self::gen_sql_many_many(table_alias, meta, orm_meta, tables, columns);
     }
     fn gen_sql_pointer(table_alias: &str,
                        meta: &'static EntityMeta,
                        orm_meta: &'static OrmMeta,
                        mut tables: &mut Vec<String>,
-                       mut fields: &mut Vec<Vec<String>>) {
+                       mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_pointer_fields().into_iter() {
             // a join b on a.b_id = b.id
             let a_b_field = a_b_meta.get_field_name();
@@ -425,14 +427,43 @@ impl<C> Session<C>
                           &b_table_alias,
                           orm_meta,
                           &mut tables,
-                          &mut fields);
+                          &mut columns);
+        }
+    }
+    fn gen_sql_one_one(table_alias: &str,
+                       meta: &'static EntityMeta,
+                       orm_meta: &'static OrmMeta,
+                       mut tables: &mut Vec<String>,
+                       mut columns: &mut Vec<Vec<String>>) {
+        for a_b_meta in meta.get_one_one_fields().into_iter() {
+            // a join b on a.id = b.a_id
+            let a_b_field = a_b_meta.get_field_name();
+            let b_entity = a_b_meta.get_refer_entity();
+            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_name = &b_meta.table_name;
+            let b_a_id_field = a_b_meta.get_one_one_id();
+            let b_a_id_meta = b_meta.field_map.get(&b_a_id_field).unwrap();
+            let b_a_id_column = b_a_id_meta.get_column_name();
+            let b_table_alias = format!("{}_{}", &table_alias, &a_b_field);
+            let join_table = format!("LEFT JOIN {} AS {} ON {}.id = {}.{}",
+                                     &b_table_name,
+                                     &b_table_alias,
+                                     &table_alias,
+                                     &b_table_alias,
+                                     &b_a_id_column);
+            tables.push(join_table);
+            Self::gen_sql(&b_entity,
+                          &b_table_alias,
+                          orm_meta,
+                          &mut tables,
+                          &mut columns);
         }
     }
     fn gen_sql_one_many(table_alias: &str,
                         meta: &'static EntityMeta,
                         orm_meta: &'static OrmMeta,
                         mut tables: &mut Vec<String>,
-                        mut fields: &mut Vec<Vec<String>>) {
+                        mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_one_many_fields().into_iter() {
             // a join b on a.id = b.a_id
             let a_b_field = a_b_meta.get_field_name();
@@ -454,10 +485,53 @@ impl<C> Session<C>
                           &b_table_alias,
                           orm_meta,
                           &mut tables,
-                          &mut fields);
+                          &mut columns);
         }
     }
-    fn get_columns(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
+    fn gen_sql_many_many(table_alias: &str,
+                         meta: &'static EntityMeta,
+                         orm_meta: &'static OrmMeta,
+                         mut tables: &mut Vec<String>,
+                         mut columns: &mut Vec<Vec<String>>) {
+        for a_b_meta in meta.get_many_many_fields().into_iter() {
+            // a join a_b on a.id = a_b.a_id join b on a_b.b_id = b.id
+            let a_b_field = a_b_meta.get_field_name();
+            let b_entity = a_b_meta.get_refer_entity();
+            let mid_entity = a_b_meta.get_many_many_middle_entity();
+            let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
+            let mid_meta = orm_meta.entity_map.get(&mid_entity).unwrap();
+            let b_table_name = &b_meta.table_name;
+            let mid_table_name = &mid_meta.table_name;
+            let mid_a_id_field = a_b_meta.get_many_many_id();
+            let mid_b_id_field = a_b_meta.get_many_many_refer_id();
+            let mid_a_id_meta = mid_meta.field_map.get(&mid_a_id_field).unwrap();
+            let mid_b_id_meta = mid_meta.field_map.get(&mid_b_id_field).unwrap();
+            let mid_a_id_column = mid_a_id_meta.get_column_name();
+            let mid_b_id_column = mid_b_id_meta.get_column_name();
+            let mid_table_alias = format!("{}__{}", &table_alias, &a_b_field);
+            let b_table_alias = format!("{}_{}", &table_alias, &a_b_field);
+            let join_mid = format!("LEFT JOIN {} AS {} ON {}.id = {}.{}",
+                                   &mid_table_name,
+                                   &mid_table_alias,
+                                   &table_alias,
+                                   &mid_table_alias,
+                                   &mid_a_id_column);
+            let join_b = format!("LEFT JOIN {} AS {} ON {}.{} = {}.id",
+                                 &b_table_name,
+                                 &b_table_alias,
+                                 &mid_table_alias,
+                                 &mid_b_id_column,
+                                 &b_table_alias);
+            tables.push(join_mid);
+            tables.push(join_b);
+            Self::gen_sql(&b_entity,
+                          &b_table_alias,
+                          orm_meta,
+                          &mut tables,
+                          &mut columns);
+        }
+    }
+    fn gen_sql_columns(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
         let table_name = &meta.table_name;
         let entity_name = &meta.entity_name;
         meta.get_non_refer_fields()

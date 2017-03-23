@@ -208,8 +208,8 @@ impl EntityInner {
         // mid.b_id = b.id
         let a_b_meta = a.meta.field_map.get(key).unwrap();
         let a_id = a.get_id_value();
-        let middle_name = a_b_meta.get_many_many_middle_name();
-        let middle_meta = a.orm_meta.entity_map.get(&middle_name).unwrap();
+        let middle_entity = a_b_meta.get_many_many_middle_entity();
+        let middle_meta = a.orm_meta.entity_map.get(&middle_entity).unwrap();
         let a_id_field = a_b_meta.get_many_many_id();
         let b_id_field = a_b_meta.get_many_many_refer_id();
         let orm_meta = a.orm_meta;

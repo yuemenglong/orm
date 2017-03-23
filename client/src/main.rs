@@ -28,9 +28,15 @@ fn select_test(db: &ast::DB) {
     p.get_addr().set_road("123");
     p.set_name("Tom");
     p.set_age(100);
+    p.set_account(&Account::default());
+    p.get_account().set_bank("中国银行");
     p.set_children(vec![Child::default(), Child::default()]);
     p.get_children().get_mut(0).unwrap().set_name("Alice");
     p.get_children().get_mut(1).unwrap().set_name("Bob");
+
+    p.set_teachers(vec![Teacher::default(), Teacher::default()]);
+    p.get_teachers().get_mut(0).unwrap().set_name("Cici");
+    p.get_teachers().get_mut(1).unwrap().set_name("Dick");
     db.insert(&p).unwrap();
     let id = p.get_id();
 
