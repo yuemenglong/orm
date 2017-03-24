@@ -342,6 +342,7 @@ impl<C> Session<C>
         map.insert(key, a_rc.clone());
 
         Self::take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
+        Self::take_entity_one_one(a_rc.clone(), &mut row, table_alias, &mut map);
         Some(a_rc)
     }
     fn take_entity_pointer(a_rc: EntityInnerPointer,
@@ -357,6 +358,22 @@ impl<C> Session<C>
             match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
                 Some(b_rc) => a.set_pointer(&a_b_field, Some(b_rc)),
                 None => a.set_pointer(&a_b_field, None),
+            }
+        }
+    }
+    fn take_entity_one_one(a_rc: EntityInnerPointer,
+                           mut row: &mut Row,
+                           table_alias: &str,
+                           mut map: &mut HashMap<String, EntityInnerPointer>) {
+        let mut a = a_rc.borrow_mut();
+        for a_b_meta in a.meta.get_one_one_fields() {
+            let b_entity = a_b_meta.get_refer_entity();
+            let a_b_field = a_b_meta.get_field_name();
+            let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_alias = format!("{}_{}", table_alias, a_b_field);
+            match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
+                Some(b_rc) => a.set_one_one(&a_b_field, Some(b_rc)),
+                None => a.set_one_one(&a_b_field, None),
             }
         }
     }
