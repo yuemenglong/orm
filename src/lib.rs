@@ -8,6 +8,8 @@ extern crate itertools;
 
 pub use rustc_serialize::json;
 
+#[macro_use]
+mod macros;
 mod formatter;
 mod visitor;
 mod attr;

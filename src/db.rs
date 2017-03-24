@@ -1,3 +1,6 @@
+#[macro_use]
+use macros;
+
 use mysql::Pool;
 use mysql::Error;
 use mysql::Value;
@@ -175,22 +178,14 @@ impl<C> Session<C>
             }
         }
         {
-            println!("{:?}", (file!(), line!()));
             // 中间表
             let middle_fields = a_rc.borrow()
                 .many_many_map
                 .clone()
                 .into_iter()
                 .map(|(field, pair_vec)| {
-                    println!("{:?}", (file!(), line!()));
-                    // a在这里必然有id，b有id的情况中间表才有意义
                     let m_vec = pair_vec.into_iter()
-                        .filter_map(|(m_rc, b_rc)| {
-                            println!("{:?}", (file!(), line!()));
-                            b_rc.borrow();
-                            println!("{:?}", (file!(), line!()));
-                            b_rc.borrow().get_id_u64().map(|_| m_rc)
-                        })
+                        .filter_map(|(m_opt, _)| m_opt)
                         .collect::<Vec<_>>();
                     (field, m_vec)
                 })
