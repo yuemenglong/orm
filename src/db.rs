@@ -169,16 +169,29 @@ impl<C> Session<C>
                 })
                 .collect::<Vec<_>>();
             try!(self.each_execute_refer_vec(a_rc.clone(), &many_many_fields, op.clone()));
+            // 重新set回去
             for (ref field, ref b_vec) in many_many_fields {
                 a_rc.borrow_mut().set_many_many(field, b_vec.clone());
             }
+        }
+        {
+            println!("{:?}", (file!(), line!()));
             // 中间表
             let middle_fields = a_rc.borrow()
                 .many_many_map
                 .clone()
                 .into_iter()
                 .map(|(field, pair_vec)| {
-                    let m_vec = pair_vec.into_iter().map(|(m_rc, _)| m_rc).collect::<Vec<_>>();
+                    println!("{:?}", (file!(), line!()));
+                    // a在这里必然有id，b有id的情况中间表才有意义
+                    let m_vec = pair_vec.into_iter()
+                        .filter_map(|(m_rc, b_rc)| {
+                            println!("{:?}", (file!(), line!()));
+                            b_rc.borrow();
+                            println!("{:?}", (file!(), line!()));
+                            b_rc.borrow().get_id_u64().map(|_| m_rc)
+                        })
+                        .collect::<Vec<_>>();
                     (field, m_vec)
                 })
                 .collect::<Vec<_>>();
@@ -236,10 +249,10 @@ impl<C> Session<C>
                      op: Cascade)
                      -> Result<(), Error> {
         let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op);
-        Self::take_cascade(b_rc.clone());
+        Self::clear_cascade(b_rc.clone());
         self.execute(b_rc, cascade)
     }
-    fn take_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
+    fn clear_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
         mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
     }
     fn calc_cascade(a_rc: EntityInnerPointer,

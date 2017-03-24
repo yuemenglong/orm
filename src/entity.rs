@@ -238,10 +238,11 @@ impl EntityInner {
                 })
                 .collect::<HashMap<u64, (EntityInnerPointer, EntityInnerPointer)>>()
         });
-        // 老数据移除关系 相当于old_b.a_id = NULL
+        // 老数据解除关系 相当于old_b.a_id = NULL
         let empty = Vec::new();
         for &(ref m_rc, _) in a.many_many_map.get(key).unwrap_or(&empty) {
             m_rc.borrow_mut().cascade_delete();
+            a.cache.push((key.to_string(), m_rc.clone()));
         }
         // 新数据绑定关系 相当于b.a_id = a.id
         let new_b_pair_vec = value.iter()

@@ -37,6 +37,7 @@ fn select_test(db: &ast::DB) {
     p.set_teachers(vec![Teacher::default(), Teacher::default()]);
     p.get_teachers().get_mut(0).unwrap().set_name("Cici");
     p.get_teachers().get_mut(1).unwrap().set_name("Dick");
+    p.cascade_teachers_insert();
     db.insert(&p).unwrap();
     let id = p.get_id();
 
