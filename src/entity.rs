@@ -54,11 +54,13 @@ impl EntityInner {
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
-        // 用默认值
         // let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
         //     .into_iter()
         //     .map(|meta| (meta.get_field_name(), Value::NULL))
         //     .collect();
+        // 用默认值?
+        // 一旦有则为正常值，外层无法设为NULL
+        let field_map: HashMap<String, Value> = HashMap::new();
         // 避免lazy load
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
             .into_iter()
@@ -80,7 +82,7 @@ impl EntityInner {
         EntityInner {
             orm_meta: orm_meta,
             meta: meta,
-            field_map: HashMap::new(),
+            field_map: field_map,
             pointer_map: pointer_map,
             one_one_map: one_one_map,
             one_many_map: one_many_map,
@@ -458,10 +460,60 @@ impl EntityInner {
 
 // 和debug相关
 impl EntityInner {
+    fn index_map(&self) -> HashMap<String, usize> {
+        self.meta
+            .field_vec
+            .iter()
+            .enumerate()
+            .map(|(idx, key)| (key.clone(), idx))
+            .collect::<HashMap<_, _>>()
+    }
     fn fmt_rc(rc: &EntityInnerPointer) -> String {
         let rc = rc.clone();
         let inner = rc.borrow();
         format!("{:?}", inner)
+    }
+    fn fmt_value(&self) -> String {
+        self.meta
+            .get_non_refer_fields()
+            .into_iter()
+            .flat_map(|key| {
+                let field = key.get_field_name();
+                let value_opt = self.field_map.get(&field);
+                value_opt.map(|value| format!("{}: {:?}", field, value))
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+    fn fmt_pointer(&self) -> String {
+        self.meta
+            .get_pointer_fields()
+            .into_iter()
+            .flat_map(|key| {
+                let field = key.get_field_name();
+                let value_opt = self.pointer_map.get(&field);
+                value_opt.map(|value| match value {
+                    None => format!("{}: NULL", field),
+                    &Some(value) => format!("{}: {:?}", field, Self::fmt_rc(value)),
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+    fn fmt_one_one(&self) -> String {
+        self.meta
+            .get_one_one_fields()
+            .into_iter()
+            .flat_map(|key| {
+                let field = key.get_field_name();
+                let value_opt = self.one_one_map.get(&field);
+                value_opt.map(|value| match value {
+                    None => format!("{}: NULL", field),
+                    &Some(value) => format!("{}: {:?}", field, Self::fmt_rc(value)),
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
     fn fmt_map_value(map: &HashMap<String, Value>) -> String {
         map.iter()

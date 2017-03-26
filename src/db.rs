@@ -307,7 +307,6 @@ impl<C> Session<C>
         let mut conn = self.conn.borrow_mut();
         let query_result = try!(conn.query(sql));
 
-        // let mut a = EntityInner::new(meta, orm_meta);
         let mut map: HashMap<String, EntityInnerPointer> = HashMap::new();
         let mut vec = Vec::new();
         for row in query_result {
@@ -327,7 +326,7 @@ impl<C> Session<C>
                    orm_meta: &'static OrmMeta,
                    mut map: &mut HashMap<String, EntityInnerPointer>)
                    -> Option<EntityInnerPointer> {
-        let mut a = EntityInner::new(meta, orm_meta);
+        let mut a = EntityInner::default(meta, orm_meta);
         a.set_values(&mut row, &table_alias);
         let id = a.get_id_u64();
         if id.is_none() {
