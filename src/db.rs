@@ -342,6 +342,7 @@ impl<C> Session<C>
 
         Self::take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
         Self::take_entity_one_one(a_rc.clone(), &mut row, table_alias, &mut map);
+        Self::take_entity_one_many(a_rc.clone(), &mut row, table_alias, &mut map);
         Some(a_rc)
     }
     fn take_entity_pointer(a_rc: EntityInnerPointer,
@@ -376,40 +377,53 @@ impl<C> Session<C>
             }
         }
     }
-    // fn take_entity_field(mut row: &mut Row,
-    //                table_alias: &str,
-    //                meta: &'static EntityMeta,
-    //                orm_meta: &'static OrmMeta) {
-    //     let mut a = EntityInner::new(meta, orm_meta);
-    //     a.set_values(&mut row, &table_alias);
-    //     Rc::new(RefCell::new(a));
-    // }
-    // fn take_entity_pointer(mut row: &mut Row,
-    //                        table_alias: &str,
-    //                        meta: &'static EntityMeta,
-    //                        orm_meta: &'static OrmMeta,
-    //                        mut select_result: &mut SelectResult)
-    //                        -> EntityInnerPointer {
-    //     // select_result 表示上级结果
-    //     let mut a = EntityInner::new(meta, orm_meta);
-    //     a.set_values(&mut row, &table_alias);
-    //     for a_b_meta in meta.get_pointer_fields() {
+    fn take_entity_one_many(a_rc: EntityInnerPointer,
+                            mut row: &mut Row,
+                            table_alias: &str,
+                            mut map: &mut HashMap<String, EntityInnerPointer>) {
+        let mut a = a_rc.borrow_mut();
+        for a_b_meta in a.meta.get_one_many_fields() {
+            let b_entity = a_b_meta.get_refer_entity();
+            let a_b_field = a_b_meta.get_field_name();
+            let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+            let b_table_alias = format!("{}_{}", table_alias, a_b_field);
+            match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
+                Some(b_rc) => {
+                    let key = format!("ONE_MANY@{}_{}",
+                                      b_table_alias,
+                                      b_rc.borrow().get_id_u64().unwrap());
+                    if !map.contains_key(&key) {
+                        a.push_one_many(&a_b_field, b_rc.clone());
+                    }
+                    map.entry(key).or_insert(b_rc);
+                }
+                None => {}
+            }
+        }
+    }
+    // fn take_entity_many_many(a_rc: EntityInnerPointer,
+    //                         mut row: &mut Row,
+    //                         table_alias: &str,
+    //                         mut map: &mut HashMap<String, EntityInnerPointer>) {
+    //     let mut a = a_rc.borrow_mut();
+    //     for a_b_meta in a.meta.get_one_many_fields() {
     //         let b_entity = a_b_meta.get_refer_entity();
-    //         let b_field = a_b_meta.get_field_name();
-    //         let b_meta = orm_meta.entity_map.get(&b_entity).unwrap();
-    //         let b_table_alias = format!("{}_{}", table_alias, b_field);
-    //         let b = Self::take_entity_field(&mut row,
-    //                                   &b_table_alias,
-    //                                   &b_meta,
-    //                                   &orm_meta,
-    //                                   &mut select_result);
-    //         if b.borrow().get_id_value() != Value::NULL {
-    //             a.set_pointer(&b_field, Some(b));
-    //         } else {
-    //             a.set_pointer(&b_field, None);
+    //         let a_b_field = a_b_meta.get_field_name();
+    //         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+    //         let b_table_alias = format!("{}_{}", table_alias, a_b_field);
+    //         match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
+    //             Some(b_rc) => {
+    //                 let key = format!("ONE_MANY@{}_{}",
+    //                                   b_table_alias,
+    //                                   b_rc.borrow().get_id_u64().unwrap());
+    //                 if !map.contains_key(&key) {
+    //                     a.push_one_many(&a_b_field, b_rc.clone());
+    //                 }
+    //                 map.entry(key).or_insert(b_rc);
+    //             }
+    //             None => {}
     //         }
     //     }
-    //     Rc::new(RefCell::new(a))
     // }
     fn gen_sql(entity: &str,
                table_alias: &str,

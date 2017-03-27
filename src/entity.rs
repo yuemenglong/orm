@@ -207,6 +207,13 @@ impl EntityInner {
         }
         a.one_many_map.get(a_b_field).unwrap().clone()
     }
+    pub fn push_one_many(&mut self, key: &str, value: EntityInnerPointer) {
+        let mut a = self;
+        let b_rc = value;
+        // a.bs.push(b);
+        a.one_many_map.entry(key.to_string()).or_insert(Vec::new());
+        a.one_many_map.get_mut(key).unwrap().push(b_rc);
+    }
 
     pub fn set_many_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
         let a = self;
@@ -284,6 +291,13 @@ impl EntityInner {
             .iter()
             .map(|&(_, ref b_rc)| b_rc.clone())
             .collect::<Vec<_>>()
+    }
+    pub fn push_many_many(&mut self, key: &str, value:(EntityInnerPointer, EntityInnerPointer)){
+        let mut a = self;
+        let (m_rc, b_rc) = value;
+        // a.bs.push(b)
+        a.many_many_map.entry(key.to_string()).or_insert(Vec::new());
+        a.many_many_map.get_mut(key).unwrap().push((Some(m_rc), b_rc));
     }
 }
 
