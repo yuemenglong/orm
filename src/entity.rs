@@ -305,19 +305,19 @@ impl EntityInner {
 impl EntityInner {
     pub fn cascade_field_insert(&mut self, field: &str) {
         let a_b_meta = self.meta.field_map.get(field).unwrap();
-        a_b_meta.set_refer_cascade(Some(Cascade::Insert));
+        a_b_meta.set_refer_rt_cascade(Some(Cascade::Insert));
     }
     pub fn cascade_field_update(&mut self, field: &str) {
         let a_b_meta = self.meta.field_map.get(field).unwrap();
-        a_b_meta.set_refer_cascade(Some(Cascade::Update));
+        a_b_meta.set_refer_rt_cascade(Some(Cascade::Update));
     }
     pub fn cascade_field_delete(&mut self, field: &str) {
         let a_b_meta = self.meta.field_map.get(field).unwrap();
-        a_b_meta.set_refer_cascade(Some(Cascade::Delete));
+        a_b_meta.set_refer_rt_cascade(Some(Cascade::Delete));
     }
     pub fn cascade_field_null(&mut self, field: &str) {
         let a_b_meta = self.meta.field_map.get(field).unwrap();
-        a_b_meta.set_refer_cascade(Some(Cascade::NULL));
+        a_b_meta.set_refer_rt_cascade(Some(Cascade::NULL));
     }
     pub fn cascade_insert(&mut self) {
         self.cascade = Some(Cascade::Insert);
@@ -364,7 +364,7 @@ impl EntityInner {
         }
         // 字段cascade
         for a_b_meta in &self.meta.get_refer_fields() {
-            a_b_meta.set_refer_cascade(None);
+            a_b_meta.set_refer_rt_cascade(None);
         }
     }
 }

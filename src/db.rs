@@ -262,8 +262,8 @@ impl<C> Session<C>
         let a_b_meta = a.meta.field_map.get(field).unwrap();
         if b_rc.borrow().cascade.is_some() {
             return b_rc.borrow().cascade.unwrap().clone();
-        } else if a_b_meta.get_refer_cascade().is_some() {
-            return a_b_meta.get_refer_cascade().clone().unwrap();
+        } else if a_b_meta.get_refer_rt_cascade().is_some() {
+            return a_b_meta.get_refer_rt_cascade().clone().unwrap();
         } else if a_b_meta.has_cascade_insert() && op == Cascade::Insert {
             return Cascade::Insert;
         } else if a_b_meta.has_cascade_update() && op == Cascade::Update {
@@ -352,6 +352,9 @@ impl<C> Session<C>
                            mut map: &mut HashMap<String, EntityInnerPointer>) {
         let mut a = a_rc.borrow_mut();
         for a_b_meta in a.meta.get_pointer_fields() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             let b_entity = a_b_meta.get_refer_entity();
             let a_b_field = a_b_meta.get_field_name();
             let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
@@ -368,6 +371,9 @@ impl<C> Session<C>
                            mut map: &mut HashMap<String, EntityInnerPointer>) {
         let mut a = a_rc.borrow_mut();
         for a_b_meta in a.meta.get_one_one_fields() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             let b_entity = a_b_meta.get_refer_entity();
             let a_b_field = a_b_meta.get_field_name();
             let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
@@ -384,6 +390,9 @@ impl<C> Session<C>
                             mut map: &mut HashMap<String, EntityInnerPointer>) {
         let mut a = a_rc.borrow_mut();
         for a_b_meta in a.meta.get_one_many_fields() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             let b_entity = a_b_meta.get_refer_entity();
             let a_b_field = a_b_meta.get_field_name();
             let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
@@ -408,6 +417,9 @@ impl<C> Session<C>
                              mut map: &mut HashMap<String, EntityInnerPointer>) {
         let mut a = a_rc.borrow_mut();
         for a_b_meta in a.meta.get_many_many_fields() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             let b_entity = a_b_meta.get_refer_entity();
             let mid_entity = a_b_meta.get_many_many_middle_entity();
             let a_b_field = a_b_meta.get_field_name();
@@ -455,6 +467,9 @@ impl<C> Session<C>
                        mut tables: &mut Vec<String>,
                        mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_pointer_fields().into_iter() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             // a join b on a.b_id = b.id
             let a_b_field = a_b_meta.get_field_name();
             let b_entity = a_b_meta.get_refer_entity();
@@ -484,6 +499,9 @@ impl<C> Session<C>
                        mut tables: &mut Vec<String>,
                        mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_one_one_fields().into_iter() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             // a join b on a.id = b.a_id
             let a_b_field = a_b_meta.get_field_name();
             let b_entity = a_b_meta.get_refer_entity();
@@ -513,6 +531,9 @@ impl<C> Session<C>
                         mut tables: &mut Vec<String>,
                         mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_one_many_fields().into_iter() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             // a join b on a.id = b.a_id
             let a_b_field = a_b_meta.get_field_name();
             let b_entity = a_b_meta.get_refer_entity();
@@ -542,6 +563,9 @@ impl<C> Session<C>
                          mut tables: &mut Vec<String>,
                          mut columns: &mut Vec<Vec<String>>) {
         for a_b_meta in meta.get_many_many_fields().into_iter() {
+            if !a_b_meta.is_fetch_eager() {
+                continue;
+            }
             // a join a_b on a.id = a_b.a_id join b on a_b.b_id = b.id
             let a_b_field = a_b_meta.get_field_name();
             let b_entity = a_b_meta.get_refer_entity();

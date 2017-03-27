@@ -15,6 +15,12 @@ pub enum Cascade {
     Delete,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
+pub enum Fetch {
+    Lazy,
+    Eager,
+}
+
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
 enum TypeMeta {
     NULL,
@@ -33,19 +39,22 @@ enum TypeMeta {
         entity: String,
         refer_id: String,
         cascades: Vec<Cascade>,
-        cascade: Cell<Option<Cascade>>,
+        rt_cascade: Cell<Option<Cascade>>,
+        fetch: Fetch,
     },
     OneToOne {
         entity: String,
         id: String,
         cascades: Vec<Cascade>,
-        cascade: Cell<Option<Cascade>>,
+        rt_cascade: Cell<Option<Cascade>>,
+        fetch: Fetch,
     },
     OneToMany {
         entity: String,
         id: String,
         cascades: Vec<Cascade>,
-        cascade: Cell<Option<Cascade>>,
+        rt_cascade: Cell<Option<Cascade>>,
+        fetch: Fetch,
     },
     ManyToMany {
         entity: String,
@@ -53,7 +62,8 @@ enum TypeMeta {
         id: String,
         refer_id: String,
         cascades: Vec<Cascade>,
-        cascade: Cell<Option<Cascade>>,
+        rt_cascade: Cell<Option<Cascade>>,
+        fetch: Fetch,
     },
 }
 
@@ -192,21 +202,30 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    pub fn get_refer_cascade(&self) -> Option<Cascade> {
+    pub fn get_refer_fetch(&self) -> Fetch {
         match self.ty {
-            TypeMeta::Pointer { ref cascade, .. } => cascade.get(),
-            TypeMeta::OneToOne { ref cascade, .. } => cascade.get(),
-            TypeMeta::OneToMany { ref cascade, .. } => cascade.get(),
-            TypeMeta::ManyToMany { ref cascade, .. } => cascade.get(),
+            TypeMeta::Pointer { ref fetch, .. } => fetch.clone(),
+            TypeMeta::OneToOne { ref fetch, .. } => fetch.clone(),
+            TypeMeta::OneToMany { ref fetch, .. } => fetch.clone(),
+            TypeMeta::ManyToMany { ref fetch, .. } => fetch.clone(),
             _ => unreachable!(),
         }
     }
-    pub fn set_refer_cascade(&self, value: Option<Cascade>) {
+    pub fn get_refer_rt_cascade(&self) -> Option<Cascade> {
         match self.ty {
-            TypeMeta::Pointer { ref cascade, .. } => cascade.set(value),
-            TypeMeta::OneToOne { ref cascade, .. } => cascade.set(value),
-            TypeMeta::OneToMany { ref cascade, .. } => cascade.set(value),
-            TypeMeta::ManyToMany { ref cascade, .. } => cascade.set(value),
+            TypeMeta::Pointer { ref rt_cascade, .. } => rt_cascade.get(),
+            TypeMeta::OneToOne { ref rt_cascade, .. } => rt_cascade.get(),
+            TypeMeta::OneToMany { ref rt_cascade, .. } => rt_cascade.get(),
+            TypeMeta::ManyToMany { ref rt_cascade, .. } => rt_cascade.get(),
+            _ => unreachable!(),
+        }
+    }
+    pub fn set_refer_rt_cascade(&self, value: Option<Cascade>) {
+        match self.ty {
+            TypeMeta::Pointer { ref rt_cascade, .. } => rt_cascade.set(value),
+            TypeMeta::OneToOne { ref rt_cascade, .. } => rt_cascade.set(value),
+            TypeMeta::OneToMany { ref rt_cascade, .. } => rt_cascade.set(value),
+            TypeMeta::ManyToMany { ref rt_cascade, .. } => rt_cascade.set(value),
             _ => unreachable!(),
         };
     }
@@ -304,6 +323,9 @@ impl FieldMeta {
         }
         return false;
     }
+    pub fn is_fetch_eager(&self) -> bool {
+        self.get_refer_fetch() == Fetch::Eager
+    }
 }
 
 impl FieldMeta {
@@ -336,6 +358,16 @@ impl FieldMeta {
                     })
                     .collect::<Vec<_>>()
             })
+        })
+    }
+    fn pick_fetch(attr: &Attr) -> Fetch {
+        let default = true;
+        attr.get("fetch").map_or(Fetch::Lazy, |str| {
+            match str {
+                "lazy" => Fetch::Lazy,
+                "eager" => Fetch::Eager,
+                _ => unreachable!(),
+            }
         })
     }
     pub fn is_normal_type(ty: &str) -> bool {
@@ -405,7 +437,8 @@ impl FieldMeta {
                 refer_id: refer_id_field.to_string(),
                 entity: entity_name,
                 cascades: Self::pick_cascades(attr),
-                cascade: Cell::new(None),
+                rt_cascade: Cell::new(None),
+                fetch: Self::pick_fetch(attr),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -422,7 +455,8 @@ impl FieldMeta {
                 id: refer_id_field.to_string(),
                 entity: refer_entity,
                 cascades: Self::pick_cascades(attr),
-                cascade: Cell::new(None),
+                rt_cascade: Cell::new(None),
+                fetch: Self::pick_fetch(attr),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -444,7 +478,8 @@ impl FieldMeta {
                 id: refer_id_field.to_string(),
                 entity: refer_entity,
                 cascades: Self::pick_cascades(attr),
-                cascade: Cell::new(None),
+                rt_cascade: Cell::new(None),
+                fetch: Self::pick_fetch(attr),
             },
         };
         ret.push((entity.to_string(), refer_object));
@@ -472,7 +507,8 @@ impl FieldMeta {
                 entity: b.to_string(),
                 middle: middle.to_string(),
                 cascades: Self::pick_cascades(attr),
-                cascade: Cell::new(None),
+                rt_cascade: Cell::new(None),
+                fetch: Self::pick_fetch(attr),
             },
         };
         let mut ret = vec![(a, a_b_meta)];
