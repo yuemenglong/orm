@@ -460,27 +460,31 @@ impl EntityInner {
 
 // 和debug相关
 impl EntityInner {
-    fn index_map(&self) -> HashMap<String, usize> {
-        self.meta
-            .field_vec
-            .iter()
-            .enumerate()
-            .map(|(idx, key)| (key.clone(), idx))
-            .collect::<HashMap<_, _>>()
+    fn format(&self) -> String {
+        let inner = vec![self.fmt_value(),
+                         self.fmt_pointer(),
+                         self.fmt_one_one(),
+                         self.fmt_one_many(),
+                         self.fmt_many_many()]
+            .into_iter()
+            .filter(|s| s.len() > 0)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{{}}}", inner)
     }
     fn fmt_rc(rc: &EntityInnerPointer) -> String {
         let rc = rc.clone();
         let inner = rc.borrow();
-        format!("{:?}", inner)
+        inner.format()
     }
     fn fmt_value(&self) -> String {
         self.meta
             .get_non_refer_fields()
             .into_iter()
-            .flat_map(|key| {
-                let field = key.get_field_name();
+            .flat_map(|meta| {
+                let field = meta.get_field_name();
                 let value_opt = self.field_map.get(&field);
-                value_opt.map(|value| format!("{}: {:?}", field, value))
+                value_opt.map(|value| format!("{}: {}", field, meta.format(value.clone())))
             })
             .collect::<Vec<_>>()
             .join(", ")
@@ -489,12 +493,12 @@ impl EntityInner {
         self.meta
             .get_pointer_fields()
             .into_iter()
-            .flat_map(|key| {
-                let field = key.get_field_name();
+            .flat_map(|meta| {
+                let field = meta.get_field_name();
                 let value_opt = self.pointer_map.get(&field);
                 value_opt.map(|value| match value {
-                    None => format!("{}: NULL", field),
-                    &Some(value) => format!("{}: {:?}", field, Self::fmt_rc(value)),
+                    &None => format!("{}: null", field),
+                    &Some(ref value) => format!("{}: {}", field, Self::fmt_rc(value)),
                 })
             })
             .collect::<Vec<_>>()
@@ -504,37 +508,47 @@ impl EntityInner {
         self.meta
             .get_one_one_fields()
             .into_iter()
-            .flat_map(|key| {
-                let field = key.get_field_name();
+            .flat_map(|meta| {
+                let field = meta.get_field_name();
                 let value_opt = self.one_one_map.get(&field);
                 value_opt.map(|value| match value {
-                    None => format!("{}: NULL", field),
-                    &Some(value) => format!("{}: {:?}", field, Self::fmt_rc(value)),
+                    &None => format!("{}: null", field),
+                    &Some(ref value) => format!("{}: {}", field, Self::fmt_rc(value)),
                 })
             })
             .collect::<Vec<_>>()
             .join(", ")
     }
-    fn fmt_map_value(map: &HashMap<String, Value>) -> String {
-        map.iter()
-            .map(|(key, value)| format!("{}: {:?}", key, value))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-    fn fmt_map_opt(map: &HashMap<String, Option<EntityInnerPointer>>) -> String {
-        map.iter()
-            .map(|(key, value)| {
-                let value_string = value.as_ref().map_or("NULL".to_string(), Self::fmt_rc);
-                format!("{}: {}", key, value_string)
+    fn fmt_one_many(&self) -> String {
+        self.meta
+            .get_one_many_fields()
+            .into_iter()
+            .flat_map(|meta| {
+                let field = meta.get_field_name();
+                let vec_opt = self.one_many_map.get(&field);
+                vec_opt.map(|vec| {
+                    let vec_string = vec.iter().map(Self::fmt_rc).collect::<Vec<_>>().join(", ");
+                    format!("{}: [{}]", field, vec_string)
+                })
             })
             .collect::<Vec<_>>()
             .join(", ")
     }
-    fn fmt_map_vec(map: &HashMap<String, Vec<EntityInnerPointer>>) -> String {
-        map.iter()
-            .map(|(key, vec)| {
-                let value_string = vec.iter().map(Self::fmt_rc).collect::<Vec<_>>().join(", ");
-                format!("{}: [{}]", key, value_string)
+    fn fmt_many_many(&self) -> String {
+        self.meta
+            .get_many_many_fields()
+            .into_iter()
+            .flat_map(|meta| {
+                let field = meta.get_field_name();
+                let vec_opt = self.many_many_map.get(&field);
+                vec_opt.map(|pair_vec| {
+                    let vec_string = pair_vec.iter()
+                        .map(|&(_, ref rc)| rc)
+                        .map(Self::fmt_rc)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{}: [{}]", field, vec_string)
+                })
             })
             .collect::<Vec<_>>()
             .join(", ")
@@ -543,32 +557,7 @@ impl EntityInner {
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let many_many_map = self.many_many_map
-            .iter()
-            .map(|(ref key, ref pair_vec)| {
-                let vec = pair_vec.iter().map(|&(_, ref b_rc)| b_rc.clone()).collect::<Vec<_>>();
-                (key.to_string(), vec)
-            })
-            .collect::<HashMap<_, _>>();
-        let middle_map = self.many_many_map
-            .iter()
-            .map(|(ref key, ref pair_vec)| {
-                let vec =
-                    pair_vec.iter().filter_map(|&(ref m_rc, _)| m_rc.clone()).collect::<Vec<_>>();
-                (format!("_{}", key), vec)
-            })
-            .collect::<HashMap<_, _>>();
-        let inner = vec![Self::fmt_map_value(&self.field_map),
-                         Self::fmt_map_opt(&self.pointer_map),
-                         Self::fmt_map_opt(&self.one_one_map),
-                         Self::fmt_map_vec(&self.one_many_map),
-                         Self::fmt_map_vec(&many_many_map),
-                         Self::fmt_map_vec(&middle_map)]
-            .into_iter()
-            .filter(|s| s.len() > 0)
-            .collect::<Vec<_>>()
-            .join(", ");
-        write!(f, "{{{}}}", inner)
+        write!(f, "{}", self.format())
     }
 }
 

@@ -5,6 +5,8 @@ use attr::Attr;
 use std::str::FromStr;
 use regex::Regex;
 
+use mysql;
+
 #[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
     NULL,
@@ -17,7 +19,7 @@ pub enum Cascade {
 enum TypeMeta {
     NULL,
     Id,
-    Number {
+    Integer {
         number: String,
         column: String,
         nullable: bool,
@@ -85,7 +87,7 @@ impl FieldMeta {
     pub fn get_column_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "id".to_string(),
-            TypeMeta::Number { ref column, .. } => column.to_string(),
+            TypeMeta::Integer { ref column, .. } => column.to_string(),
             TypeMeta::String { ref column, .. } => column.to_string(),
             _ => unreachable!(),
         }
@@ -96,7 +98,7 @@ impl FieldMeta {
     pub fn get_type_name(&self) -> String {
         match self.ty {
             TypeMeta::Id => "u64".to_string(),
-            TypeMeta::Number { ref number, .. } => number.to_string(),
+            TypeMeta::Integer { ref number, .. } => number.to_string(),
             TypeMeta::String { .. } => "String".to_string(),
             TypeMeta::Pointer { ref entity, .. } => entity.to_string(),
             TypeMeta::OneToOne { ref entity, .. } => entity.to_string(),
@@ -121,7 +123,7 @@ impl FieldMeta {
         };
         match self.ty {
             TypeMeta::Id => "`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT".to_string(),
-            TypeMeta::Number { ref number, ref column, ref nullable } => {
+            TypeMeta::Integer { ref number, ref column, ref nullable } => {
                 format!("`{}` {}{}",
                         column,
                         Self::get_db_type_number(number),
@@ -139,7 +141,7 @@ impl FieldMeta {
     pub fn get_type_name_set(&self) -> String {
         match self.ty {
             TypeMeta::Id => self.get_type_name(),
-            TypeMeta::Number { .. } => self.get_type_name(),
+            TypeMeta::Integer { .. } => self.get_type_name(),
             TypeMeta::String { .. } => "&str".to_string(),
             TypeMeta::Pointer { ref entity, .. } => format!("&{}", entity),
             TypeMeta::OneToOne { ref entity, .. } => format!("&{}", entity),
@@ -157,7 +159,7 @@ impl FieldMeta {
     }
     pub fn is_type_normal(&self) -> bool {
         match self.ty {
-            TypeMeta::Number { .. } => true,
+            TypeMeta::Integer { .. } => true,
             TypeMeta::String { .. } => true,
             _ => false,
         }
@@ -352,7 +354,7 @@ impl FieldMeta {
     }
     fn new_normal(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         match ty {
-            "i32" | "u32" | "i64" | "u64" => Self::new_number(entity, field, ty, attr),
+            "i32" | "u32" | "i64" | "u64" => Self::new_integer(entity, field, ty, attr),
             "String" => Self::new_string(entity, field, ty, attr),
             _ => unreachable!(),
         }
@@ -381,10 +383,10 @@ impl FieldMeta {
         };
         vec![(entity.to_string(), meta)]
     }
-    fn new_number(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+    fn new_integer(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let meta = FieldMeta {
             field: field.to_string(),
-            ty: TypeMeta::Number {
+            ty: TypeMeta::Integer {
                 number: ty.to_string(),
                 column: field.to_string(),
                 nullable: Self::pick_nullable(attr),
@@ -396,7 +398,7 @@ impl FieldMeta {
         let refer_id_field = format!("{}_id", field);
         let entity_name = ty.to_string();
         // 对象与id都挂在A上
-        let mut ret = FieldMeta::new_number(entity, refer_id_field.as_ref(), "u64", attr);
+        let mut ret = FieldMeta::new_integer(entity, refer_id_field.as_ref(), "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::Pointer {
@@ -413,7 +415,7 @@ impl FieldMeta {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
         let refer_entity = ty.to_string();
-        let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
+        let mut ret = FieldMeta::new_integer(&refer_entity, &refer_id_field, "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToOne {
@@ -435,7 +437,7 @@ impl FieldMeta {
         // 对象挂在A上，id挂在B上
         let refer_id_field = format!("{}_id", entity.to_lowercase());
         let refer_entity = caps.get(1).unwrap().as_str().to_string();
-        let mut ret = FieldMeta::new_number(&refer_entity, &refer_id_field, "u64", attr);
+        let mut ret = FieldMeta::new_integer(&refer_entity, &refer_id_field, "u64", attr);
         let refer_object = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::OneToMany {
@@ -460,8 +462,8 @@ impl FieldMeta {
         let b_id = format!("{}_id", b.to_lowercase());
         // 生成中间表
         let middle = format!("{}{}", a, b);
-        let a_id_vec = FieldMeta::new_number(&middle, &a_id, "u64", attr);
-        let b_id_vec = FieldMeta::new_number(&middle, &b_id, "u64", attr);
+        let a_id_vec = FieldMeta::new_integer(&middle, &a_id, "u64", attr);
+        let b_id_vec = FieldMeta::new_integer(&middle, &b_id, "u64", attr);
         let a_b_meta = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::ManyToMany {
@@ -477,6 +479,17 @@ impl FieldMeta {
         ret.extend(a_id_vec);
         ret.extend(b_id_vec);
         ret
+    }
+    pub fn format(&self, value: mysql::Value) -> String {
+        if value == mysql::Value::NULL {
+            return "null".to_string();
+        }
+        match self.ty {
+            TypeMeta::Id => mysql::from_value::<u64>(value).to_string(),
+            TypeMeta::Integer { .. } => mysql::from_value::<i64>(value).to_string(),
+            TypeMeta::String { .. } => format!("\"{}\"", mysql::from_value::<String>(value)),
+            _ => unreachable!(),
+        }
     }
 }
 
