@@ -343,6 +343,7 @@ impl<C> Session<C>
         Self::take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
         Self::take_entity_one_one(a_rc.clone(), &mut row, table_alias, &mut map);
         Self::take_entity_one_many(a_rc.clone(), &mut row, table_alias, &mut map);
+        Self::take_entity_many_many(a_rc.clone(), &mut row, table_alias, &mut map);
         Some(a_rc)
     }
     fn take_entity_pointer(a_rc: EntityInnerPointer,
@@ -401,30 +402,39 @@ impl<C> Session<C>
             }
         }
     }
-    // fn take_entity_many_many(a_rc: EntityInnerPointer,
-    //                         mut row: &mut Row,
-    //                         table_alias: &str,
-    //                         mut map: &mut HashMap<String, EntityInnerPointer>) {
-    //     let mut a = a_rc.borrow_mut();
-    //     for a_b_meta in a.meta.get_one_many_fields() {
-    //         let b_entity = a_b_meta.get_refer_entity();
-    //         let a_b_field = a_b_meta.get_field_name();
-    //         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
-    //         let b_table_alias = format!("{}_{}", table_alias, a_b_field);
-    //         match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
-    //             Some(b_rc) => {
-    //                 let key = format!("ONE_MANY@{}_{}",
-    //                                   b_table_alias,
-    //                                   b_rc.borrow().get_id_u64().unwrap());
-    //                 if !map.contains_key(&key) {
-    //                     a.push_one_many(&a_b_field, b_rc.clone());
-    //                 }
-    //                 map.entry(key).or_insert(b_rc);
-    //             }
-    //             None => {}
-    //         }
-    //     }
-    // }
+    fn take_entity_many_many(a_rc: EntityInnerPointer,
+                             mut row: &mut Row,
+                             table_alias: &str,
+                             mut map: &mut HashMap<String, EntityInnerPointer>) {
+        let mut a = a_rc.borrow_mut();
+        for a_b_meta in a.meta.get_many_many_fields() {
+            let b_entity = a_b_meta.get_refer_entity();
+            let mid_entity = a_b_meta.get_many_many_middle_entity();
+            let a_b_field = a_b_meta.get_field_name();
+            let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+            let mid_meta = a.orm_meta.entity_map.get(&mid_entity).unwrap();
+            let b_table_alias = format!("{}_{}", table_alias, a_b_field);
+            let mid_table_alias = format!("{}__{}", table_alias, a_b_field);
+            match Self::take_entity(&mut row, &b_table_alias, &b_meta, &a.orm_meta, &mut map) {
+                Some(b_rc) => {
+                    let key = format!("MANY_MANY@{}_{}",
+                                      b_table_alias,
+                                      b_rc.borrow().get_id_u64().unwrap());
+                    if !map.contains_key(&key) {
+                        let mid_rc = Self::take_entity(&mut row,
+                                                       &mid_table_alias,
+                                                       &mid_meta,
+                                                       &a.orm_meta,
+                                                       &mut map)
+                            .unwrap();
+                        a.push_many_many(&a_b_field, (mid_rc, b_rc.clone()));
+                    }
+                    map.entry(key).or_insert(b_rc);
+                }
+                None => {}
+            }
+        }
+    }
     fn gen_sql(entity: &str,
                table_alias: &str,
                orm_meta: &'static OrmMeta,
@@ -561,6 +571,11 @@ impl<C> Session<C>
                                  &mid_b_id_column,
                                  &b_table_alias);
             tables.push(join_mid);
+            Self::gen_sql(&mid_entity,
+                          &mid_table_alias,
+                          orm_meta,
+                          &mut tables,
+                          &mut columns);
             tables.push(join_b);
             Self::gen_sql(&b_entity,
                           &b_table_alias,
