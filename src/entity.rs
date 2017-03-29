@@ -21,10 +21,10 @@ use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
 use meta::Cascade;
+use session::Session;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
-#[derive(Clone)]
 pub struct EntityInner {
     pub orm_meta: &'static OrmMeta,
     pub meta: &'static EntityMeta,
@@ -35,7 +35,8 @@ pub struct EntityInner {
     pub many_many_map: HashMap<String, Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>>,
 
     pub cascade: Option<Cascade>,
-    pub cache: Vec<(String, EntityInnerPointer)>,
+    pub session: Option<Session>,
+    // pub cache: Vec<(String, EntityInnerPointer)>,
 }
 
 // 和字段编辑相关
@@ -50,7 +51,8 @@ impl EntityInner {
             one_many_map: HashMap::new(),
             many_many_map: HashMap::new(),
             cascade: None,
-            cache: Vec::new(),
+            session: None,
+            // cache: Vec::new(),
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
@@ -59,7 +61,7 @@ impl EntityInner {
         //     .map(|meta| (meta.get_field_name(), Value::NULL))
         //     .collect();
         // 用默认值?
-        // 一旦有则为正常值，外层无法设为NULL
+        // 一旦有则为正常值，不能为NULL，因为外层无法设为NULL
         let field_map: HashMap<String, Value> = HashMap::new();
         // 避免lazy load
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
@@ -88,7 +90,8 @@ impl EntityInner {
             one_many_map: one_many_map,
             many_many_map: many_many_map,
             cascade: None,
-            cache: Vec::new(),
+            session: None,
+            // cache: Vec::new(),
         }
     }
 
@@ -157,7 +160,7 @@ impl EntityInner {
         if old_b.is_some() {
             let old_b = old_b.unwrap();
             old_b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
-            a.cache.push((key.to_string(), old_b));
+            // a.cache.push((key.to_string(), old_b));
         }
         // b.a_id = a.id;
         let a_id = a.get_id_value();
@@ -187,7 +190,7 @@ impl EntityInner {
         // old_b.a_id = NULL;
         for b in old_b_vec {
             b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
-            a.cache.push((key.to_string(), b));
+            // a.cache.push((key.to_string(), b));
         }
         // b.a_id = a.id;
         let a_id = a.get_id_value();
@@ -292,7 +295,7 @@ impl EntityInner {
             .map(|&(_, ref b_rc)| b_rc.clone())
             .collect::<Vec<_>>()
     }
-    pub fn push_many_many(&mut self, key: &str, value:(EntityInnerPointer, EntityInnerPointer)){
+    pub fn push_many_many(&mut self, key: &str, value: (EntityInnerPointer, EntityInnerPointer)) {
         let mut a = self;
         let (m_rc, b_rc) = value;
         // a.bs.push(b)
@@ -359,9 +362,9 @@ impl EntityInner {
             }
         }
         // cache cascade
-        for &(_, ref b_rc) in &self.cache {
-            b_rc.borrow_mut().cascade_reset();
-        }
+        // for &(_, ref b_rc) in &self.cache {
+        //     b_rc.borrow_mut().cascade_reset();
+        // }
         // 字段cascade
         for a_b_meta in &self.meta.get_refer_fields() {
             a_b_meta.set_refer_rt_cascade(None);
@@ -440,6 +443,12 @@ impl EntityInner {
         let params = vec![("id".to_string(), id)];
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
+    }
+    pub fn set_session(&mut self, session: Session) {
+        self.session = Some(session);
+    }
+    pub fn clear_session(&mut self){
+        self.session = None;
     }
     // pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
     //     where C: GenericConnection

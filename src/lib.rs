@@ -16,6 +16,7 @@ mod attr;
 mod db;
 mod cond;
 mod entity;
+mod session;
 
 pub mod init;
 pub mod meta;

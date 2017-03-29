@@ -8,7 +8,7 @@ struct Person {
     #[fetch(eager)]
     addr: Address,
     #[pointer]
-    #[fetch(eager)]
+    // #[fetch(eager)]
     addr2: Address,
     #[one_one]
     #[cascade(insert, update, delete)]
