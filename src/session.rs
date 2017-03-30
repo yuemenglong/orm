@@ -18,7 +18,7 @@ use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-// use cond::Cond;
+use cond::Cond;
 use entity::Entity;
 use entity::EntityInner;
 use entity::EntityInnerPointer;
@@ -29,58 +29,82 @@ use meta::EntityMeta;
 use meta::FieldMeta;
 use meta::Cascade;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum SessionStatus {
+    Normal,
+    Closed,
+    Insert,
+    Update,
+    Select,
+    Delete,
+}
+
 pub struct Session {
     conn: Rc<RefCell<PooledConn>>,
     cache: Rc<RefCell<Vec<EntityInnerPointer>>>,
-    valid: Rc<Cell<bool>>,
+    status: Rc<Cell<SessionStatus>>,
 }
 impl Session {
     pub fn new(conn: PooledConn) -> Session {
         Session {
             conn: Rc::new(RefCell::new(conn)),
             cache: Rc::new(RefCell::new(Vec::new())),
-            valid: Rc::new(Cell::new(true)),
+            status: Rc::new(Cell::new(SessionStatus::Normal)),
         }
     }
 }
 
 impl Session {
     pub fn execute(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
-        self.execute_impl(a_rc, op)
+        let status = match op {
+            Cascade::NULL => SessionStatus::Normal,
+            Cascade::Insert => SessionStatus::Insert,
+            Cascade::Update => SessionStatus::Update,
+            Cascade::Delete => SessionStatus::Delete,
+        };
+        let old = self.status.get();
+        self.status.set(status);
+        let result = self.execute_impl(a_rc, op);
+        self.status.set(old);
+        return result;
     }
     pub fn select(&self,
-                  id: u64,
+                  cond:&Cond,
                   meta: &'static EntityMeta,
                   orm_meta: &'static OrmMeta)
                   -> Result<Vec<EntityInnerPointer>, Error> {
-        self.select_impl(id, meta, orm_meta)
+        let old = self.status.get();
+        self.status.set(SessionStatus::Select);
+        let result = self.select_impl(cond, meta, orm_meta);
+        self.status.set(old);
+        return result;
     }
     pub fn clone(&self) -> Session {
         Session {
             conn: self.conn.clone(),
             cache: self.cache.clone(),
-            valid: self.valid.clone(),
+            status: self.status.clone(),
         }
     }
-    pub fn close(&self){
+    pub fn close(&self) {
         self.close_impl();
     }
-    pub fn is_valid(&self) -> bool {
-        self.valid.get() == true
+    pub fn status(&self) -> SessionStatus {
+        self.status.get()
     }
 }
 
-impl Drop for Session{
-    fn drop(&mut self){
+impl Drop for Session {
+    fn drop(&mut self) {
         self.close();
     }
 }
 
 impl Session {
     fn close_impl(&self) -> Result<(), Error> {
-        self.valid.set(false);
+        self.status.set(SessionStatus::Closed);
         try!(self.batch_impl(self.cache.borrow().deref(), Cascade::Update));
-        for rc in self.cache.borrow().iter(){
+        for rc in self.cache.borrow().iter() {
             rc.borrow_mut().clear_session();
         }
         self.cache.borrow_mut().clear();
@@ -103,6 +127,10 @@ impl Session {
             return Ok(());
         }
         {
+            // 一上来就设为持久态
+            a_rc.borrow_mut().set_session(self.clone());
+        }
+        {
             // pointer
             let pointer_fields = Self::map_to_vec(&a_rc.borrow().pointer_map);
             try!(self.each_execute_refer(a_rc.clone(), &pointer_fields, op.clone()));
@@ -113,7 +141,6 @@ impl Session {
         {
             // self
             try!(self.execute_self(a_rc.clone(), op.clone()));
-            a_rc.borrow_mut().set_session(self.clone());
         }
         {
             // one one
@@ -252,7 +279,7 @@ impl Session {
 // select
 impl Session {
     fn select_impl(&self,
-                   id: u64,
+                   cond:&Cond,
                    meta: &'static EntityMeta,
                    orm_meta: &'static OrmMeta)
                    -> Result<Vec<EntityInnerPointer>, Error> {
@@ -269,14 +296,15 @@ impl Session {
             .map(|vec| vec.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join(",\n"))
             .collect::<Vec<_>>()
             .join(",\n\n");
-        tables.insert(0, meta.table_name.clone());
+        tables.insert(0, format!("{} AS {}", &meta.table_name, table_alias));
         let tables = tables.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join("\n");
-        let cond = format!("\t{}.id = {}", &meta.table_name, id);
-        let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n{}", fields, tables, cond);
+        // let cond = format!("\t{}.id = {}", &meta.table_name, id);
+        let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n\t{}", fields, tables, cond.to_sql());
         println!("{}", sql);
+        println!("{:?}", cond.to_params());
 
         let mut conn = self.conn.borrow_mut();
-        let query_result = try!(conn.query(sql));
+        let query_result = try!(conn.prep_exec(sql, cond.to_params()));
 
         let mut map: HashMap<String, EntityInnerPointer> = HashMap::new();
         let mut vec = Vec::new();
@@ -291,13 +319,17 @@ impl Session {
             vec.into_iter().unique_by(|rc| rc.borrow().get_id_u64().unwrap()).collect::<Vec<_>>();
         Ok(vec)
     }
-    fn take_entity(&self, mut row: &mut Row,
+    fn take_entity(&self,
+                   mut row: &mut Row,
                    table_alias: &str,
                    meta: &'static EntityMeta,
                    orm_meta: &'static OrmMeta,
                    mut map: &mut HashMap<String, EntityInnerPointer>)
                    -> Option<EntityInnerPointer> {
-        let mut a = EntityInner::default(meta, orm_meta);
+        // 关系是空的，这样才能判断出lazy的情况
+        let mut a = EntityInner::new(meta, orm_meta);
+        // 一上来就设为持久态
+        a.set_session(self.clone());
         a.set_values(&mut row, &table_alias);
         let id = a.get_id_u64();
         if id.is_none() {
@@ -310,7 +342,6 @@ impl Session {
             None => Rc::new(RefCell::new(a)),
         };
         map.insert(key, a_rc.clone());
-        a_rc.borrow_mut().set_session(self.clone());
 
         self.take_entity_pointer(a_rc.clone(), &mut row, table_alias, &mut map);
         self.take_entity_one_one(a_rc.clone(), &mut row, table_alias, &mut map);
@@ -318,7 +349,8 @@ impl Session {
         self.take_entity_many_many(a_rc.clone(), &mut row, table_alias, &mut map);
         Some(a_rc)
     }
-    fn take_entity_pointer(&self, a_rc: EntityInnerPointer,
+    fn take_entity_pointer(&self,
+                           a_rc: EntityInnerPointer,
                            mut row: &mut Row,
                            table_alias: &str,
                            mut map: &mut HashMap<String, EntityInnerPointer>) {
@@ -337,7 +369,8 @@ impl Session {
             }
         }
     }
-    fn take_entity_one_one(&self, a_rc: EntityInnerPointer,
+    fn take_entity_one_one(&self,
+                           a_rc: EntityInnerPointer,
                            mut row: &mut Row,
                            table_alias: &str,
                            mut map: &mut HashMap<String, EntityInnerPointer>) {
@@ -356,7 +389,8 @@ impl Session {
             }
         }
     }
-    fn take_entity_one_many(&self, a_rc: EntityInnerPointer,
+    fn take_entity_one_many(&self,
+                            a_rc: EntityInnerPointer,
                             mut row: &mut Row,
                             table_alias: &str,
                             mut map: &mut HashMap<String, EntityInnerPointer>) {
@@ -383,7 +417,8 @@ impl Session {
             }
         }
     }
-    fn take_entity_many_many(&self, a_rc: EntityInnerPointer,
+    fn take_entity_many_many(&self,
+                             a_rc: EntityInnerPointer,
                              mut row: &mut Row,
                              table_alias: &str,
                              mut map: &mut HashMap<String, EntityInnerPointer>) {
@@ -406,10 +441,10 @@ impl Session {
                                       b_rc.borrow().get_id_u64().unwrap());
                     if !map.contains_key(&key) {
                         let mid_rc = self.take_entity(&mut row,
-                                                       &mid_table_alias,
-                                                       &mid_meta,
-                                                       &a.orm_meta,
-                                                       &mut map)
+                                         &mid_table_alias,
+                                         &mid_meta,
+                                         &a.orm_meta,
+                                         &mut map)
                             .unwrap();
                         a.push_many_many(&a_b_field, (mid_rc, b_rc.clone()));
                     }

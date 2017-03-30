@@ -3,29 +3,15 @@ use macros;
 
 use mysql::Pool;
 use mysql::Error;
-use mysql::Value;
-use mysql::Row;
-
-use mysql::prelude::GenericConnection;
 
 use itertools::Itertools;
 
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::mem;
-use std::ops::DerefMut;
-
-// use cond::Cond;
 use entity::Entity;
-use entity::EntityInner;
-use entity::EntityInnerPointer;
 
 use meta;
 use meta::OrmMeta;
-use meta::EntityMeta;
-use meta::FieldMeta;
 use meta::Cascade;
+use cond::Cond;
 use session::Session;
 
 pub struct DB {
@@ -101,7 +87,8 @@ impl DB {
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
         let mut conn = self.pool.get_conn();
         let session = Session::new(conn.unwrap());
-        let vec = try!(session.select(id, E::meta(), E::orm_meta()));
+        let mut cond = Cond::new::<E>();
+        let vec = try!(session.select(cond.id(id), E::meta(), E::orm_meta()));
         match vec.len() {
             0 => Ok(None),
             _ => Ok(Some(E::from_inner(vec[0].clone()))),

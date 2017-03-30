@@ -14,12 +14,12 @@ mod formatter;
 mod visitor;
 mod attr;
 mod db;
-mod cond;
 mod entity;
 mod session;
 
 pub mod init;
 pub mod meta;
+pub mod cond;
 
 pub use entity::Entity;
 pub use entity::EntityInner;

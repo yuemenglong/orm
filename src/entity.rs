@@ -22,6 +22,7 @@ use meta::EntityMeta;
 use meta::FieldMeta;
 use meta::Cascade;
 use session::Session;
+use session::SessionStatus;
 
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
@@ -35,8 +36,7 @@ pub struct EntityInner {
     pub many_many_map: HashMap<String, Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>>,
 
     pub cascade: Option<Cascade>,
-    pub session: Option<Session>,
-    // pub cache: Vec<(String, EntityInnerPointer)>,
+    pub session: Option<Session>, // pub cache: Vec<(String, EntityInnerPointer)>,
 }
 
 // 和字段编辑相关
@@ -51,8 +51,7 @@ impl EntityInner {
             one_many_map: HashMap::new(),
             many_many_map: HashMap::new(),
             cascade: None,
-            session: None,
-            // cache: Vec::new(),
+            session: None, // cache: Vec::new(),
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
@@ -90,8 +89,7 @@ impl EntityInner {
             one_many_map: one_many_map,
             many_many_map: many_many_map,
             cascade: None,
-            session: None,
-            // cache: Vec::new(),
+            session: None, // cache: Vec::new(),
         }
     }
 
@@ -174,12 +172,14 @@ impl EntityInner {
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
         let mut a = &self;
         let a_b = a.one_one_map.get(key);
-        if a_b.is_none() {
-            // lazy load
-            // let a_b_meta = self.meta.field_map.get(key).unwrap();
-            unimplemented!();
+        if a_b.is_some() {
+            // 查到了就直接返回了
+            return a_b.unwrap().clone();
         }
-        a.one_one_map.get(key).unwrap().clone()
+        if !self.need_lazy_load(){
+            return None;
+        }
+        unimplemented!();
     }
 
     pub fn set_one_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
@@ -301,6 +301,30 @@ impl EntityInner {
         // a.bs.push(b)
         a.many_many_map.entry(key.to_string()).or_insert(Vec::new());
         a.many_many_map.get_mut(key).unwrap().push((Some(m_rc), b_rc));
+    }
+
+    fn need_lazy_load(&self)->bool{
+        // 以下都是没有查到的情况
+        if self.session.is_none() {
+            // 没有session，属于临时对象，不进行懒加载
+            return false;
+        }
+        // 以下为有session，即非临时对象的情况
+        let session = self.session.as_ref().unwrap();
+        if session.status() == SessionStatus::Closed {
+            // 游离态,抛异常
+            panic!("Can't Call Set In Detached Status");
+        }
+        if session.status() == SessionStatus::Select {
+            // 在执行查询的过程中，说明正在组装对象，不进行懒加载
+            return false;
+        }
+        if session.status() == SessionStatus::Normal{
+            // 最常见的情况，正常的lazy load的情况
+            return true;
+        }
+        // 未考虑到的情况
+        unreachable!(); 
     }
 }
 
@@ -447,7 +471,7 @@ impl EntityInner {
     pub fn set_session(&mut self, session: Session) {
         self.session = Some(session);
     }
-    pub fn clear_session(&mut self){
+    pub fn clear_session(&mut self) {
         self.session = None;
     }
     // pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
