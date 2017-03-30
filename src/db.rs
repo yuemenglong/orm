@@ -69,34 +69,39 @@ impl DB {
             Err(err) => Err(err),
         }
     }
-    pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<(), Error> {
-        let ret = self.execute(entity, Cascade::Insert);
-        entity.cascade_reset();
-        ret
+    pub fn insert<E: Entity>(&self, entity: &E) -> Result<(), Error> {
+        // let ret = self.execute(entity, Cascade::Insert);
+        // entity.cascade_reset();
+        // ret
+        let session = self.get_session();
+        session.insert(entity)
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let ret = self.execute(entity, Cascade::Update);
-        entity.cascade_reset();
-        ret
+        // let ret = self.execute(entity, Cascade::Update);
+        // entity.cascade_reset();
+        // ret
+        let session = self.get_session();
+        session.update(entity)
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<(), Error> {
-        let ret = self.execute(&entity, Cascade::Delete);
-        entity.cascade_reset();
-        ret
+        // let ret = self.execute(&entity, Cascade::Delete);
+        // entity.cascade_reset();
+        // ret
+        let session = self.get_session();
+        session.delete(entity)
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
         let mut conn = self.pool.get_conn();
         let session = Session::new(conn.unwrap());
         let mut cond = Cond::new::<E>();
-        let vec = try!(session.select(cond.id(id), E::meta(), E::orm_meta()));
+        let mut vec = try!(session.select::<E>(cond.id(id)));
         match vec.len() {
             0 => Ok(None),
-            _ => Ok(Some(E::from_inner(vec[0].clone()))),
+            _ => Ok(Some(vec.swap_remove(0))),
         }
     }
-    pub fn execute<E: Entity>(&self, entity: &E, op: Cascade) -> Result<(), Error> {
+    pub fn get_session(&self) -> Session {
         let mut conn = self.pool.get_conn();
-        let session = Session::new(conn.unwrap());
-        session.execute(entity.inner().clone(), op.clone())
+        Session::new(conn.unwrap())
     }
 }

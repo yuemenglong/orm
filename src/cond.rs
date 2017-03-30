@@ -34,6 +34,21 @@ impl Cond {
             items: Vec::new(),
         }
     }
+    pub fn from_meta(meta:&'static EntityMeta, orm_meta:&'static OrmMeta) -> Cond
+    {
+        Cond {
+            meta: meta,
+            orm_meta: orm_meta,
+            alias: meta.entity_name.to_string(),
+            items: Vec::new(),
+        }
+    }
+    pub fn meta(&self)->&'static EntityMeta{
+        self.meta
+    }
+    pub fn orm_meta(&self)->&'static OrmMeta{
+        self.orm_meta
+    }
     pub fn id(&mut self, id: u64) -> &mut Self {
         self.items.push(Item::Id(Value::from(id)));
         self

@@ -55,7 +55,7 @@ impl Session {
 }
 
 impl Session {
-    pub fn execute(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+    fn execute(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         let status = match op {
             Cascade::NULL => SessionStatus::Normal,
             Cascade::Insert => SessionStatus::Insert,
@@ -64,20 +64,43 @@ impl Session {
         };
         let old = self.status.get();
         self.status.set(status);
-        let result = self.execute_impl(a_rc, op);
+        let result = self.execute_impl(a_rc.clone(), op);
         self.status.set(old);
+        // 重置动态级联标记
+        a_rc.borrow_mut().cascade_reset();
         return result;
     }
-    pub fn select(&self,
-                  cond:&Cond,
-                  meta: &'static EntityMeta,
-                  orm_meta: &'static OrmMeta)
-                  -> Result<Vec<EntityInnerPointer>, Error> {
+    pub fn insert<E>(&self, entity: &E) -> Result<(), Error>
+        where E: Entity
+    {
+        self.execute(entity.inner(), Cascade::Insert)
+    }
+    pub fn update<E>(&self, entity: &E) -> Result<(), Error>
+        where E: Entity
+    {
+        self.execute(entity.inner(), Cascade::Update)
+    }
+    pub fn delete<E>(&self, entity: E) -> Result<(), Error>
+        where E: Entity
+    {
+        self.execute(entity.inner(), Cascade::Delete)
+    }
+    pub fn select<E>(&self, cond: &Cond) -> Result<Vec<E>, Error>
+        where E: Entity
+    {
+        self.select_inner(cond).map(|vec| {
+            // let () = vec;
+            vec.into_iter()
+                .map(E::from_inner)
+                .collect::<Vec<E>>()
+        })
+    }
+    pub fn select_inner(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
         let old = self.status.get();
         self.status.set(SessionStatus::Select);
-        let result = self.select_impl(cond, meta, orm_meta);
+        let result = self.select_impl(cond);
         self.status.set(old);
-        return result;
+        result
     }
     pub fn clone(&self) -> Session {
         Session {
@@ -278,11 +301,9 @@ impl Session {
 
 // select
 impl Session {
-    fn select_impl(&self,
-                   cond:&Cond,
-                   meta: &'static EntityMeta,
-                   orm_meta: &'static OrmMeta)
-                   -> Result<Vec<EntityInnerPointer>, Error> {
+    fn select_impl(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
+        let meta = cond.meta();
+        let orm_meta = cond.orm_meta();
         let table_alias = &meta.table_name;
         let mut tables = Vec::new();
         let mut fields = Vec::new();
@@ -299,7 +320,10 @@ impl Session {
         tables.insert(0, format!("{} AS {}", &meta.table_name, table_alias));
         let tables = tables.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join("\n");
         // let cond = format!("\t{}.id = {}", &meta.table_name, id);
-        let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n\t{}", fields, tables, cond.to_sql());
+        let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n\t{}",
+                          fields,
+                          tables,
+                          cond.to_sql());
         println!("{}", sql);
         println!("{:?}", cond.to_params());
 

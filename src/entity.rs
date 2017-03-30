@@ -24,6 +24,8 @@ use meta::Cascade;
 use session::Session;
 use session::SessionStatus;
 
+use cond::Cond;
+
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
 pub struct EntityInner {
@@ -176,10 +178,22 @@ impl EntityInner {
             // 查到了就直接返回了
             return a_b.unwrap().clone();
         }
-        if !self.need_lazy_load(){
+        if !a.need_lazy_load(){
             return None;
         }
-        unimplemented!();
+        // 懒加载
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_entity = a_b_meta.get_refer_entity();
+        let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        let a_id = a.get_id_value();
+        let b_a_id_field = a_b_meta.get_one_one_id();
+        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        cond.eq(&b_a_id_field, a_id);
+        let session = a.session.as_ref().unwrap();
+        let res = session.select_inner(&cond);
+        println!("{:?}", res);
+        return None;
+        // unimplemented!();
     }
 
     pub fn set_one_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
