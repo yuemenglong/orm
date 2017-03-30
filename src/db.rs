@@ -73,21 +73,21 @@ impl DB {
         // let ret = self.execute(entity, Cascade::Insert);
         // entity.cascade_reset();
         // ret
-        let session = self.get_session();
+        let session = self.open_session();
         session.insert(entity)
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
         // let ret = self.execute(entity, Cascade::Update);
         // entity.cascade_reset();
         // ret
-        let session = self.get_session();
+        let session = self.open_session();
         session.update(entity)
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<(), Error> {
         // let ret = self.execute(&entity, Cascade::Delete);
         // entity.cascade_reset();
         // ret
-        let session = self.get_session();
+        let session = self.open_session();
         session.delete(entity)
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
@@ -100,7 +100,7 @@ impl DB {
             _ => Ok(Some(vec.swap_remove(0))),
         }
     }
-    pub fn get_session(&self) -> Session {
+    pub fn open_session(&self) -> Session {
         let mut conn = self.pool.get_conn();
         Session::new(conn.unwrap())
     }

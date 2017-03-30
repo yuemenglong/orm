@@ -190,9 +190,11 @@ impl EntityInner {
         let mut cond = Cond::from_meta(b_meta, a.orm_meta);
         cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
-        let res = session.select_inner(&cond);
-        println!("{:?}", res);
-        return None;
+        let res = session.one_inner(&cond);
+        if res.is_err(){
+            panic!("Get One One Fail");
+        }
+        res.unwrap()
         // unimplemented!();
     }
 
@@ -327,7 +329,7 @@ impl EntityInner {
         let session = self.session.as_ref().unwrap();
         if session.status() == SessionStatus::Closed {
             // 游离态,抛异常
-            panic!("Can't Call Set In Detached Status");
+            panic!("Can't Call Set/Get In Detached Status");
         }
         if session.status() == SessionStatus::Select {
             // 在执行查询的过程中，说明正在组装对象，不进行懒加载

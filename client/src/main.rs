@@ -38,11 +38,15 @@ fn select_test(db: &ast::DB) {
     p.get_teachers().get_mut(0).unwrap().set_name("Cici");
     p.get_teachers().get_mut(1).unwrap().set_name("Dick");
     p.cascade_teachers_insert();
-    db.insert(&p).unwrap();
+
+    let session = db.open_session();
+    session.insert(&p).unwrap();
     let id = p.get_id();
 
     let p: Person = db.get(id).unwrap().unwrap();
     p.debug();
+
+    p.get_account().debug();
 }
 
 fn refer_test(db: &ast::DB) {

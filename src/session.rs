@@ -102,6 +102,16 @@ impl Session {
         self.status.set(old);
         result
     }
+    pub fn one_inner(&self, cond: &Cond) -> Result<Option<EntityInnerPointer>, Error> {
+        let old = self.status.get();
+        self.status.set(SessionStatus::Select);
+        let result = self.select_impl(cond);
+        self.status.set(old);
+        result.map(|mut vec| match vec.len() {
+            0 => None,
+            _ => Some(vec.swap_remove(0)),
+        })
+    }
     pub fn clone(&self) -> Session {
         Session {
             conn: self.conn.clone(),
@@ -114,12 +124,6 @@ impl Session {
     }
     pub fn status(&self) -> SessionStatus {
         self.status.get()
-    }
-}
-
-impl Drop for Session {
-    fn drop(&mut self) {
-        self.close();
     }
 }
 
@@ -314,18 +318,18 @@ impl Session {
                       &mut fields);
 
         let fields = fields.into_iter()
-            .map(|vec| vec.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join(",\n"))
+            .map(|vec| vec.iter().map(|line| format!("\t{}", line)).collect::<Vec<_>>().join(",\n"))
             .collect::<Vec<_>>()
             .join(",\n\n");
         tables.insert(0, format!("{} AS {}", &meta.table_name, table_alias));
-        let tables = tables.iter().map(|l| format!("\t{}", l)).collect::<Vec<_>>().join("\n");
+        let tables = tables.iter().map(|line| format!("\t{}", line)).collect::<Vec<_>>().join("\n");
         // let cond = format!("\t{}.id = {}", &meta.table_name, id);
         let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n\t{}",
                           fields,
                           tables,
                           cond.to_sql());
         println!("{}", sql);
-        println!("{:?}", cond.to_params());
+        println!("\t{:?}", cond.to_params());
 
         let mut conn = self.conn.borrow_mut();
         let query_result = try!(conn.prep_exec(sql, cond.to_params()));
