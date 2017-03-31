@@ -39,6 +39,17 @@ pub enum SessionStatus {
     Delete,
 }
 
+impl From<Cascade> for SessionStatus {
+    fn from(c: Cascade) -> SessionStatus {
+        match c {
+            Cascade::NULL => SessionStatus::Normal,
+            Cascade::Insert => SessionStatus::Insert,
+            Cascade::Update => SessionStatus::Update,
+            Cascade::Delete => SessionStatus::Delete,
+        }
+    }
+}
+
 pub struct Session {
     conn: Rc<RefCell<PooledConn>>,
     cache: Rc<RefCell<Vec<EntityInnerPointer>>>,
@@ -52,64 +63,91 @@ impl Session {
             status: Rc::new(Cell::new(SessionStatus::Normal)),
         }
     }
-}
-
-impl Session {
-    fn execute(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
-        let status = match op {
-            Cascade::NULL => SessionStatus::Normal,
-            Cascade::Insert => SessionStatus::Insert,
-            Cascade::Update => SessionStatus::Update,
-            Cascade::Delete => SessionStatus::Delete,
-        };
-        let old = self.status.get();
-        self.status.set(status);
-        let result = self.execute_impl(a_rc.clone(), op);
-        self.status.set(old);
-        // 重置动态级联标记
-        a_rc.borrow_mut().cascade_reset();
-        return result;
-    }
     pub fn insert<E>(&self, entity: &E) -> Result<(), Error>
         where E: Entity
     {
-        self.execute(entity.inner(), Cascade::Insert)
+        self.execute_inner(entity.inner(), Cascade::Insert)
     }
     pub fn update<E>(&self, entity: &E) -> Result<(), Error>
         where E: Entity
     {
-        self.execute(entity.inner(), Cascade::Update)
+        self.execute_inner(entity.inner(), Cascade::Update)
     }
     pub fn delete<E>(&self, entity: E) -> Result<(), Error>
         where E: Entity
     {
-        self.execute(entity.inner(), Cascade::Delete)
+        self.execute_inner(entity.inner(), Cascade::Delete)
     }
     pub fn select<E>(&self, cond: &Cond) -> Result<Vec<E>, Error>
         where E: Entity
     {
         self.select_inner(cond).map(|vec| {
-            // let () = vec;
             vec.into_iter()
                 .map(E::from_inner)
                 .collect::<Vec<E>>()
         })
     }
-    pub fn select_inner(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
+    pub fn one<E>(&self, cond: &Cond) -> Result<Option<E>, Error>
+        where E: Entity
+    {
+        self.one_inner(cond).map(|opt| opt.map(E::from_inner))
+    }
+    pub fn close(&self) {
+        self.flush_cache();
+        self.status.set(SessionStatus::Closed);
+    }
+}
+
+impl Session {
+    fn flush_cache(&self) -> Result<(), Error> {
+        try!(self.batch_impl(self.cache.borrow().deref(), Cascade::Update));
+        for rc in self.cache.borrow().iter() {
+            rc.borrow_mut().clear_session();
+        }
+        self.cache.borrow_mut().clear();
+        Ok(())
+    }
+    fn guard<F, S, R>(&self, status: S, cb: F) -> R
+        where F: FnOnce() -> R,
+              SessionStatus: From<S>
+    {
+        // 备份当前状态
+        let status = SessionStatus::from(status);
         let old = self.status.get();
-        self.status.set(SessionStatus::Select);
-        let result = self.select_impl(cond);
+        self.status.set(status);
+        let result = cb();
+        // 恢复当前状态
         self.status.set(old);
-        result
+        // 刷新缓存
+        self.flush_cache();
+        return result;
+    }
+    fn batch_inner(&self, vec: &Vec<EntityInnerPointer>, op: Cascade) -> Result<(), Error> {
+        self.guard(op.clone(), || {
+            let result = self.batch_impl(vec, op);
+            // 重置动态级联标记
+            for rc in vec.iter() {
+                rc.borrow_mut().cascade_reset();
+            }
+            result
+        })
+    }
+    fn execute_inner(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+        self.guard(op.clone(), || {
+            let result = self.execute_impl(a_rc.clone(), op);
+            a_rc.borrow_mut().cascade_reset();
+            result
+        })
+    }
+    pub fn select_inner(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
+        self.guard(SessionStatus::Select, || self.select_impl(cond))
     }
     pub fn one_inner(&self, cond: &Cond) -> Result<Option<EntityInnerPointer>, Error> {
-        let old = self.status.get();
-        self.status.set(SessionStatus::Select);
-        let result = self.select_impl(cond);
-        self.status.set(old);
-        result.map(|mut vec| match vec.len() {
-            0 => None,
-            _ => Some(vec.swap_remove(0)),
+        self.guard(SessionStatus::Select, || {
+            self.select_impl(cond).map(|mut vec| match vec.len() {
+                0 => None,
+                _ => Some(vec.swap_remove(0)),
+            })
         })
     }
     pub fn clone(&self) -> Session {
@@ -119,23 +157,8 @@ impl Session {
             status: self.status.clone(),
         }
     }
-    pub fn close(&self) {
-        self.close_impl();
-    }
     pub fn status(&self) -> SessionStatus {
         self.status.get()
-    }
-}
-
-impl Session {
-    fn close_impl(&self) -> Result<(), Error> {
-        self.status.set(SessionStatus::Closed);
-        try!(self.batch_impl(self.cache.borrow().deref(), Cascade::Update));
-        for rc in self.cache.borrow().iter() {
-            rc.borrow_mut().clear_session();
-        }
-        self.cache.borrow_mut().clear();
-        Ok(())
     }
 }
 
@@ -219,11 +242,6 @@ impl Session {
                 .collect::<Vec<_>>();
             try!(self.each_execute_refer_vec(a_rc.clone(), &middle_fields, op.clone()));
         }
-        {
-            // cache
-            // let cache = mem::replace(&mut a_rc.borrow_mut().cache, Vec::new());
-            // try!(self.each_execute_refer(a_rc.clone(), &cache, op.clone()));
-        }
         Ok(())
     }
     fn execute_self(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
@@ -272,7 +290,7 @@ impl Session {
                      -> Result<(), Error> {
         let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op);
         Self::clear_cascade(b_rc.clone());
-        self.execute(b_rc, cascade)
+        self.execute_impl(b_rc, cascade)
     }
     fn clear_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
         mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
