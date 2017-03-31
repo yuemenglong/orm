@@ -161,6 +161,7 @@ impl EntityInner {
             let old_b = old_b.unwrap();
             old_b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
             // a.cache.push((key.to_string(), old_b));
+            a.push_cache(old_b.clone());
         }
         // b.a_id = a.id;
         let a_id = a.get_id_value();
@@ -178,7 +179,7 @@ impl EntityInner {
             // 查到了就直接返回了
             return a_b.unwrap().clone();
         }
-        if !a.need_lazy_load(){
+        if !a.need_lazy_load() {
             return None;
         }
         // 懒加载
@@ -191,7 +192,7 @@ impl EntityInner {
         cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
         let res = session.one_inner(&cond);
-        if res.is_err(){
+        if res.is_err() {
             panic!("Get One One Fail");
         }
         res.unwrap()
@@ -207,6 +208,7 @@ impl EntityInner {
         for b in old_b_vec {
             b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
             // a.cache.push((key.to_string(), b));
+            a.push_cache(b.clone());
         }
         // b.a_id = a.id;
         let a_id = a.get_id_value();
@@ -293,6 +295,7 @@ impl EntityInner {
         // 剩下的老关系都要删掉
         for (m_id, m_rc) in old_b_mid_map.iter() {
             m_rc.borrow_mut().cascade_delete();
+            a.push_cache(m_rc.clone());
         }
         a.many_many_map.insert(key.to_string(), new_b_pair_vec);
     }
@@ -319,7 +322,7 @@ impl EntityInner {
         a.many_many_map.get_mut(key).unwrap().push((Some(m_rc), b_rc));
     }
 
-    fn need_lazy_load(&self)->bool{
+    fn need_lazy_load(&self) -> bool {
         // 以下都是没有查到的情况
         if self.session.is_none() {
             // 没有session，属于临时对象，不进行懒加载
@@ -335,12 +338,27 @@ impl EntityInner {
             // 在执行查询的过程中，说明正在组装对象，不进行懒加载
             return false;
         }
-        if session.status() == SessionStatus::Normal{
+        if session.status() == SessionStatus::Normal {
             // 最常见的情况，正常的lazy load的情况
             return true;
         }
         // 未考虑到的情况
-        unreachable!(); 
+        unreachable!();
+    }
+    fn push_cache(&self, rc: EntityInnerPointer) {
+        println!("{:?}", rc.borrow());
+        if self.session.is_none() {
+            return;
+        }
+        let session = self.session.as_ref().unwrap();
+        match session.status() {
+            SessionStatus::Normal => session.push_cache(rc),
+            SessionStatus::Closed => unreachable!(),
+            SessionStatus::Insert => unreachable!(),
+            SessionStatus::Update => unreachable!(),
+            SessionStatus::Select => unreachable!(),
+            SessionStatus::Delete => unreachable!(),
+        }
     }
 }
 
@@ -490,35 +508,6 @@ impl EntityInner {
     pub fn clear_session(&mut self) {
         self.session = None;
     }
-    // pub fn do_get<C>(&mut self, conn: &mut C) -> Result<(), Error>
-    //     where C: GenericConnection
-    // {
-    //     let sql = self.meta.sql_get();
-    //     let id = self.get_id_value();
-    //     let params = vec![("id".to_string(), id.clone())];
-    //     println!("{}, {:?}", sql, params);
-    //     let res = conn.prep_exec(sql, params);
-    //     if let Err(err) = res {
-    //         return Err(err);
-    //     }
-    //     let mut res = res.unwrap();
-    //     let row = res.next();
-    //     if row.is_none() {
-    //         // 没有读取到，返回id无效
-    //         return Err(Error::MySqlError(MySqlError {
-    //             state: "ID_NOT_EXIST".to_string(),
-    //             message: id.into_str(),
-    //             code: 60001,
-    //         }));
-    //     }
-    //     let row = row.unwrap();
-    //     if let Err(err) = row {
-    //         return Err(err);
-    //     }
-    //     let mut row = row.unwrap();
-    //     self.set_values(&res, &mut row, "");
-    //     Ok(())
-    // }
 }
 
 // 和debug相关
@@ -620,7 +609,8 @@ impl EntityInner {
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.format())
+        let entity = &self.meta.entity_name;
+        write!(f, "{}: {}", entity, self.format())
     }
 }
 
@@ -633,10 +623,7 @@ pub trait Entity {
     fn inner(&self) -> EntityInnerPointer;
     fn debug(&self) {
         let inner = self.inner();
-        let inner = inner.borrow();
-        let inner = inner.deref();
-        let entity = &Self::meta().entity_name;
-        println!("{}: {:?}", entity, inner);
+        println!("{:?}", inner.borrow());
     }
 
     fn do_inner<F, R>(&self, cb: F) -> R

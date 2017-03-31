@@ -96,6 +96,12 @@ impl Session {
         self.flush_cache();
         self.status.set(SessionStatus::Closed);
     }
+    pub fn status(&self) -> SessionStatus {
+        self.status.get()
+    }
+    pub fn push_cache(&self, rc: EntityInnerPointer) {
+        self.cache.borrow_mut().push(rc);
+    }
 }
 
 impl Session {
@@ -156,9 +162,6 @@ impl Session {
             cache: self.cache.clone(),
             status: self.status.clone(),
         }
-    }
-    pub fn status(&self) -> SessionStatus {
-        self.status.get()
     }
 }
 
