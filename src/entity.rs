@@ -352,12 +352,12 @@ impl EntityInner {
         }
         let session = self.session.as_ref().unwrap();
         match session.status() {
-            SessionStatus::Normal => session.push_cache(rc),
-            SessionStatus::Closed => unreachable!(),
-            SessionStatus::Insert => unreachable!(),
-            SessionStatus::Update => unreachable!(),
-            SessionStatus::Select => unreachable!(),
-            SessionStatus::Delete => unreachable!(),
+            SessionStatus::Closed => unreachable!(), // 异常情况
+            SessionStatus::Select => unreachable!(), // 目前的情况不应该出现
+            SessionStatus::Normal => session.push_cache(rc), // 在session内进行操作
+            SessionStatus::Insert => session.push_cache(rc), // 操作完成后的级联更新
+            SessionStatus::Update => session.push_cache(rc), // 操作完成后的级联更新
+            SessionStatus::Delete => session.push_cache(rc), // 操作完成后的级联更新
         }
     }
 }
