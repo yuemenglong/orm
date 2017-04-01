@@ -102,7 +102,8 @@ impl Session {
     }
     pub fn push_cache(&self, rc: EntityInnerPointer) {
         debug!("push_cache", rc.borrow());
-        debug!("push_cache length:", self.cache.borrow().len());
+        debug!("push_cache length:", self.cache.borrow().len() + 1);
+        panic!("{:?}", "test");
         self.cache.borrow_mut().push(rc);
     }
 }
@@ -212,6 +213,7 @@ impl Session {
         {
             // one one
             let one_one_fields = Self::map_to_vec(&a_rc.borrow().one_one_map);
+            // 是否要通过级联判断要不要set
             for &(ref field, ref b_rc) in one_one_fields.iter() {
                 a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
             }

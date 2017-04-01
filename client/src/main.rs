@@ -51,11 +51,11 @@ fn select_test(db: &ast::DB) {
     p.get_account().debug();
     println!("======================finish lazy get");
 
-    p.set_account(&Account::default());
-    println!("======================after set account");
+    // p.set_account(&Account::default());
+    // println!("======================after set account");
 
-    p.get_account().cascade_insert();
-    p.get_account().debug();
+    // p.get_account().cascade_insert();
+    // p.get_account().debug();
     session.update(&p);
     p.debug();
     println!("======================finish update");
