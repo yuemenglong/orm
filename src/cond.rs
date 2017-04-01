@@ -34,8 +34,7 @@ impl Cond {
             items: Vec::new(),
         }
     }
-    pub fn from_meta(meta:&'static EntityMeta, orm_meta:&'static OrmMeta) -> Cond
-    {
+    pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Cond {
         Cond {
             meta: meta,
             orm_meta: orm_meta,
@@ -43,10 +42,20 @@ impl Cond {
             items: Vec::new(),
         }
     }
-    pub fn meta(&self)->&'static EntityMeta{
+    pub fn by_id<E>(id: u64) -> Cond
+        where E: Entity
+    {
+        Cond {
+            meta: E::meta(),
+            orm_meta: E::orm_meta(),
+            alias: E::meta().entity_name.to_string(),
+            items: vec![Item::Id(Value::from(id))],
+        }
+    }
+    pub fn meta(&self) -> &'static EntityMeta {
         self.meta
     }
-    pub fn orm_meta(&self)->&'static OrmMeta{
+    pub fn orm_meta(&self) -> &'static OrmMeta {
         self.orm_meta
     }
     pub fn id(&mut self, id: u64) -> &mut Self {

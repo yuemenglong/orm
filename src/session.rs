@@ -87,31 +87,43 @@ impl Session {
                 .collect::<Vec<E>>()
         })
     }
-    pub fn one<E>(&self, cond: &Cond) -> Result<Option<E>, Error>
+    pub fn get<E>(&self, id: u64) -> Result<Option<E>, Error>
         where E: Entity
     {
-        self.one_inner(cond).map(|opt| opt.map(E::from_inner))
+        self.get_inner(Cond::new::<E>().id(id)).map(|opt| opt.map(E::from_inner))
     }
     pub fn close(&self) {
         self.flush_cache();
+        self.clear_session();
         self.status.set(SessionStatus::Closed);
     }
     pub fn status(&self) -> SessionStatus {
         self.status.get()
     }
     pub fn push_cache(&self, rc: EntityInnerPointer) {
+        debug!("push_cache", rc.borrow());
+        debug!("push_cache length:", self.cache.borrow().len());
         self.cache.borrow_mut().push(rc);
     }
 }
 
 impl Session {
-    fn flush_cache(&self) -> Result<(), Error> {
-        try!(self.batch_impl(self.cache.borrow().deref(), Cascade::Update));
+    fn clear_session(&self) {
         for rc in self.cache.borrow().iter() {
             rc.borrow_mut().clear_session();
         }
+    }
+    fn flush_cache(&self) -> Result<(), Error> {
+        // 一定要调用非guard函数！！，因为guard会调用flush_cache导致死循环
+        let result = self.cache.borrow().iter().fold(Ok(()), |result, rc| {
+            if result.is_err() {
+                return result;
+            }
+            let op = rc.borrow().cascade.map_or(Cascade::Update, |op| op);
+            self.execute_impl(rc.clone(), op)
+        });
         self.cache.borrow_mut().clear();
-        Ok(())
+        result
     }
     fn guard<F, S, R>(&self, status: S, cb: F) -> R
         where F: FnOnce() -> R,
@@ -148,7 +160,7 @@ impl Session {
     pub fn select_inner(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
         self.guard(SessionStatus::Select, || self.select_impl(cond))
     }
-    pub fn one_inner(&self, cond: &Cond) -> Result<Option<EntityInnerPointer>, Error> {
+    pub fn get_inner(&self, cond: &Cond) -> Result<Option<EntityInnerPointer>, Error> {
         self.guard(SessionStatus::Select, || {
             self.select_impl(cond).map(|mut vec| match vec.len() {
                 0 => None,
@@ -182,6 +194,8 @@ impl Session {
         {
             // 一上来就设为持久态
             a_rc.borrow_mut().set_session(self.clone());
+            // 本次事务内不会再操作该对象了
+            a_rc.borrow_mut().cascade_null();
         }
         {
             // pointer
@@ -292,11 +306,7 @@ impl Session {
                      op: Cascade)
                      -> Result<(), Error> {
         let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op);
-        Self::clear_cascade(b_rc.clone());
         self.execute_impl(b_rc, cascade)
-    }
-    fn clear_cascade(b_rc: EntityInnerPointer) -> Option<Cascade> {
-        mem::replace(&mut b_rc.borrow_mut().cascade, Some(Cascade::NULL))
     }
     fn calc_cascade(a_rc: EntityInnerPointer,
                     b_rc: EntityInnerPointer,

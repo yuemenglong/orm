@@ -41,12 +41,24 @@ fn select_test(db: &ast::DB) {
 
     let session = db.open_session();
     session.insert(&p).unwrap();
-    let id = p.get_id();
+    println!("======================finish insert");
 
-    let p: Person = db.get(id).unwrap().unwrap();
+    let id = p.get_id();
+    let mut p: Person = session.get(id).unwrap().unwrap();
     p.debug();
+    println!("======================finish get");
 
     p.get_account().debug();
+    println!("======================finish lazy get");
+
+    p.set_account(&Account::default());
+    println!("======================after set account");
+
+    p.get_account().cascade_insert();
+    p.get_account().debug();
+    session.update(&p);
+    p.debug();
+    println!("======================finish update");
 }
 
 fn refer_test(db: &ast::DB) {

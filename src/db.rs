@@ -70,23 +70,14 @@ impl DB {
         }
     }
     pub fn insert<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        // let ret = self.execute(entity, Cascade::Insert);
-        // entity.cascade_reset();
-        // ret
         let session = self.open_session();
         session.insert(entity)
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        // let ret = self.execute(entity, Cascade::Update);
-        // entity.cascade_reset();
-        // ret
         let session = self.open_session();
         session.update(entity)
     }
     pub fn delete<E: Entity>(&self, entity: E) -> Result<(), Error> {
-        // let ret = self.execute(&entity, Cascade::Delete);
-        // entity.cascade_reset();
-        // ret
         let session = self.open_session();
         session.delete(entity)
     }
@@ -94,11 +85,7 @@ impl DB {
         let mut conn = self.pool.get_conn();
         let session = Session::new(conn.unwrap());
         let mut cond = Cond::new::<E>();
-        let mut vec = try!(session.select::<E>(cond.id(id)));
-        match vec.len() {
-            0 => Ok(None),
-            _ => Ok(Some(vec.swap_remove(0))),
-        }
+        session.get::<E>(id)
     }
     pub fn open_session(&self) -> Session {
         let mut conn = self.pool.get_conn();

@@ -173,11 +173,13 @@ impl EntityInner {
         a.one_one_map.insert(key.to_string(), value);
     }
     pub fn get_one_one(&mut self, key: &str) -> Option<EntityInnerPointer> {
-        let mut a = &self;
-        let a_b = a.one_one_map.get(key);
-        if a_b.is_some() {
+        let mut a = self;
+        {
             // 查到了就直接返回了
-            return a_b.unwrap().clone();
+            let a_b = a.one_one_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().clone();
+            }
         }
         if !a.need_lazy_load() {
             return None;
@@ -191,11 +193,13 @@ impl EntityInner {
         let mut cond = Cond::from_meta(b_meta, a.orm_meta);
         cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
-        let res = session.one_inner(&cond);
+        let res = session.get_inner(&cond);
         if res.is_err() {
             panic!("Get One One Fail");
         }
-        res.unwrap()
+        let b_rc_opt = res.unwrap();
+        a.one_one_map.insert(key.to_string(), b_rc_opt.clone());
+        b_rc_opt
         // unimplemented!();
     }
 
@@ -346,7 +350,6 @@ impl EntityInner {
         unreachable!();
     }
     fn push_cache(&self, rc: EntityInnerPointer) {
-        println!("{:?}", rc.borrow());
         if self.session.is_none() {
             return;
         }
