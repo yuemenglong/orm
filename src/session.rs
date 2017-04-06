@@ -196,60 +196,12 @@ impl Session {
             // 本次事务内不会再操作该对象了
             a_rc.borrow_mut().cascade_null();
         }
-        {
-            // pointer
-            try!(self.execute_pointer(a_rc.clone(), op.clone()));
-        }
-        {
-            // self
-            try!(self.execute_self(a_rc.clone(), op.clone()));
-        }
-        {
-            // one one
-            let one_one_fields = Self::map_to_vec(&a_rc.borrow().one_one_map);
-            // 是否要通过级联判断要不要set
-            for &(ref field, ref b_rc) in one_one_fields.iter() {
-                a_rc.borrow_mut().set_one_one(field, Some(b_rc.clone()));
-            }
-            try!(self.each_execute_refer(a_rc.clone(), &one_one_fields, op.clone()));
-        }
-        {
-            // one many
-            try!(self.execute_one_many(a_rc.clone(), op.clone()));
-        }
-        {
-            // many many
-            // 实体表
-            let many_many_fields = a_rc.borrow()
-                .many_many_map
-                .clone()
-                .into_iter()
-                .map(|(field, pair_vec)| {
-                    let b_vec = pair_vec.into_iter().map(|(_, b_rc)| b_rc).collect::<Vec<_>>();
-                    (field, b_vec)
-                })
-                .collect::<Vec<_>>();
-            try!(self.each_execute_refer_vec(a_rc.clone(), &many_many_fields, op.clone()));
-            // 重新set回去
-            for (ref field, ref b_vec) in many_many_fields {
-                a_rc.borrow_mut().set_many_many(field, b_vec.clone());
-            }
-        }
-        {
-            // 中间表
-            let middle_fields = a_rc.borrow()
-                .many_many_map
-                .clone()
-                .into_iter()
-                .map(|(field, pair_vec)| {
-                    let m_vec = pair_vec.into_iter()
-                        .filter_map(|(m_opt, _)| m_opt)
-                        .collect::<Vec<_>>();
-                    (field, m_vec)
-                })
-                .collect::<Vec<_>>();
-            try!(self.each_execute_refer_vec(a_rc.clone(), &middle_fields, op.clone()));
-        }
+        try!(self.execute_pointer(a_rc.clone(), op.clone()));
+        try!(self.execute_self(a_rc.clone(), op.clone()));
+        try!(self.execute_one_one(a_rc.clone(), op.clone()));
+        try!(self.execute_one_many(a_rc.clone(), op.clone()));
+        try!(self.execute_many_many(a_rc.clone(), op.clone()));
+        try!(self.execute_middle(a_rc.clone(), op.clone()));
         Ok(())
     }
     fn execute_pointer(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
@@ -275,10 +227,37 @@ impl Session {
             pointer_fields.push((field.to_string(), b_rc.clone()));
         }
         let res = try!(self.each_execute_refer(a_rc.clone(), &pointer_fields, op.clone()));
+        // 更新关系
         for (field, b_rc) in pointer_fields {
             a_rc.borrow_mut().set_pointer(&field, Some(b_rc));
         }
         Ok(res)
+    }
+    fn execute_one_one(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+        let meta = a_rc.borrow().meta;
+        let one_one_map = a_rc.borrow().one_one_map.clone();
+        let mut one_one_fields = Vec::new();
+        for field_meta in meta.get_one_one_fields() {
+            let field = field_meta.get_field_name();
+            let b_rc = one_one_map.get(&field);
+            if b_rc.is_none() {
+                continue;
+            }
+            let b_rc = b_rc.unwrap();
+            if b_rc.is_none() {
+                continue;
+            }
+            let b_rc = b_rc.as_ref().unwrap();
+
+            let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), &field, op.clone());
+            if cascade == Cascade::NULL {
+                continue;
+            }
+            // 这里set是为了更新关系id
+            a_rc.borrow_mut().set_one_one(&field, Some(b_rc.clone()));
+            one_one_fields.push((field.to_string(), b_rc.clone()));
+        }
+        self.each_execute_refer(a_rc.clone(), &one_one_fields, op.clone())
     }
     fn execute_one_many(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         let meta = a_rc.borrow().meta;
@@ -291,8 +270,6 @@ impl Session {
                 continue;
             }
             let vec = vec_opt.unwrap();
-            // 这里set是为了更新关系id
-            a_rc.borrow_mut().set_one_many(&field, vec.clone());
             for b_rc in vec.iter() {
                 let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), &field, op.clone());
                 if cascade == Cascade::NULL {
@@ -300,9 +277,64 @@ impl Session {
                 }
                 one_many_fields.push((field.to_string(), b_rc.clone()));
             }
-
+            // 这里set是为了更新关系id
+            a_rc.borrow_mut().set_one_many(&field, vec.clone());
         }
         self.each_execute_refer(a_rc.clone(), &one_many_fields, op.clone())
+    }
+    fn execute_many_many(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+        let meta = a_rc.borrow().meta;
+        let many_many_map = a_rc.borrow().many_many_map.clone();
+        let mut many_many_fields = Vec::new();
+        // 先做对象表
+        for field_meta in meta.get_many_many_fields() {
+            let field = field_meta.get_field_name();
+            let vec_opt = many_many_map.get(&field);
+            if vec_opt.is_none() {
+                continue;
+            }
+            let vec = vec_opt.unwrap();
+            for &(_, ref b_rc) in vec.iter() {
+                let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), &field, op.clone());
+                if cascade == Cascade::NULL {
+                    continue;
+                }
+                many_many_fields.push((field.to_string(), b_rc.clone()));
+            }
+        }
+        try!(self.each_execute_refer(a_rc.clone(), &many_many_fields, op.clone()));
+        // 这里set是为了更新关系id
+        for (field, vec) in many_many_map.into_iter() {
+            let vec = vec.into_iter().map(|(_, b_rc)| b_rc).collect::<Vec<_>>();
+            a_rc.borrow_mut().set_many_many(&field, vec);
+        }
+        Ok(())
+    }
+    fn execute_middle(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
+        let meta = a_rc.borrow().meta;
+        let many_many_map = a_rc.borrow().many_many_map.clone();
+        let mut many_many_fields = Vec::new();
+        // 后做中间表
+        for field_meta in meta.get_many_many_fields() {
+            let field = field_meta.get_field_name();
+            let vec_opt = many_many_map.get(&field);
+            if vec_opt.is_none() {
+                continue;
+            }
+            let vec = vec_opt.unwrap();
+            for &(ref m_rc, _) in vec.iter() {
+                if m_rc.is_none() {
+                    continue;
+                }
+                let m_rc = m_rc.as_ref().unwrap();
+                let cascade = Self::calc_cascade(a_rc.clone(), m_rc.clone(), &field, op.clone());
+                if cascade == Cascade::NULL {
+                    continue;
+                }
+                many_many_fields.push((field.to_string(), m_rc.clone()));
+            }
+        }
+        self.each_execute_refer(a_rc.clone(), &many_many_fields, op.clone())
     }
     fn execute_self(&self, a_rc: EntityInnerPointer, op: Cascade) -> Result<(), Error> {
         match op {
@@ -312,25 +344,6 @@ impl Session {
             Cascade::NULL => Ok(()),
         }
     }
-    fn filter_cascade(a_rc: EntityInnerPointer,
-                      b_rc: EntityInnerPointer,
-                      field: &str,
-                      op: Cascade)
-                      -> Option<(String, EntityInnerPointer)> {
-        let cascade = Self::calc_cascade(a_rc.clone(), b_rc.clone(), field, op.clone());
-        match cascade {
-            Cascade::NULL => None,
-            _ => Some((field.to_string(), b_rc.clone())),
-        }
-    }
-    fn map_to_vec(map: &HashMap<String, Option<EntityInnerPointer>>)
-                  -> Vec<(String, EntityInnerPointer)> {
-        map.iter()
-            .map(|(field, opt)| opt.clone().map(|b_rc| (field.to_string(), b_rc.clone())))
-            .filter(Option::is_some)
-            .map(Option::unwrap)
-            .collect::<Vec<_>>()
-    }
     fn each_execute_refer(&self,
                           a_rc: EntityInnerPointer,
                           vec: &Vec<(String, EntityInnerPointer)>,
@@ -338,18 +351,6 @@ impl Session {
                           -> Result<(), Error> {
         for &(ref field, ref b_rc) in vec.iter() {
             try!(self.execute_refer(a_rc.clone(), b_rc.clone(), field, op.clone()));
-        }
-        Ok(())
-    }
-    fn each_execute_refer_vec(&self,
-                              a_rc: EntityInnerPointer,
-                              vecs: &Vec<(String, Vec<EntityInnerPointer>)>,
-                              op: Cascade)
-                              -> Result<(), Error> {
-        for &(ref field, ref vec) in vecs.iter() {
-            let pairs =
-                vec.iter().map(|b_rc| (field.to_string(), b_rc.clone())).collect::<Vec<_>>();
-            try!(self.each_execute_refer(a_rc.clone(), &pairs, op.clone()));
         }
         Ok(())
     }
