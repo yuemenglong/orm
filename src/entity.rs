@@ -125,6 +125,7 @@ impl EntityInner {
     }
 
     pub fn set_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let a = self;
         // a.b_id = b.id;
         let a_b_meta = a.meta.field_map.get(key).unwrap();
@@ -140,16 +141,33 @@ impl EntityInner {
         a.pointer_map.insert(a_b_field, b);
     }
     pub fn get_pointer(&mut self, key: &str) -> Option<EntityInnerPointer> {
-        let a = &self;
-        // return a.b
-        let a_b_meta = a.meta.field_map.get(key).unwrap();
-        let a_b = a.pointer_map.get(key);
-        if a_b.is_none() {
-            let a_b_id_field = a_b_meta.get_pointer_id();
-            // lazy load
-            unimplemented!();
+        let mut a = self;
+        {
+            // 查到了就直接返回了
+            let a_b = a.pointer_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().clone();
+            }
         }
-        a.pointer_map.get(key).unwrap().clone()
+        if !a.need_lazy_load() {
+            return None;
+        }
+        // 懒加载
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_entity = a_b_meta.get_refer_entity();
+        let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        let b_id_field = a_b_meta.get_pointer_id();
+        let b_id = a.field_map.get(&b_id_field).unwrap();
+        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        cond.eq("id", b_id.clone());
+        let session = a.session.as_ref().unwrap();
+        let res = session.get_inner(&cond);
+        if res.is_err() {
+            panic!("Get Pointer Fail");
+        }
+        let b_rc_opt = res.unwrap();
+        a.pointer_map.insert(key.to_string(), b_rc_opt.clone());
+        b_rc_opt
     }
 
     pub fn set_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
@@ -247,7 +265,7 @@ impl EntityInner {
         let b_entity = a_b_meta.get_refer_entity();
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
         let a_id = a.get_id_value();
-        let b_a_id_field = a_b_meta.get_one_one_id();
+        let b_a_id_field = a_b_meta.get_one_many_id();
         let mut cond = Cond::from_meta(b_meta, a.orm_meta);
         cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
