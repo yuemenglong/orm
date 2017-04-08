@@ -253,7 +253,7 @@ impl EntityInner {
         let session = a.session.as_ref().unwrap();
         let res = session.select_inner(&cond);
         if res.is_err() {
-            panic!("Get One One Fail");
+            panic!("Get One Many Fail");
         }
         let b_rc_vec = res.unwrap();
         a.one_many_map.insert(key.to_string(), b_rc_vec.clone());
