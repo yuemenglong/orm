@@ -69,6 +69,10 @@ impl DB {
             Err(err) => Err(err),
         }
     }
+    pub fn open_session(&self) -> Session {
+        let mut conn = self.pool.get_conn();
+        Session::new(conn.unwrap())
+    }
     pub fn insert<E: Entity>(&self, entity: &E) -> Result<(), Error> {
         let session = self.open_session();
         session.insert(entity)
@@ -82,13 +86,7 @@ impl DB {
         session.delete(entity)
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
-        let mut conn = self.pool.get_conn();
-        let session = Session::new(conn.unwrap());
-        let mut cond = Cond::new::<E>();
+        let session = self.open_session();
         session.get::<E>(id)
-    }
-    pub fn open_session(&self) -> Session {
-        let mut conn = self.pool.get_conn();
-        Session::new(conn.unwrap())
     }
 }

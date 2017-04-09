@@ -158,10 +158,10 @@ impl EntityInner {
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
         let b_id_field = a_b_meta.get_pointer_id();
         let b_id = a.field_map.get(&b_id_field).unwrap();
-        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
-        cond.eq("id", b_id.clone());
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq("id", b_id.clone());
         let session = a.session.as_ref().unwrap();
-        let res = session.get_inner(&cond);
+        let res = session.get_inner(b_meta, a.orm_meta, &Cond::by_id(b_id.clone()));
         if res.is_err() {
             panic!("Get Pointer Fail");
         }
@@ -211,10 +211,9 @@ impl EntityInner {
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
         let a_id = a.get_id_value();
         let b_a_id_field = a_b_meta.get_one_one_id();
-        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
-        cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
-        let res = session.get_inner(&cond);
+        // let res = session.get_inner(&cond);
+        let res = session.get_inner(b_meta, a.orm_meta, &Cond::by_eq(&b_a_id_field, a_id));
         if res.is_err() {
             panic!("Get One One Fail");
         }
@@ -257,7 +256,7 @@ impl EntityInner {
                 return a_b.unwrap().clone();
             }
         }
-        if !a.need_lazy_load(){
+        if !a.need_lazy_load() {
             return Vec::new();
         }
         // 懒加载
@@ -266,10 +265,10 @@ impl EntityInner {
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
         let a_id = a.get_id_value();
         let b_a_id_field = a_b_meta.get_one_many_id();
-        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
-        cond.eq(&b_a_id_field, a_id);
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
-        let res = session.select_inner(&cond);
+        let res = session.select_inner(b_meta, a.orm_meta, &Cond::by_eq(&b_a_id_field, a_id));
         if res.is_err() {
             panic!("Get One Many Fail");
         }
@@ -354,10 +353,10 @@ impl EntityInner {
         {
             let a_b = a.many_many_map.get(key);
             if a_b.is_some() {
-                return a_b.unwrap().clone();
+                return a_b.unwrap().iter().map(|&(_, ref b_rc)| b_rc.clone()).collect::<_>();
             }
         }
-        if !a.need_lazy_load(){
+        if !a.need_lazy_load() {
             return Vec::new();
         }
         Vec::new()

@@ -81,7 +81,7 @@ impl Session {
     pub fn select<E>(&self, cond: &Cond) -> Result<Vec<E>, Error>
         where E: Entity
     {
-        self.select_inner(cond).map(|vec| {
+        self.select_inner(E::meta(), E::orm_meta(), cond).map(|vec| {
             vec.into_iter()
                 .map(E::from_inner)
                 .collect::<Vec<E>>()
@@ -90,7 +90,8 @@ impl Session {
     pub fn get<E>(&self, id: u64) -> Result<Option<E>, Error>
         where E: Entity
     {
-        self.get_inner(Cond::new::<E>().id(id)).map(|opt| opt.map(E::from_inner))
+        self.get_inner(E::meta(), E::orm_meta(), &Cond::by_id(id))
+            .map(|opt| opt.map(E::from_inner))
     }
     pub fn close(&self) {
         self.flush_cache();
@@ -156,12 +157,21 @@ impl Session {
         a_rc.borrow_mut().cascade_reset();
         result
     }
-    pub fn select_inner(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
-        self.guard(SessionStatus::Select, || self.select_impl(cond))
+    pub fn select_inner(&self,
+                        meta: &'static EntityMeta,
+                        orm_meta: &'static OrmMeta,
+                        cond: &Cond)
+                        -> Result<Vec<EntityInnerPointer>, Error> {
+        self.guard(SessionStatus::Select,
+                   || self.select_impl(meta, orm_meta, cond))
     }
-    pub fn get_inner(&self, cond: &Cond) -> Result<Option<EntityInnerPointer>, Error> {
+    pub fn get_inner(&self,
+                     meta: &'static EntityMeta,
+                     orm_meta: &'static OrmMeta,
+                     cond: &Cond)
+                     -> Result<Option<EntityInnerPointer>, Error> {
         self.guard(SessionStatus::Select, || {
-            self.select_impl(cond).map(|mut vec| match vec.len() {
+            self.select_impl(meta, orm_meta, cond).map(|mut vec| match vec.len() {
                 0 => None,
                 _ => Some(vec.swap_remove(0)),
             })
@@ -390,9 +400,11 @@ impl Session {
 
 // select
 impl Session {
-    fn select_impl(&self, cond: &Cond) -> Result<Vec<EntityInnerPointer>, Error> {
-        let meta = cond.meta();
-        let orm_meta = cond.orm_meta();
+    fn select_impl(&self,
+                   meta: &'static EntityMeta,
+                   orm_meta: &'static OrmMeta,
+                   cond: &Cond)
+                   -> Result<Vec<EntityInnerPointer>, Error> {
         let table_alias = &meta.table_name;
         let mut tables = Vec::new();
         let mut fields = Vec::new();
@@ -412,12 +424,12 @@ impl Session {
         let sql = format!("SELECT \n{} \nFROM \n{} \nWHERE \n\t{}",
                           fields,
                           tables,
-                          cond.to_sql());
+                          cond.to_sql(table_alias));
         println!("{}", sql);
-        println!("\t{:?}", cond.to_params());
+        println!("\t{:?}", cond.to_params(table_alias));
 
         let mut conn = self.conn.borrow_mut();
-        let query_result = try!(conn.prep_exec(sql, cond.to_params()));
+        let query_result = try!(conn.prep_exec(sql, cond.to_params(table_alias)));
 
         let mut map: HashMap<String, EntityInnerPointer> = HashMap::new();
         let mut vec = Vec::new();

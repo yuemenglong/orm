@@ -7,39 +7,32 @@ use meta::EntityMeta;
 use meta::FieldMeta;
 
 pub struct Cond {
-    meta: &'static EntityMeta,
-    orm_meta: &'static OrmMeta,
-    alias: String,
     items: Vec<Item>,
 }
 
 impl Cond {
-    pub fn new<E>() -> Cond
-        where E: Entity
-    {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: E::meta().entity_name.to_string(),
-            items: Vec::new(),
-        }
-    }
-    pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Cond {
-        Cond {
-            meta: meta,
-            orm_meta: orm_meta,
-            alias: meta.entity_name.to_string(),
-            items: Vec::new(),
-        }
+    pub fn new() -> Self {
+        Cond { items: Vec::new() }
     }
 
-    pub fn meta(&self) -> &'static EntityMeta {
-        self.meta
+    pub fn by_id<V>(id: V) -> Self
+        where Value: From<V>
+    {
+        let mut cond = Cond::new();
+        cond.id(id);
+        cond
     }
-    pub fn orm_meta(&self) -> &'static OrmMeta {
-        self.orm_meta
+    pub fn by_eq<V>(field: &str, value: V) -> Self
+        where Value: From<V>
+    {
+        let mut cond = Cond::new();
+        cond.eq(field, value);
+        cond
     }
-    pub fn id(&mut self, id: u64) -> &mut Self {
+
+    pub fn id<V>(&mut self, id: V) -> &mut Self
+        where Value: From<V>
+    {
         self.items.push(Item::Id(Value::from(id)));
         self
     }
@@ -56,17 +49,17 @@ impl Cond {
         self
     }
 
-    pub fn to_sql(&self) -> String {
+    pub fn to_sql(&self, alias: &str) -> String {
         self.items
             .iter()
-            .map(|item| item.to_sql(&self.alias))
+            .map(|item| item.to_sql(alias))
             .collect::<Vec<_>>()
             .join(" AND ")
     }
-    pub fn to_params(&self) -> Vec<(String, Value)> {
+    pub fn to_params(&self, alias: &str) -> Vec<(String, Value)> {
         self.items
             .iter()
-            .map(|item| item.to_params(&self.alias))
+            .map(|item| item.to_params(alias))
             .collect::<Vec<_>>()
     }
 }
