@@ -24,16 +24,6 @@ impl Cond {
             items: Vec::new(),
         }
     }
-    pub fn from_alias<E>(alias: &str) -> Cond
-        where E: Entity
-    {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: alias.to_string(),
-            items: Vec::new(),
-        }
-    }
     pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Cond {
         Cond {
             meta: meta,
@@ -42,16 +32,7 @@ impl Cond {
             items: Vec::new(),
         }
     }
-    pub fn by_id<E>(id: u64) -> Cond
-        where E: Entity
-    {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: E::meta().entity_name.to_string(),
-            items: vec![Item::Id(Value::from(id))],
-        }
-    }
+
     pub fn meta(&self) -> &'static EntityMeta {
         self.meta
     }
@@ -74,6 +55,7 @@ impl Cond {
         self.items.push(Item::Gt(field.to_string(), Value::from(value)));
         self
     }
+
     pub fn to_sql(&self) -> String {
         self.items
             .iter()

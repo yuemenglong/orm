@@ -286,6 +286,7 @@ impl EntityInner {
     }
 
     pub fn set_many_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let a = self;
         // 确保中间表信息存在
         a.get_many_many(key);
@@ -349,19 +350,48 @@ impl EntityInner {
         a.many_many_map.insert(key.to_string(), new_b_pair_vec);
     }
     pub fn get_many_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
-        let mut a = &self;
-        let a_b_vec = a.many_many_map.get(key);
-        if a_b_vec.is_none() {
-            // lazy load
-            // let a_b_meta = self.meta.field_map.get(key).unwrap();
-            unimplemented!();
+        let a = self;
+        {
+            let a_b = a.many_many_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().clone();
+            }
         }
-        a.many_many_map
-            .get(key)
-            .unwrap()
-            .iter()
-            .map(|&(_, ref b_rc)| b_rc.clone())
-            .collect::<Vec<_>>()
+        if !a.need_lazy_load(){
+            return Vec::new();
+        }
+        Vec::new()
+        // 懒加载
+        // let a_b_meta = a.meta.field_map.get(key).unwrap();
+        // let b_entity = a_b_meta.get_refer_entity();
+        // let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        // let a_id = a.get_id_value();
+        // let b_a_id_field = a_b_meta.get_many_many_id();
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq(&b_a_id_field, a_id);
+        // let session = a.session.as_ref().unwrap();
+        // let res = session.select_inner(&cond);
+        // if res.is_err() {
+        //     panic!("Get One Many Fail");
+        // }
+        // let b_rc_vec = res.unwrap();
+        // a.many_many_map.insert(key.to_string(), b_rc_vec.clone());
+        // b_rc_vec
+
+
+        // let mut a = &self;
+        // let a_b_vec = a.many_many_map.get(key);
+        // if a_b_vec.is_none() {
+        //     // lazy load
+        //     // let a_b_meta = self.meta.field_map.get(key).unwrap();
+        //     unimplemented!();
+        // }
+        // a.many_many_map
+        //     .get(key)
+        //     .unwrap()
+        //     .iter()
+        //     .map(|&(_, ref b_rc)| b_rc.clone())
+        //     .collect::<Vec<_>>()
     }
     pub fn push_many_many(&mut self, key: &str, value: (EntityInnerPointer, EntityInnerPointer)) {
         let mut a = self;
