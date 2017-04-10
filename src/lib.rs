@@ -20,6 +20,7 @@ mod session;
 pub mod init;
 pub mod meta;
 pub mod cond;
+pub mod select;
 
 pub use entity::Entity;
 pub use entity::EntityInner;
