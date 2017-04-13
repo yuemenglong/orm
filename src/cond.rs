@@ -7,58 +7,32 @@ use meta::EntityMeta;
 use meta::FieldMeta;
 
 pub struct Cond {
-    meta: &'static EntityMeta,
-    orm_meta: &'static OrmMeta,
-    alias: String,
     items: Vec<Item>,
 }
 
 impl Cond {
-    pub fn new<E>() -> Cond
-        where E: Entity
+    pub fn new() -> Self {
+        Cond { items: Vec::new() }
+    }
+
+    pub fn by_id<V>(id: V) -> Self
+        where Value: From<V>
     {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: E::meta().entity_name.to_string(),
-            items: Vec::new(),
-        }
+        let mut cond = Cond::new();
+        cond.id(id);
+        cond
     }
-    pub fn from_alias<E>(alias: &str) -> Cond
-        where E: Entity
+    pub fn by_eq<V>(field: &str, value: V) -> Self
+        where Value: From<V>
     {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: alias.to_string(),
-            items: Vec::new(),
-        }
+        let mut cond = Cond::new();
+        cond.eq(field, value);
+        cond
     }
-    pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Cond {
-        Cond {
-            meta: meta,
-            orm_meta: orm_meta,
-            alias: meta.entity_name.to_string(),
-            items: Vec::new(),
-        }
-    }
-    pub fn by_id<E>(id: u64) -> Cond
-        where E: Entity
+
+    pub fn id<V>(&mut self, id: V) -> &mut Self
+        where Value: From<V>
     {
-        Cond {
-            meta: E::meta(),
-            orm_meta: E::orm_meta(),
-            alias: E::meta().entity_name.to_string(),
-            items: vec![Item::Id(Value::from(id))],
-        }
-    }
-    pub fn meta(&self) -> &'static EntityMeta {
-        self.meta
-    }
-    pub fn orm_meta(&self) -> &'static OrmMeta {
-        self.orm_meta
-    }
-    pub fn id(&mut self, id: u64) -> &mut Self {
         self.items.push(Item::Id(Value::from(id)));
         self
     }
@@ -74,17 +48,18 @@ impl Cond {
         self.items.push(Item::Gt(field.to_string(), Value::from(value)));
         self
     }
-    pub fn to_sql(&self) -> String {
+
+    pub fn to_sql(&self, alias: &str) -> String {
         self.items
             .iter()
-            .map(|item| item.to_sql(&self.alias))
+            .map(|item| item.to_sql(alias))
             .collect::<Vec<_>>()
             .join(" AND ")
     }
-    pub fn to_params(&self) -> Vec<(String, Value)> {
+    pub fn to_params(&self, alias: &str) -> Vec<(String, Value)> {
         self.items
             .iter()
-            .map(|item| item.to_params(&self.alias))
+            .map(|item| item.to_params(alias))
             .collect::<Vec<_>>()
     }
 }

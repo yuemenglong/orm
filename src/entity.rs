@@ -7,6 +7,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
 
 use mysql::Value;
 use mysql::Error;
@@ -57,14 +59,10 @@ impl EntityInner {
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
-        // let field_map: HashMap<String, Value> = meta.get_non_refer_fields()
-        //     .into_iter()
-        //     .map(|meta| (meta.get_field_name(), Value::NULL))
-        //     .collect();
         // 用默认值?
         // 一旦有则为正常值，不能为NULL，因为外层无法设为NULL
         let field_map: HashMap<String, Value> = HashMap::new();
-        // 避免lazy load
+        // 避免lazy load, 用默认None
         let pointer_map: HashMap<String, Option<EntityInnerPointer>> = meta.get_pointer_fields()
             .into_iter()
             .map(|meta| (meta.get_field_name(), None))
@@ -95,6 +93,9 @@ impl EntityInner {
         }
     }
 
+    pub fn get_addr(&self) -> u64 {
+        self as *const EntityInner as u64
+    }
     pub fn get_id_value(&self) -> Value {
         self.field_map.get("id").map_or(Value::NULL, |id| id.clone())
     }
@@ -124,6 +125,7 @@ impl EntityInner {
     }
 
     pub fn set_pointer(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let a = self;
         // a.b_id = b.id;
         let a_b_meta = a.meta.field_map.get(key).unwrap();
@@ -139,25 +141,44 @@ impl EntityInner {
         a.pointer_map.insert(a_b_field, b);
     }
     pub fn get_pointer(&mut self, key: &str) -> Option<EntityInnerPointer> {
-        let a = &self;
-        // return a.b
-        let a_b_meta = a.meta.field_map.get(key).unwrap();
-        let a_b = a.pointer_map.get(key);
-        if a_b.is_none() {
-            let a_b_id_field = a_b_meta.get_pointer_id();
-            // lazy load
-            unimplemented!();
+        let mut a = self;
+        {
+            // 查到了就直接返回了
+            let a_b = a.pointer_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().clone();
+            }
         }
-        a.pointer_map.get(key).unwrap().clone()
+        if !a.need_lazy_load() {
+            return None;
+        }
+        // 懒加载
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_entity = a_b_meta.get_refer_entity();
+        let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        let b_id_field = a_b_meta.get_pointer_id();
+        let b_id = a.field_map.get(&b_id_field).unwrap();
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq("id", b_id.clone());
+        let session = a.session.as_ref().unwrap();
+        let res = session.get_inner(b_meta, a.orm_meta, &Cond::by_id(b_id.clone()));
+        if res.is_err() {
+            panic!("Get Pointer Fail");
+        }
+        let b_rc_opt = res.unwrap();
+        a.pointer_map.insert(key.to_string(), b_rc_opt.clone());
+        b_rc_opt
     }
 
     pub fn set_one_one(&mut self, key: &str, value: Option<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let mut a = self;
         let a_b_meta = a.meta.field_map.get(key).unwrap();
         let b_a_id_field = a_b_meta.get_one_one_id();
         let old_b = a.get_one_one(key);
         // old_b.a_id = NULL;
-        if old_b.is_some() {
+        if old_b.is_some() && old_b != value {
+            // 不同对象才需要cache
             let old_b = old_b.unwrap();
             old_b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
             // a.cache.push((key.to_string(), old_b));
@@ -190,10 +211,9 @@ impl EntityInner {
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
         let a_id = a.get_id_value();
         let b_a_id_field = a_b_meta.get_one_one_id();
-        let mut cond = Cond::from_meta(b_meta, a.orm_meta);
-        cond.eq(&b_a_id_field, a_id);
         let session = a.session.as_ref().unwrap();
-        let res = session.get_inner(&cond);
+        // let res = session.get_inner(&cond);
+        let res = session.get_inner(b_meta, a.orm_meta, &Cond::by_eq(&b_a_id_field, a_id));
         if res.is_err() {
             panic!("Get One One Fail");
         }
@@ -204,12 +224,18 @@ impl EntityInner {
     }
 
     pub fn set_one_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let mut a = self;
         let a_b_meta = a.meta.field_map.get(key).unwrap();
         let b_a_id_field = a_b_meta.get_one_many_id();
         let old_b_vec = a.get_one_many(key);
+        let new_b_set = value.iter().map(|rc| rc.borrow().get_addr()).collect::<HashSet<_>>();
         // old_b.a_id = NULL;
         for b in old_b_vec {
+            if new_b_set.contains(&b.borrow().get_addr()) {
+                // 还在原集合中的不需要断开关系
+                continue;
+            }
             b.borrow_mut().field_map.insert(b_a_id_field.to_string(), Value::NULL);
             // a.cache.push((key.to_string(), b));
             a.push_cache(b.clone());
@@ -223,14 +249,32 @@ impl EntityInner {
         a.one_many_map.insert(key.to_string(), value);
     }
     pub fn get_one_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
-        let mut a = &self;
-        let a_b_field = key;
-        let a_b = a.one_many_map.get(a_b_field);
-        if a_b.is_none() {
-            // lazy load
-            unimplemented!();
+        let a = self;
+        {
+            let a_b = a.one_many_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().clone();
+            }
         }
-        a.one_many_map.get(a_b_field).unwrap().clone()
+        if !a.need_lazy_load() {
+            return Vec::new();
+        }
+        // 懒加载
+        let a_b_meta = a.meta.field_map.get(key).unwrap();
+        let b_entity = a_b_meta.get_refer_entity();
+        let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        let a_id = a.get_id_value();
+        let b_a_id_field = a_b_meta.get_one_many_id();
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq(&b_a_id_field, a_id);
+        let session = a.session.as_ref().unwrap();
+        let res = session.select_inner(b_meta, a.orm_meta, &Cond::by_eq(&b_a_id_field, a_id));
+        if res.is_err() {
+            panic!("Get One Many Fail");
+        }
+        let b_rc_vec = res.unwrap();
+        a.one_many_map.insert(key.to_string(), b_rc_vec.clone());
+        b_rc_vec
     }
     pub fn push_one_many(&mut self, key: &str, value: EntityInnerPointer) {
         let mut a = self;
@@ -241,6 +285,7 @@ impl EntityInner {
     }
 
     pub fn set_many_many(&mut self, key: &str, value: Vec<EntityInnerPointer>) {
+        self.ensure_session_not_closed();
         let a = self;
         // 确保中间表信息存在
         a.get_many_many(key);
@@ -304,19 +349,48 @@ impl EntityInner {
         a.many_many_map.insert(key.to_string(), new_b_pair_vec);
     }
     pub fn get_many_many(&mut self, key: &str) -> Vec<EntityInnerPointer> {
-        let mut a = &self;
-        let a_b_vec = a.many_many_map.get(key);
-        if a_b_vec.is_none() {
-            // lazy load
-            // let a_b_meta = self.meta.field_map.get(key).unwrap();
-            unimplemented!();
+        let a = self;
+        {
+            let a_b = a.many_many_map.get(key);
+            if a_b.is_some() {
+                return a_b.unwrap().iter().map(|&(_, ref b_rc)| b_rc.clone()).collect::<_>();
+            }
         }
-        a.many_many_map
-            .get(key)
-            .unwrap()
-            .iter()
-            .map(|&(_, ref b_rc)| b_rc.clone())
-            .collect::<Vec<_>>()
+        if !a.need_lazy_load() {
+            return Vec::new();
+        }
+        Vec::new()
+        // 懒加载
+        // let a_b_meta = a.meta.field_map.get(key).unwrap();
+        // let b_entity = a_b_meta.get_refer_entity();
+        // let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
+        // let a_id = a.get_id_value();
+        // let b_a_id_field = a_b_meta.get_many_many_id();
+        // let mut cond = Cond::from_meta(b_meta, a.orm_meta);
+        // cond.eq(&b_a_id_field, a_id);
+        // let session = a.session.as_ref().unwrap();
+        // let res = session.select_inner(&cond);
+        // if res.is_err() {
+        //     panic!("Get One Many Fail");
+        // }
+        // let b_rc_vec = res.unwrap();
+        // a.many_many_map.insert(key.to_string(), b_rc_vec.clone());
+        // b_rc_vec
+
+
+        // let mut a = &self;
+        // let a_b_vec = a.many_many_map.get(key);
+        // if a_b_vec.is_none() {
+        //     // lazy load
+        //     // let a_b_meta = self.meta.field_map.get(key).unwrap();
+        //     unimplemented!();
+        // }
+        // a.many_many_map
+        //     .get(key)
+        //     .unwrap()
+        //     .iter()
+        //     .map(|&(_, ref b_rc)| b_rc.clone())
+        //     .collect::<Vec<_>>()
     }
     pub fn push_many_many(&mut self, key: &str, value: (EntityInnerPointer, EntityInnerPointer)) {
         let mut a = self;
@@ -325,7 +399,10 @@ impl EntityInner {
         a.many_many_map.entry(key.to_string()).or_insert(Vec::new());
         a.many_many_map.get_mut(key).unwrap().push((Some(m_rc), b_rc));
     }
+}
 
+// 和session相关
+impl EntityInner {
     fn need_lazy_load(&self) -> bool {
         // 以下都是没有查到的情况
         if self.session.is_none() {
@@ -350,7 +427,8 @@ impl EntityInner {
         unreachable!();
     }
     fn push_cache(&self, rc: EntityInnerPointer) {
-        if self.session.is_none() {
+        // a和b有一个是临时态都不需要做这项操作
+        if self.session.is_none() || rc.borrow().session.is_none() {
             return;
         }
         let session = self.session.as_ref().unwrap();
@@ -361,6 +439,13 @@ impl EntityInner {
             SessionStatus::Insert => session.push_cache(rc), // 操作完成后的级联更新
             SessionStatus::Update => session.push_cache(rc), // 操作完成后的级联更新
             SessionStatus::Delete => session.push_cache(rc), // 操作完成后的级联更新
+        }
+    }
+    fn ensure_session_not_closed(&self) {
+        // 游离态
+        if self.session.is_some() &&
+           self.session.as_ref().unwrap().status() == SessionStatus::Closed {
+            panic!("Session Is Closed");
         }
     }
 }
@@ -430,6 +515,12 @@ impl EntityInner {
         for a_b_meta in &self.meta.get_refer_fields() {
             a_b_meta.set_refer_rt_cascade(None);
         }
+    }
+    pub fn set_session(&mut self, session: Session) {
+        self.session = Some(session);
+    }
+    pub fn clear_session(&mut self) {
+        self.session = None;
     }
 }
 
@@ -504,12 +595,6 @@ impl EntityInner {
         let params = vec![("id".to_string(), id)];
         println!("{}, {:?}", sql, params);
         conn.prep_exec(sql, params).map(|res| ())
-    }
-    pub fn set_session(&mut self, session: Session) {
-        self.session = Some(session);
-    }
-    pub fn clear_session(&mut self) {
-        self.session = None;
     }
 }
 
@@ -614,6 +699,18 @@ impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let entity = &self.meta.entity_name;
         write!(f, "{}: {}", entity, self.format())
+    }
+}
+
+impl PartialEq for EntityInner {
+    fn eq(&self, other: &EntityInner) -> bool {
+        self.get_addr() == other.get_addr()
+    }
+}
+
+impl Hash for EntityInner {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.get_addr().hash(state);
     }
 }
 
