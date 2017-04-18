@@ -3,6 +3,7 @@ extern crate mysql;
 
 use ast::Entity;
 use ast::EntityMeta;
+use ast::Select;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -17,11 +18,17 @@ use entity::*;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    let db = ast::open("root", "root", "192.168.31.203", 3306, "test").unwrap();
-    select_test(&db);
+    let db = ast::open("root", "root", "172.16.16.225", 3306, "test").unwrap();
+    select_test();
 }
 
-fn select_test(db: &ast::DB) {
+fn select_test(){
+    let mut select = Select::from::<Person>();
+    select.join("addr");
+    println!("{:?}", select.get_tables()); 
+}
+
+fn get_test(db: &ast::DB) {
     db.rebuild(orm_meta()).unwrap();
     let mut p = Person::default();
     p.set_addr(&Address::default());

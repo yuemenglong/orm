@@ -6,6 +6,7 @@ use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
 
+#[derive(Debug, Clone)]
 pub struct Cond {
     items: Vec<Item>,
 }
@@ -64,7 +65,7 @@ impl Cond {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Item {
     Id(Value),
     Eq(String, Value),

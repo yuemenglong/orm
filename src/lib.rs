@@ -16,11 +16,11 @@ mod attr;
 mod db;
 mod entity;
 mod session;
+mod select;
 
 pub mod init;
 pub mod meta;
 pub mod cond;
-pub mod select;
 
 pub use entity::Entity;
 pub use entity::EntityInner;
@@ -31,6 +31,7 @@ pub use meta::OrmMeta;
 pub use mysql::Value;
 pub use mysql::Row;
 pub use db::DB;
+pub use select::Select;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
