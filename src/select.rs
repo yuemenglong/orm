@@ -152,6 +152,16 @@ impl Select {
             let b_rc = select_rc.borrow().inner_pick(&b_alias, row, map);
             if field_meta.is_refer_pointer() {
                 a_rc.borrow_mut().pointer_map.insert(a_b_field.clone(), b_rc);
+            } else if field_meta.is_refer_one_one() {
+                a_rc.borrow_mut().one_one_map.insert(a_b_field.clone(), b_rc);
+            } else if field_meta.is_refer_one_many() {
+                a_rc.borrow_mut().one_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
+                a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
+            } else if field_meta.is_refer_many_many() {
+                let mid_alias = format!("{}__{}", alias, a_b_field);
+                let mid_rc = select_rc.borrow().inner_pick(&mid_alias, row, map);
+                a_rc.borrow_mut().many_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
+                a_rc.borrow_mut().many_many_map.get_mut(a_b_field).unwrap().push((mid_rc, b_rc.unwrap()));
             }
         }
         Some(a_rc)
