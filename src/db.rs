@@ -3,6 +3,7 @@ use macros;
 
 use mysql::Pool;
 use mysql::Error;
+use mysql::PooledConn;
 
 use itertools::Itertools;
 
@@ -72,6 +73,9 @@ impl DB {
     pub fn open_session(&self) -> Session {
         let mut conn = self.pool.get_conn();
         Session::new(conn.unwrap())
+    }
+    pub fn get_conn(&self) -> Result<PooledConn, Error> {
+        self.pool.get_conn()
     }
     pub fn insert<E: Entity>(&self, entity: &E) -> Result<(), Error> {
         let session = self.open_session();

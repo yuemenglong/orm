@@ -4,6 +4,7 @@ extern crate mysql;
 use ast::Entity;
 use ast::EntityMeta;
 use ast::Select;
+use ast::Cond;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,13 +20,20 @@ use entity::*;
 // flush privileges;
 fn main() {
     let db = ast::open("root", "root", "172.16.16.225", 3306, "test").unwrap();
-    select_test();
+    select_test(&db);
 }
 
-fn select_test(){
+fn select_test(db:&ast::DB){
     let mut select = Select::from::<Person>();
+    select.wher(&Cond::by_id(1));
     select.join("addr");
-    println!("{:?}", select.get_tables()); 
+    // println!("{:?}", select.get_columns()); 
+    // println!("{:?}", select.get_tables()); 
+    // println!("{:?}", select.get_conds());
+    // println!("{:?}", select.get_params());
+    // println!("{}", select.get_sql());
+    let res = select.inner_query(&mut db.get_conn().unwrap());
+    println!("{:?}", res);
 }
 
 fn get_test(db: &ast::DB) {

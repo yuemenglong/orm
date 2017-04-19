@@ -92,6 +92,16 @@ impl EntityInner {
             session: None, // cache: Vec::new(),
         }
     }
+    pub fn new_pointer(meta: &'static EntityMeta,
+                       orm_meta: &'static OrmMeta)
+                       -> EntityInnerPointer {
+        Rc::new(RefCell::new(EntityInner::new(meta, orm_meta)))
+    }
+    pub fn default_pointer(meta: &'static EntityMeta,
+                           orm_meta: &'static OrmMeta)
+                           -> EntityInnerPointer {
+        Rc::new(RefCell::new(EntityInner::default(meta, orm_meta)))
+    }
 
     pub fn get_addr(&self) -> u64 {
         self as *const EntityInner as u64
