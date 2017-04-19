@@ -1,92 +1,255 @@
+use rustc_serialize;
+
+use meta::*;
+
+static TPL: &'static str = r#"
+use ast;
+use ast::Entity;
 use std;
-use std::cell::Cell;
-use std::ops::Deref;
 
-use syntax;
-use syntax::ast::ItemKind::*;
-use syntax::print::pprust::*;
-use syntax::ast::VariantData;
+static mut ORM_META: Option<&'static ast::meta::OrmMeta> = None;
+static ONCE: std::sync::Once = std::sync::ONCE_INIT;
 
-#[derive(Debug)]
-pub struct Formatter {
-    indent: Cell<usize>,
+pub fn orm_meta() -> &'static ast::meta::OrmMeta {
+    let json = r#${JSON}#;
+    ONCE.call_once(|| unsafe { ORM_META = Some(ast::init::init_meta(json)) });
+    unsafe { ORM_META.unwrap() }
 }
 
-struct Indent<'a> {
-    indent: usize,
-    formatter: &'a Formatter,
+${ENTITIES}
+"#;
+
+static TPL_STRUCT: &'static str = r#"
+#[derive(Debug, Clone)]
+pub struct ${ENTITY_NAME} {
+    inner: ast::EntityInnerPointer,
+}
+"#;
+
+static TPL_IMPL: &'static str = r#"
+impl ${ENTITY_NAME} {${IMPL_FIELDS}
+}
+"#;
+
+static TPL_IMPL_FIELD: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> ${TYPE} {
+        self.inner_get_value("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
+        self.inner_set_value("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_value::<${TYPE}>("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_value::<${TYPE}>("${FIELD}");
+    }"#;
+
+static TPL_IMPL_POINTER: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
+        Box::new(self.inner_get_pointer("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
+        self.inner_set_pointer("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_pointer("${FIELD}")
+    }   
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_pointer("${FIELD}");
+    }"#;
+
+static TPL_IMPL_ONE_ONE: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
+        Box::new(self.inner_get_one_one("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
+        self.inner_set_one_one("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_one_one("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_one_one("${FIELD}")
+    }"#;
+
+static TPL_IMPL_ONE_MANY: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
+        Box::new(self.inner_get_one_many("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
+        self.inner_set_one_many("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_one_many("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_one_many("${FIELD}")
+    }"#;
+
+static TPL_IMPL_MANY_MANY: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
+        Box::new(self.inner_get_many_many("${FIELD}"))
+    }
+    #[allow(dead_code)]
+    pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
+        self.inner_set_many_many("${FIELD}", value);
+    }
+    #[allow(dead_code)]
+    pub fn has_${FIELD}(&self) -> bool {
+        self.inner_has_many_many("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn clear_${FIELD}(&self) {
+        self.inner_clear_many_many("${FIELD}")
+    }"#;
+
+static TPL_IMPL_CASCADE: &'static str = r#"
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_insert(&self) {
+        self.inner_cascade_field_insert("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_update(&self) {
+        self.inner_cascade_field_update("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_delete(&self) {
+        self.inner_cascade_field_delete("${FIELD}");
+    }
+    #[allow(dead_code)]
+    pub fn cascade_${FIELD}_null(&self) {
+        self.inner_cascade_field_null("${FIELD}");
+    }"#;
+
+static TPL_TRAIT: &'static str = r#"
+impl ast::Entity for ${ENTITY_NAME} {
+    fn orm_meta() -> &'static ast::meta::OrmMeta {
+        orm_meta()
+    }
+    fn meta() -> &'static ast::meta::EntityMeta {
+        orm_meta().entity_map.get("${ENTITY_NAME}").unwrap()
+    }
+    fn default() -> Self {
+        ${ENTITY_NAME} {
+            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::default(Self::meta(), Self::orm_meta())))
+        }
+    }
+    fn new() -> Self {
+        ${ENTITY_NAME} {
+            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::new(Self::meta(), Self::orm_meta())))
+        }
+    }
+    fn from_inner(inner: ast::EntityInnerPointer) -> ${ENTITY_NAME} {
+        ${ENTITY_NAME} {
+            inner: inner,
+        }
+    }
+    fn inner(&self) -> ast::EntityInnerPointer {
+        self.inner.clone()
+    }
+}
+"#;
+
+fn do_spec_fields(fields: Vec<&FieldMeta>, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
+    fields.into_iter()
+        .map(cb)
+        .collect::<Vec<_>>()
+        .join(join)
 }
 
-impl<'a> Indent<'a> {
-    pub fn new(formatter: &'a Formatter) -> Indent<'a> {
-        let indent = formatter.indent.get();
-        formatter.indent.set(indent + 4);
-        Indent {
-            indent: indent,
-            formatter: formatter,
-        }
-    }
+pub fn format_meta(meta: &OrmMeta) -> String {
+    let json = format!("\"{}\"", rustc_serialize::json::encode(&meta).unwrap());
+    let entities = meta.get_entities()
+        .into_iter()
+        .map(format_entity)
+        .collect::<Vec<_>>()
+        .join("");
+    let tpl = TPL.to_string();
+    tpl.replace("${JSON}", &json).replace("${ENTITIES}", &entities)
 }
-
-impl<'a> Drop for Indent<'a> {
-    fn drop(&mut self) {
-        self.formatter.indent.set(self.indent);
-    }
+fn format_entity(meta: &EntityMeta) -> String {
+    let entity = format_entity_define(meta);
+    let implt = format_entity_impl(meta);
+    let treit = format_entity_trait(meta);
+    format!("{}{}{}", entity, implt, treit)
 }
-
-impl Formatter {
-    pub fn new() -> Formatter {
-        Formatter { indent: Cell::new(0) }
-    }
-    pub fn indent_str(&self) -> String {
-        std::iter::repeat(" ").take(self.indent.get()).collect::<String>()
-    }
-    pub fn format_krate(&self, krate: &syntax::ast::Crate) -> String {
-        krate.module
-            .items
-            .iter()
-            .map(|item| self.format_item(item.deref()))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-    fn format_item(&self, item: &syntax::ast::Item) -> String {
-        match item.node {
-            Struct(_, _) => self.format_struct(item),
-            _ => unreachable!(),
-        }
-    }
-    fn format_struct(&self, item: &syntax::ast::Item) -> String {
-        if let Struct(ref variant_data, ref _generics) = item.node {
-            if let &VariantData::Struct(ref vec, _id) = variant_data {
-                let indent_str = self.indent_str();
-                let _indent = Indent::new(self);
-                let content = vec.iter()
-                    .map(|field| self.format_struct_field(field))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!("{}struct {} {{\n{}\n{}}}",
-                        indent_str,
-                        item.ident.name.as_str(),
-                        content,
-                        indent_str)
-            } else {
-                unreachable!()
-            }
-        } else {
-            unreachable!()
-        }
-    }
-    fn format_struct_field(&self, field: &syntax::ast::StructField) -> String {
-        let ident = ident_to_string(field.ident.unwrap());
-        let ty = ty_to_string(field.ty.deref());
-        let attrs = self.format_attrs(&field.attrs);
-        let indent_str = self.indent_str();
-        match attrs.len() {
-            0 => format!("{}{}: {},", indent_str, ident, ty),
-            _ => format!("{}{}\n{}{}: {},", indent_str, attrs, indent_str, ident, ty),
-        }
-    }
-    fn format_attrs(&self, attrs: &Vec<syntax::ast::Attribute>) -> String {
-        attrs.iter().map(attr_to_string).collect::<Vec<_>>().join("\n")
-    }
+fn format_entity_define(meta: &EntityMeta) -> String {
+    TPL_STRUCT.to_string()
+        .replace("${ENTITY_NAME}", &meta.entity_name)
+}
+fn format_entity_impl(meta: &EntityMeta) -> String {
+    let normal_fields = do_spec_fields(meta.get_normal_fields(), "", &format_entity_impl_field);
+    let pointer_fields = do_spec_fields(meta.get_pointer_fields(), "", &format_entity_impl_pointer);
+    let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
+    let one_many_fields =
+        do_spec_fields(meta.get_one_many_fields(), "", &format_entity_impl_one_many);
+    let many_many_fields = do_spec_fields(meta.get_many_many_fields(),
+                                          "",
+                                          &format_entity_impl_many_many);
+    let cascade_detail = do_spec_fields(meta.get_refer_fields(), "", &format_entity_impl_cascade);
+    let fields = format!("{}\n{}\n{}\n{}\n{}\n{}",
+                         normal_fields,
+                         pointer_fields,
+                         one_one_fields,
+                         one_many_fields,
+                         many_many_fields,
+                         cascade_detail);
+    TPL_IMPL.to_string()
+        .replace("${ENTITY_NAME}", &meta.entity_name)
+        .replace("${IMPL_FIELDS}", &fields)
+}
+fn format_entity_trait(meta: &EntityMeta) -> String {
+    TPL_TRAIT.to_string()
+        .replace("${ENTITY_NAME}", &meta.entity_name)
+}
+fn format_entity_impl_field(meta: &FieldMeta) -> String {
+    TPL_IMPL_FIELD.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
+    TPL_IMPL_POINTER.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
+    TPL_IMPL_ONE_ONE.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_one_many(meta: &FieldMeta) -> String {
+    TPL_IMPL_ONE_MANY.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_many_many(meta: &FieldMeta) -> String {
+    TPL_IMPL_MANY_MANY.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
+fn format_entity_impl_cascade(meta: &FieldMeta) -> String {
+    TPL_IMPL_CASCADE.to_string().replace("${FIELD}", &meta.get_field_name())
 }
