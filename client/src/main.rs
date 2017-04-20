@@ -26,7 +26,8 @@ fn main() {
 fn select_test(db:&ast::DB){
     let mut select = Select::from::<Person>();
     select.wher(&Cond::by_id(1));
-    select.join("teachers");
+    let mut ts = select.join("teachers");
+    ts.borrow_mut().wher(&Cond::by_id(1));
     // println!("{:?}", select.get_columns()); 
     // println!("{:?}", select.get_tables()); 
     // println!("{:?}", select.get_conds());
@@ -117,7 +118,7 @@ fn refer_test(db: &ast::DB) {
     db.update(&person).unwrap();
 
     person.debug();
-    db.delete(person).unwrap();
+    // db.delete(person).unwrap();
 }
 
 fn curd_test(db: &ast::DB) {

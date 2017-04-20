@@ -30,6 +30,47 @@ pub struct Select {
     joins: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
 }
 
+fn filter(vec: &mut Vec<EntityInnerPointer>) {
+    let copy = vec.clone();
+    vec.clear();
+    let mut map = HashMap::new();
+    for rc in copy {
+        let id = rc.borrow().get_id_u64().unwrap();
+        if !map.contains_key(&id) {
+            vec.push(rc.clone());
+        }
+        map.entry(id).or_insert(rc.clone());
+    }
+    for rc in vec.iter() {
+        for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
+            filter(om_vec);
+        }
+        for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
+            filter_pair(mm_vec);
+        }
+    }
+}
+fn filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) {
+    let copy = vec.clone();
+    vec.clear();
+    let mut map = HashMap::new();
+    for (mid, rc) in copy {
+        let id = rc.borrow().get_id_u64().unwrap();
+        if !map.contains_key(&id) {
+            vec.push((mid.clone(), rc.clone()));
+        }
+        map.entry(id).or_insert(rc.clone());
+    }
+    for &(ref mid_rc, ref rc) in vec.iter() {
+        for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
+            filter(om_vec);
+        }
+        for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
+            filter_pair(mm_vec);
+        }
+    }
+}
+
 impl Select {
     pub fn from<E>() -> Self
         where E: Entity
@@ -70,6 +111,8 @@ impl Select {
     pub fn inner_query(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
         let sql = self.get_sql();
         let params = self.get_params();
+        println!("{}", sql);
+        println!("\t{}", params);
         let res = conn.prep_exec(sql, params);
         let a_meta = self.meta;
         let alias = &a_meta.entity_name;
@@ -92,7 +135,10 @@ impl Select {
             }
             return acc;
         });
-        ret
+        ret.map(|mut vec| {
+            filter(&mut vec);
+            vec
+        })
     }
     pub fn inner_pick(&self,
                       alias: &str,
@@ -307,19 +353,19 @@ impl Select {
                         mid_meta.field_map.get(&b_mid_field).unwrap().get_column_name();
                     let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
                     let a_join_mid = format!("{} AS {} ON {}.{} = {}.{}",
-                                           mid_table,
-                                           mid_alias,
-                                           alias,
-                                           a_column,
-                                           mid_alias,
-                                           a_mid_column);
+                                             mid_table,
+                                             mid_alias,
+                                             alias,
+                                             a_column,
+                                             mid_alias,
+                                             a_mid_column);
                     let mid_join_b = format!("{} AS {} ON {}.{} = {}.{}",
-                                           b_table,
-                                           b_alias,
-                                           mid_alias,
-                                           b_mid_column,
-                                           b_alias,
-                                           b_column);
+                                             b_table,
+                                             b_alias,
+                                             mid_alias,
+                                             b_mid_column,
+                                             b_alias,
+                                             b_column);
                     vec.insert(0, mid_join_b);
                     vec.insert(0, a_join_mid);
                     vec
