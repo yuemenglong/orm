@@ -26,7 +26,7 @@ fn main() {
 fn select_test(db:&ast::DB){
     let mut select = Select::from::<Person>();
     select.wher(&Cond::by_id(1));
-    select.join("addr");
+    select.join("teachers");
     // println!("{:?}", select.get_columns()); 
     // println!("{:?}", select.get_tables()); 
     // println!("{:?}", select.get_conds());
