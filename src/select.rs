@@ -112,7 +112,7 @@ impl Select {
         let sql = self.get_sql();
         let params = self.get_params();
         println!("{}", sql);
-        println!("\t{}", params);
+        println!("\t{:?}", params);
         let res = conn.prep_exec(sql, params);
         let a_meta = self.meta;
         let alias = &a_meta.entity_name;

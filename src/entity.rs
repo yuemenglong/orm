@@ -25,6 +25,7 @@ use meta::FieldMeta;
 use meta::Cascade;
 use session::Session;
 use session::SessionStatus;
+use select::Select;
 
 use cond::Cond;
 
@@ -369,7 +370,23 @@ impl EntityInner {
         if !a.need_lazy_load() {
             return Vec::new();
         }
-        Vec::new()
+        // 下面为懒加载
+        let mut select = Select::from_meta(a.meta, a.orm_meta);
+        select.join(key);
+        select.wher(&Cond::by_id(a.get_id_u64().unwrap()));
+        let vec = (|| {
+            let session = a.session.as_ref().unwrap();
+            session.query_inner(&select).unwrap()
+        })();
+        if vec.len() == 0 {
+            a.set_many_many(key, Vec::new());
+            return Vec::new();
+        }
+        let ref a2 = vec[0];
+        // 这里比较特殊，没有通过set接口，因为要传递中间表，懒加载的情况下可以这么处理
+        let pair_vec = a2.borrow_mut().many_many_map.remove(key).unwrap();
+        a.many_many_map.insert(key.to_string(), pair_vec);
+        a.get_many_many(key)
         // 懒加载
         // let a_b_meta = a.meta.field_map.get(key).unwrap();
         // let b_entity = a_b_meta.get_refer_entity();

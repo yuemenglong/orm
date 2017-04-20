@@ -22,6 +22,7 @@ use cond::Cond;
 use entity::Entity;
 use entity::EntityInner;
 use entity::EntityInnerPointer;
+use select::Select;
 
 use meta;
 use meta::OrmMeta;
@@ -156,6 +157,9 @@ impl Session {
         let result = self.guard(op.clone(), || self.execute_impl(a_rc.clone(), op));
         a_rc.borrow_mut().cascade_reset();
         result
+    }
+    pub fn query_inner(&self, select:&Select)->Result<Vec<EntityInnerPointer>, Error>{
+        select.inner_query(self.conn.borrow_mut().deref_mut())
     }
     pub fn select_inner(&self,
                         meta: &'static EntityMeta,
