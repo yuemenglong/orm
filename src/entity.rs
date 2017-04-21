@@ -476,6 +476,35 @@ impl EntityInner {
             panic!("Session Is Closed");
         }
     }
+    pub fn set_session(&mut self, session: Session) {
+        self.session = Some(session);
+    }
+    pub fn set_session_recur(&mut self, session: Session) {
+        self.set_session(session.clone());
+        for (_, rc) in self.pointer_map.iter() {
+            if rc.is_some() {
+                rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
+            }
+        }
+        for (_, rc) in self.one_one_map.iter() {
+            if rc.is_some() {
+                rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
+            }
+        }
+        for (_, vec) in self.one_many_map.iter() {
+            for rc in vec.iter() {
+                rc.borrow_mut().set_session_recur(session.clone());
+            }
+        }
+        for (_, vec) in self.many_many_map.iter() {
+            for &(_, ref rc) in vec.iter() {
+                rc.borrow_mut().set_session_recur(session.clone());
+            }
+        }
+    }
+    pub fn clear_session(&mut self) {
+        self.session = None;
+    }
 }
 
 // 和级联相关
@@ -543,12 +572,6 @@ impl EntityInner {
         for a_b_meta in &self.meta.get_refer_fields() {
             a_b_meta.set_refer_rt_cascade(None);
         }
-    }
-    pub fn set_session(&mut self, session: Session) {
-        self.session = Some(session);
-    }
-    pub fn clear_session(&mut self) {
-        self.session = None;
     }
 }
 

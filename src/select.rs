@@ -5,7 +5,6 @@ use cond::Cond;
 use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
-use session::Session;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -109,48 +108,45 @@ impl Select {
         return rc;
     }
 
-    pub fn query<E>(&self, session: &Session) -> Result<Vec<E>, Error>
+    pub fn query<E>(&self, conn: &mut PooledConn) -> Result<Vec<E>, Error>
         where E: Entity
     {
-        self.inner_query(session).map(|vec| vec.into_iter().map(E::from_inner).collect::<_>())
+        self.query_inner(conn).map(|vec| vec.into_iter().map(E::from_inner).collect::<_>())
     }
 
-    // pub fn inner_query(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
-    pub fn inner_query(&self, session: &Session) -> Result<Vec<EntityInnerPointer>, Error> {
+    pub fn query_inner(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
         let sql = self.get_sql();
         let params = self.get_params();
         println!("{}", sql);
         println!("\t{:?}", params);
-        session.prep_exec(sql, params, |res| {
-            // let res = conn.prep_exec(sql, params);
-            if res.is_err() {
-                return Err(res.err().unwrap());
-            }
-            let a_meta = self.meta;
-            let alias = &a_meta.entity_name;
-            let query_result = res.unwrap();
-            let mut map = HashMap::new();
-            let ret = query_result.into_iter().fold(Ok(Vec::new()), |mut acc, mut item| {
-                if acc.is_err() {
-                    return acc;
-                }
-                if item.is_err() {
-                    return Err(item.err().unwrap());
-                }
-                let mut row = item.as_mut().unwrap();
-                let rc = self.inner_pick(alias, &mut row, &mut map);
-                if rc.is_some() {
-                    acc.as_mut().unwrap().push(rc.unwrap().clone());
-                }
+        let res = conn.prep_exec(sql, params);
+        let a_meta = self.meta;
+        let alias = &a_meta.entity_name;
+        if res.is_err() {
+            return Err(res.err().unwrap());
+        }
+        let query_result = res.unwrap();
+        let mut map = HashMap::new();
+        let ret = query_result.into_iter().fold(Ok(Vec::new()), |mut acc, mut item| {
+            if acc.is_err() {
                 return acc;
-            });
-            ret.map(|mut vec| {
-                filter(&mut vec);
-                vec
-            })
+            }
+            if item.is_err() {
+                return Err(item.err().unwrap());
+            }
+            let mut row = item.as_mut().unwrap();
+            let rc = self.pick_inner(alias, &mut row, &mut map);
+            if rc.is_some() {
+                acc.as_mut().unwrap().push(rc.unwrap().clone());
+            }
+            return acc;
+        });
+        ret.map(|mut vec| {
+            filter(&mut vec);
+            vec
         })
     }
-    pub fn inner_pick(&self,
+    pub fn pick_inner(&self,
                       alias: &str,
                       row: &mut Row,
                       map: &mut HashMap<String, EntityInnerPointer>)
@@ -167,23 +163,27 @@ impl Select {
         for &(ref a_b_field, ref select_rc) in self.joins.iter() {
             let field_meta = a_meta.field_map.get(a_b_field).unwrap();
             let b_alias = format!("{}_{}", alias, a_b_field);
-            let b_rc = select_rc.borrow().inner_pick(&b_alias, row, map);
+            let b_rc = select_rc.borrow().pick_inner(&b_alias, row, map);
             if field_meta.is_refer_pointer() {
                 a_rc.borrow_mut().pointer_map.insert(a_b_field.clone(), b_rc);
             } else if field_meta.is_refer_one_one() {
                 a_rc.borrow_mut().one_one_map.insert(a_b_field.clone(), b_rc);
             } else if field_meta.is_refer_one_many() {
                 a_rc.borrow_mut().one_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
+                if (b_rc.is_some()) {
+                    a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
+                }
             } else if field_meta.is_refer_many_many() {
                 let mid_alias = format!("{}__{}", alias, a_b_field);
-                let mid_rc = select_rc.borrow().inner_pick(&mid_alias, row, map);
+                let mid_rc = select_rc.borrow().pick_inner(&mid_alias, row, map);
                 a_rc.borrow_mut().many_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                a_rc.borrow_mut()
-                    .many_many_map
-                    .get_mut(a_b_field)
-                    .unwrap()
-                    .push((mid_rc, b_rc.unwrap()));
+                if (b_rc.is_some()) {
+                    a_rc.borrow_mut()
+                        .many_many_map
+                        .get_mut(a_b_field)
+                        .unwrap()
+                        .push((mid_rc, b_rc.unwrap()));
+                }
             }
         }
         Some(a_rc)

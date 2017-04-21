@@ -66,10 +66,10 @@ impl Session {
             status: Rc::new(Cell::new(SessionStatus::Normal)),
         }
     }
-    pub fn prep_exec<A, T, F, R>(&self, query: A, params: T, f:F) -> R
+    pub fn prep_exec<A, T, F, R>(&self, query: A, params: T, f: F) -> R
         where A: AsRef<str>,
               T: Into<Params>,
-              F:Fn(Result<QueryResult, Error>)->R
+              F: Fn(Result<QueryResult, Error>) -> R
     {
         let mut conn = self.conn.borrow_mut();
         let res = conn.prep_exec(query, params);
@@ -175,7 +175,12 @@ impl Session {
         result
     }
     pub fn query_inner(&self, select: &Select) -> Result<Vec<EntityInnerPointer>, Error> {
-        select.inner_query(self.conn.borrow_mut().deref_mut())
+        select.query_inner(self.conn.borrow_mut().deref_mut()).map(|vec| {
+            for rc in vec.iter() {
+                rc.borrow_mut().set_session_recur(self.clone());
+            }
+            vec
+        })
     }
     pub fn select_inner(&self,
                         meta: &'static EntityMeta,
