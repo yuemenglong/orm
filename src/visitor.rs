@@ -1,29 +1,13 @@
 use std::ops::Deref;
-use std::collections::HashMap;
-use std::cell::RefMut;
-use std::str::FromStr;
-
-use regex::Regex;
 
 use syntax;
 use syntax::ast::ItemKind::*;
 use syntax::ast::VariantData;
-use syntax::ast::MetaItemKind;
-use syntax::ast::NestedMetaItemKind;
-use syntax::ast::LitKind;
 use syntax::print::pprust::*;
 
 use attr::visit_attrs;
 
 use meta::*;
-
-const DEFAULT_LEN: u64 = 64;
-
-#[derive(Debug)]
-enum FieldType {
-    Normal,
-    Refer,
-}
 
 pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
     let mut orm_meta = OrmMeta::default();
@@ -60,20 +44,6 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
         entity_meta.field_vec.push(field_meta.get_field_name());
         entity_meta.field_map.insert(field_meta.get_field_name(), field_meta);
     }
-    // let mut map: HashMap<String, HashMap<String, FieldMeta>> = HashMap::new();
-    // fields.into_iter().flat_map(|vec| vec).fold(&mut map, |mut acc, (entity, field)| {
-    //     if !acc.contains_key(&entity) {
-    //         acc.insert(entity.to_string(), HashMap::new());
-    //     }
-    //     acc.get_mut(&entity).unwrap().insert(field.get_field_name(), field);
-    //     acc
-    // });
-    // meta.entity_vec = entities.into_iter()
-    //     .map(|mut entity| {
-    //         entity.field_vec = map.remove(&entity.entity_name).unwrap();
-    //         entity
-    //     })
-    //     .collect();
     orm_meta
 }
 fn visit_item(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>) {
@@ -114,26 +84,3 @@ fn visit_struct_field(entity: &str, field: &syntax::ast::StructField) -> Vec<(St
     FieldMeta::new(&entity, &field_name, &ty, &attr)
 }
 
-
-pub fn fix_meta(meta: &mut OrmMeta) {
-    // for entity_meta in meta.entity_vec.iter_mut() {
-    //     // build field map / column map
-    //     entity_meta.field_map = entity_meta.field_vec
-    //         .iter()
-    //         .map(|field_meta_rc| (field_meta_rc.get_field_name(), field_meta_rc.clone()))
-    //         .collect();
-    //     // entity_meta.column_map = entity_meta.field_vec
-    //     //     .iter()
-    //     //     .map(|field_meta_rc| (field_meta_rc.column_name.clone(), field_meta_rc.clone()))
-    //     //     .collect();
-    // }
-    // // build entity_map / table_map
-    // meta.entity_map = meta.entity_vec
-    //     .iter()
-    //     .map(|entity_meta_rc| (entity_meta_rc.entity_name.clone(), entity_meta_rc.clone()))
-    //     .collect();
-    // meta.table_map = meta.entity_vec
-    //     .iter()
-    //     .map(|entity_meta_rc| (entity_meta_rc.table_name.clone(), entity_meta_rc.clone()))
-    //     .collect();
-}

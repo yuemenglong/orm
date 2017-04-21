@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::cell::Cell;
-use std::rc::Rc;
 use attr::Attr;
 use std::str::FromStr;
 use regex::Regex;
 
 use mysql;
+
+const DEFAULT_LEN: u64 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
@@ -341,8 +342,7 @@ impl FieldMeta {
         attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
     }
     fn pick_len(attr: &Attr) -> u64 {
-        let default = 64;
-        attr.get("len").map_or(default, |str| u64::from_str(str).unwrap())
+        attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())
     }
     fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
         attr.get_attr("cascade").map_or(Vec::new(), |attr| {
@@ -361,7 +361,6 @@ impl FieldMeta {
         })
     }
     fn pick_fetch(attr: &Attr) -> Fetch {
-        let default = true;
         attr.get("fetch").map_or(Fetch::Lazy, |str| {
             match str {
                 "lazy" => Fetch::Lazy,
@@ -404,7 +403,7 @@ impl FieldMeta {
         unreachable!()
     }
 
-    fn new_string(entity: &str, field: &str, ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
+    fn new_string(entity: &str, field: &str, _ty: &str, attr: &Attr) -> Vec<(String, FieldMeta)> {
         let meta = FieldMeta {
             field: field.to_string(),
             ty: TypeMeta::String {

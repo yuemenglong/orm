@@ -5,14 +5,8 @@ use mysql::Pool;
 use mysql::Error;
 use mysql::PooledConn;
 
-use itertools::Itertools;
-
-use entity::Entity;
-
-use meta;
 use meta::OrmMeta;
-use meta::Cascade;
-use cond::Cond;
+use entity::Entity;
 use session::Session;
 
 pub struct DB {
@@ -20,11 +14,11 @@ pub struct DB {
 }
 
 impl DB {
-    pub fn rebuild(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
+    pub fn rebuild(&self, meta: &OrmMeta) -> Result<u64, Error> {
         try!(self.drop_tables(meta));
         Ok(try!(self.create_tables(meta)))
     }
-    pub fn create_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
+    pub fn create_tables(&self, meta: &OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in meta.get_entities().iter() {
             let sql = entity_meta.sql_create_table();
@@ -38,7 +32,7 @@ impl DB {
         }
         return Ok(ret);
     }
-    pub fn drop_tables(&self, meta: &meta::OrmMeta) -> Result<u64, Error> {
+    pub fn drop_tables(&self, meta: &OrmMeta) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in meta.get_entities().iter() {
             let sql = entity_meta.sql_drop_table();
@@ -71,7 +65,7 @@ impl DB {
         }
     }
     pub fn open_session(&self) -> Session {
-        let mut conn = self.pool.get_conn();
+        let conn = self.pool.get_conn();
         Session::new(conn.unwrap())
     }
     pub fn get_conn(&self) -> Result<PooledConn, Error> {

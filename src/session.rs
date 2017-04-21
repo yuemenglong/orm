@@ -1,13 +1,8 @@
 #[macro_use]
 use macros;
 
-use mysql::Pool;
 use mysql::Error;
-use mysql::Value;
 use mysql::Row;
-use mysql::Params;
-use mysql::QueryResult;
-
 use mysql::PooledConn;
 
 use itertools::Itertools;
@@ -16,8 +11,6 @@ use std::rc::Rc;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::mem;
-use std::ops::Deref;
 use std::ops::DerefMut;
 
 use cond::Cond;
@@ -26,10 +19,8 @@ use entity::EntityInner;
 use entity::EntityInnerPointer;
 use select::Select;
 
-use meta;
 use meta::OrmMeta;
 use meta::EntityMeta;
-use meta::FieldMeta;
 use meta::Cascade;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -66,15 +57,6 @@ impl Session {
             status: Rc::new(Cell::new(SessionStatus::Normal)),
         }
     }
-    pub fn prep_exec<A, T, F, R>(&self, query: A, params: T, f: F) -> R
-        where A: AsRef<str>,
-              T: Into<Params>,
-              F: Fn(Result<QueryResult, Error>) -> R
-    {
-        let mut conn = self.conn.borrow_mut();
-        let res = conn.prep_exec(query, params);
-        f(res)
-    }
     pub fn insert<E>(&self, entity: &E) -> Result<(), Error>
         where E: Entity
     {
@@ -110,10 +92,10 @@ impl Session {
         self.get_inner(E::meta(), E::orm_meta(), &Cond::by_id(id))
             .map(|opt| opt.map(E::from_inner))
     }
-    pub fn close(&self) {
-        self.flush_cache();
-        self.clear_session();
+    pub fn close(&self) -> Result<(), Error> {
+        let res = self.flush_cache();
         self.status.set(SessionStatus::Closed);
+        res
     }
     pub fn status(&self) -> SessionStatus {
         self.status.get()
@@ -124,20 +106,17 @@ impl Session {
 }
 
 impl Session {
-    fn clear_session(&self) {
-        for rc in self.cache.borrow().iter() {
-            rc.borrow_mut().clear_session();
-        }
-    }
     fn flush_cache(&self) -> Result<(), Error> {
         // 一定要调用非guard函数！！，因为guard会调用flush_cache导致死循环
         let result = self.cache.borrow().iter().fold(Ok(()), |result, rc| {
             if result.is_err() {
                 return result;
             }
+            // 如果对象上没有级联标记，默认进行UPDATE
             let op = rc.borrow().cascade.map_or(Cascade::Update, |op| op);
             self.execute_impl(rc.clone(), op)
         });
+        // 重置动态级联标记
         for rc in self.cache.borrow().iter() {
             rc.borrow_mut().cascade_reset();
         }
@@ -155,8 +134,6 @@ impl Session {
         let result = cb();
         // 恢复当前状态
         self.status.set(old);
-        // 刷新缓存
-        self.flush_cache();
         return result;
     }
     fn batch_inner(&self, vec: &Vec<EntityInnerPointer>, op: Cascade) -> Result<(), Error> {
@@ -767,8 +744,6 @@ impl Session {
         }
     }
     fn gen_sql_columns(meta: &'static EntityMeta, table_alias: &str) -> Vec<String> {
-        let table_name = &meta.table_name;
-        let entity_name = &meta.entity_name;
         meta.get_non_refer_fields()
             .iter()
             .map(|field_meta| {
