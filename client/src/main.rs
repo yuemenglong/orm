@@ -24,16 +24,23 @@ fn main() {
 }
 
 fn select_test(db:&ast::DB){
+    let session = db.open_session();
     let mut select = Select::from::<Person>();
     select.wher(&Cond::by_id(1));
-    select.join("addr");
+    // let mut ts = select.join("teachers");
+    // ts.borrow_mut().wher(&Cond::by_id(1));
     // println!("{:?}", select.get_columns()); 
     // println!("{:?}", select.get_tables()); 
     // println!("{:?}", select.get_conds());
     // println!("{:?}", select.get_params());
     // println!("{}", select.get_sql());
-    let res = select.inner_query(&mut db.get_conn().unwrap());
-    println!("{:?}", res);
+    // let person = select.query::<Person>(&mut db.get_conn().unwrap()).unwrap().swap_remove(0);
+    let person = session.query::<Person>(&select).unwrap().swap_remove(0);
+    // let inner = person.inner();
+    // println!("{:?}", inner.borrow().many_many_map);
+    let teachers = person.get_teachers();
+    println!("{:?}", teachers);
+    // println!("{:?}", person);
 }
 
 fn get_test(db: &ast::DB) {
@@ -117,7 +124,7 @@ fn refer_test(db: &ast::DB) {
     db.update(&person).unwrap();
 
     person.debug();
-    db.delete(person).unwrap();
+    // db.delete(person).unwrap();
 }
 
 fn curd_test(db: &ast::DB) {

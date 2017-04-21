@@ -27,7 +27,48 @@ pub struct Select {
     meta: &'static EntityMeta,
     orm_meta: &'static OrmMeta,
     cond: Option<Cond>,
-    joins: Vec<(String, String, String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
+    joins: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
+}
+
+fn filter(vec: &mut Vec<EntityInnerPointer>) {
+    let copy = vec.clone();
+    vec.clear();
+    let mut map = HashMap::new();
+    for rc in copy {
+        let id = rc.borrow().get_id_u64().unwrap();
+        if !map.contains_key(&id) {
+            vec.push(rc.clone());
+        }
+        map.entry(id).or_insert(rc.clone());
+    }
+    for rc in vec.iter() {
+        for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
+            filter(om_vec);
+        }
+        for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
+            filter_pair(mm_vec);
+        }
+    }
+}
+fn filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) {
+    let copy = vec.clone();
+    vec.clear();
+    let mut map = HashMap::new();
+    for (mid, rc) in copy {
+        let id = rc.borrow().get_id_u64().unwrap();
+        if !map.contains_key(&id) {
+            vec.push((mid.clone(), rc.clone()));
+        }
+        map.entry(id).or_insert(rc.clone());
+    }
+    for &(ref mid_rc, ref rc) in vec.iter() {
+        for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
+            filter(om_vec);
+        }
+        for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
+            filter_pair(mm_vec);
+        }
+    }
 }
 
 impl Select {
@@ -63,51 +104,21 @@ impl Select {
         let rc = Rc::new(RefCell::new(Select::from_meta(b_meta, a.orm_meta)));
 
         let a_b_field = field_meta.get_field_name();
-        if field_meta.is_refer_pointer() {
-            let a_field = field_meta.get_pointer_id();
-            let b_field = "id".to_string();
-            a.joins.push((a_field, b_field, a_b_field, rc.clone()));
-            return rc;
-        } else if field_meta.is_refer_one_one() {
-            let a_field = "id".to_string();
-            let b_field = field_meta.get_one_one_id();
-            a.joins.push((a_field, b_field, a_b_field, rc.clone()));
-            return rc;
-        } else if field_meta.is_refer_one_many() {
-            let a_field = "id".to_string();
-            let b_field = field_meta.get_one_many_id();
-            a.joins.push((a_field, b_field, a_b_field, rc.clone()));
-            return rc;
-        } else if field_meta.is_refer_many_many() {
-            let a_field = "id".to_string();
-            let b_field = field_meta.get_many_many_id();
-            a.joins.push((a_field, b_field, a_b_field.clone(), rc.clone()));
-            let a_field = field_meta.get_many_many_refer_id();
-            let b_field = "id".to_string();
-            let ret = rc.borrow_mut().join_on(&a_field, &b_field, &a_b_field, b_meta);
-            return ret;
-        } else {
-            panic!("Join Must Set Refer Field, {}", field);
-        }
+        a.joins.push((a_b_field, rc.clone()));
+        return rc;
     }
 
-    pub fn join_on(&mut self,
-                   a_field: &str,
-                   b_field: &str,
-                   a_b_field: &str,
-                   b_meta: &'static EntityMeta)
-                   -> Rc<RefCell<Select>> {
-        let a = self;
-        if a.meta.field_map.get(a_field).is_none() || b_meta.field_map.get(b_field).is_none() {
-            panic!("Join Invalid Field, [{}], [{}]", a_field, b_field);
-        }
-        let rc = Rc::new(RefCell::new(Select::from_meta(b_meta, a.orm_meta)));
-        a.joins.push((a_field.to_string(), b_field.to_string(), a_b_field.to_string(), rc.clone()));
-        rc
+    pub fn query<E>(&self, conn: &mut PooledConn) -> Result<Vec<E>, Error>
+        where E: Entity
+    {
+        self.query_inner(conn).map(|vec| vec.into_iter().map(E::from_inner).collect::<_>())
     }
-    pub fn inner_query(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
+
+    pub fn query_inner(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
         let sql = self.get_sql();
         let params = self.get_params();
+        println!("{}", sql);
+        println!("\t{:?}", params);
         let res = conn.prep_exec(sql, params);
         let a_meta = self.meta;
         let alias = &a_meta.entity_name;
@@ -124,15 +135,18 @@ impl Select {
                 return Err(item.err().unwrap());
             }
             let mut row = item.as_mut().unwrap();
-            let rc = self.inner_pick(alias, &mut row, &mut map);
+            let rc = self.pick_inner(alias, &mut row, &mut map);
             if rc.is_some() {
                 acc.as_mut().unwrap().push(rc.unwrap().clone());
             }
             return acc;
         });
-        ret
+        ret.map(|mut vec| {
+            filter(&mut vec);
+            vec
+        })
     }
-    pub fn inner_pick(&self,
+    pub fn pick_inner(&self,
                       alias: &str,
                       row: &mut Row,
                       map: &mut HashMap<String, EntityInnerPointer>)
@@ -146,22 +160,30 @@ impl Select {
         let key = format!("{}_{}", alias, a_rc.borrow().get_id_u64().unwrap());
         map.entry(key.clone()).or_insert(a_rc.clone());
         let a_rc = map.get(&key).unwrap().clone();
-        for &(_, _, ref a_b_field, ref select_rc) in self.joins.iter() {
+        for &(ref a_b_field, ref select_rc) in self.joins.iter() {
             let field_meta = a_meta.field_map.get(a_b_field).unwrap();
             let b_alias = format!("{}_{}", alias, a_b_field);
-            let b_rc = select_rc.borrow().inner_pick(&b_alias, row, map);
+            let b_rc = select_rc.borrow().pick_inner(&b_alias, row, map);
             if field_meta.is_refer_pointer() {
                 a_rc.borrow_mut().pointer_map.insert(a_b_field.clone(), b_rc);
             } else if field_meta.is_refer_one_one() {
                 a_rc.borrow_mut().one_one_map.insert(a_b_field.clone(), b_rc);
             } else if field_meta.is_refer_one_many() {
                 a_rc.borrow_mut().one_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
+                if (b_rc.is_some()) {
+                    a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
+                }
             } else if field_meta.is_refer_many_many() {
                 let mid_alias = format!("{}__{}", alias, a_b_field);
-                let mid_rc = select_rc.borrow().inner_pick(&mid_alias, row, map);
+                let mid_rc = select_rc.borrow().pick_inner(&mid_alias, row, map);
                 a_rc.borrow_mut().many_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                a_rc.borrow_mut().many_many_map.get_mut(a_b_field).unwrap().push((mid_rc, b_rc.unwrap()));
+                if (b_rc.is_some()) {
+                    a_rc.borrow_mut()
+                        .many_many_map
+                        .get_mut(a_b_field)
+                        .unwrap()
+                        .push((mid_rc, b_rc.unwrap()));
+                }
             }
         }
         Some(a_rc)
@@ -216,7 +238,7 @@ impl Select {
         let a_table = &a_meta.table_name;
         let mut vec = self.joins
             .iter()
-            .flat_map(|&(_, _, ref a_b_field, ref rc)| {
+            .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_meta = rc.borrow().meta;
                 let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -238,7 +260,7 @@ impl Select {
         let a_table = &a_meta.table_name;
         let mut vec = self.joins
             .iter()
-            .flat_map(|&(_, _, ref a_b_field, ref rc)| {
+            .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_meta = rc.borrow().meta;
                 let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -256,7 +278,7 @@ impl Select {
         let a_table = &a_meta.table_name;
         let mut vec = self.joins
             .iter()
-            .flat_map(|&(_, _, ref a_b_field, ref rc)| {
+            .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_meta = rc.borrow().meta;
                 let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -275,27 +297,89 @@ impl Select {
         vec.insert(0, self_columns);
         vec
     }
+    fn get_join_field(field_meta: &FieldMeta) -> (String, String) {
+        if field_meta.is_refer_pointer() {
+            let a_field = field_meta.get_pointer_id();
+            let b_field = "id".to_string();
+            return (a_field, b_field);
+        } else if field_meta.is_refer_one_one() {
+            let a_field = "id".to_string();
+            let b_field = field_meta.get_one_one_id();
+            return (a_field, b_field);
+        } else if field_meta.is_refer_one_many() {
+            let a_field = "id".to_string();
+            let b_field = field_meta.get_one_many_id();
+            return (a_field, b_field);
+        } else {
+            unreachable!();
+        }
+    }
+    fn get_join_field_many_many(field_meta: &FieldMeta) -> (String, String, String, String) {
+        if field_meta.is_refer_many_many() {
+            let a_field = "id".to_string();
+            let mid_a_field = field_meta.get_many_many_id();
+            let mid_b_field = field_meta.get_many_many_refer_id();
+            let b_field = "id".to_string();
+            return (a_field, mid_a_field, mid_b_field, b_field);
+        } else {
+            unreachable!();
+        }
+    }
     fn inner_get_tables(&self, alias: &str) -> Vec<String> {
         let a_meta = self.meta;
         let a_table = &a_meta.table_name;
         self.joins
             .iter()
-            .flat_map(|&(ref a_field, ref b_field, ref a_b_field, ref rc)| {
+            .flat_map(|&(ref a_b_field, ref rc)| {
+                let a_b_meta = a_meta.field_map.get(a_b_field).unwrap();
+                let b_alias = format!("{}_{}", alias, a_b_field);
                 let b_meta = rc.borrow().meta;
                 let b_table = &b_meta.table_name;
-                let a_column = a_meta.field_map.get(a_field).unwrap().get_column_name();
-                let b_column = b_meta.field_map.get(b_field).unwrap().get_column_name();
-                let b_alias = format!("{}_{}", alias, a_b_field);
-                let join_sql = format!("{} AS {} ON {}.{} = {}.{}",
-                                       b_table,
-                                       b_alias,
-                                       alias,
-                                       a_column,
-                                       b_alias,
-                                       b_column);
                 let mut vec = rc.borrow().inner_get_tables(&b_alias);
-                vec.insert(0, join_sql);
-                vec
+                if !a_b_meta.is_refer_many_many() {
+                    let (a_field, b_field) = Self::get_join_field(a_b_meta);
+                    let a_column = a_meta.field_map.get(&a_field).unwrap().get_column_name();
+                    let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
+                    let join_sql = format!("{} AS {} ON {}.{} = {}.{}",
+                                           b_table,
+                                           b_alias,
+                                           alias,
+                                           a_column,
+                                           b_alias,
+                                           b_column);
+                    vec.insert(0, join_sql);
+                    vec
+                } else {
+                    let mid_entity = a_b_meta.get_many_many_middle_entity();
+                    let mid_meta = self.orm_meta.entity_map.get(&mid_entity).unwrap();
+                    let mid_table = &mid_meta.table_name;
+                    let mid_alias = format!("{}__{}", alias, a_b_field);
+                    let (a_field, a_mid_field, b_mid_field, b_field) =
+                        Self::get_join_field_many_many(a_b_meta);
+                    let a_column = a_meta.field_map.get(&a_field).unwrap().get_column_name();
+                    let a_mid_column =
+                        mid_meta.field_map.get(&a_mid_field).unwrap().get_column_name();
+                    let b_mid_column =
+                        mid_meta.field_map.get(&b_mid_field).unwrap().get_column_name();
+                    let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
+                    let a_join_mid = format!("{} AS {} ON {}.{} = {}.{}",
+                                             mid_table,
+                                             mid_alias,
+                                             alias,
+                                             a_column,
+                                             mid_alias,
+                                             a_mid_column);
+                    let mid_join_b = format!("{} AS {} ON {}.{} = {}.{}",
+                                             b_table,
+                                             b_alias,
+                                             mid_alias,
+                                             b_mid_column,
+                                             b_alias,
+                                             b_column);
+                    vec.insert(0, mid_join_b);
+                    vec.insert(0, a_join_mid);
+                    vec
+                }
             })
             .collect::<Vec<_>>()
     }
