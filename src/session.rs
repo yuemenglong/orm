@@ -67,7 +67,7 @@ impl Session {
     {
         self.execute_inner(entity.inner(), Cascade::Update)
     }
-    pub fn delete<E>(&self, entity: E) -> Result<(), Error>
+    pub fn delete<E>(&self, entity: &E) -> Result<(), Error>
         where E: Entity
     {
         self.execute_inner(entity.inner(), Cascade::Delete)

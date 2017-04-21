@@ -1,10 +1,13 @@
+// #[macro_use]
+// extern crate log;
+#[macro_use]
+extern crate itertools;
+
 extern crate syntex_syntax as syntax;
 extern crate syntex_errors as errors;
 extern crate regex;
 extern crate mysql;
 extern crate rustc_serialize;
-#[macro_use]
-extern crate itertools;
 
 pub use rustc_serialize::json;
 
@@ -59,10 +62,16 @@ pub fn build(src: &str) -> String {
     ret
 }
 
-pub fn open(user: &str, pwd: &str, host: &str, port: u16, db: &str) -> Result<DB, mysql::Error> {
+pub fn open(user: &str,
+            pwd: &str,
+            host: &str,
+            port: u16,
+            db: &str,
+            orm_meta: &'static OrmMeta)
+            -> Result<DB, mysql::Error> {
     let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
     match mysql::Pool::new(conn_str.as_ref()) {
-        Ok(pool) => Ok(DB { pool: pool }),
+        Ok(pool) => Ok(DB::new(pool, orm_meta)),
         Err(err) => Err(err),
     }
 }

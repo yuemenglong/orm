@@ -83,4 +83,3 @@ fn visit_struct_field(entity: &str, field: &syntax::ast::StructField) -> Vec<(St
     let attr = visit_attrs(&field.attrs);
     FieldMeta::new(&entity, &field_name, &ty, &attr)
 }
-
