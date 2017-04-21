@@ -368,6 +368,7 @@ impl EntityInner {
             }
         }
         if !a.need_lazy_load() {
+            debug!("not need_lazy_load");
             return Vec::new();
         }
         // 下面为懒加载

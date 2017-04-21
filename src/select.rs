@@ -5,6 +5,7 @@ use cond::Cond;
 use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
+use session::Session;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -108,36 +109,45 @@ impl Select {
         return rc;
     }
 
-    pub fn inner_query(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
+    pub fn query<E>(&self, session: &Session) -> Result<Vec<E>, Error>
+        where E: Entity
+    {
+        self.inner_query(session).map(|vec| vec.into_iter().map(E::from_inner).collect::<_>())
+    }
+
+    // pub fn inner_query(&self, conn: &mut PooledConn) -> Result<Vec<EntityInnerPointer>, Error> {
+    pub fn inner_query(&self, session: &Session) -> Result<Vec<EntityInnerPointer>, Error> {
         let sql = self.get_sql();
         let params = self.get_params();
         println!("{}", sql);
         println!("\t{:?}", params);
-        let res = conn.prep_exec(sql, params);
-        let a_meta = self.meta;
-        let alias = &a_meta.entity_name;
-        if res.is_err() {
-            return Err(res.err().unwrap());
-        }
-        let query_result = res.unwrap();
-        let mut map = HashMap::new();
-        let ret = query_result.into_iter().fold(Ok(Vec::new()), |mut acc, mut item| {
-            if acc.is_err() {
+        session.prep_exec(sql, params, |res| {
+            // let res = conn.prep_exec(sql, params);
+            if res.is_err() {
+                return Err(res.err().unwrap());
+            }
+            let a_meta = self.meta;
+            let alias = &a_meta.entity_name;
+            let query_result = res.unwrap();
+            let mut map = HashMap::new();
+            let ret = query_result.into_iter().fold(Ok(Vec::new()), |mut acc, mut item| {
+                if acc.is_err() {
+                    return acc;
+                }
+                if item.is_err() {
+                    return Err(item.err().unwrap());
+                }
+                let mut row = item.as_mut().unwrap();
+                let rc = self.inner_pick(alias, &mut row, &mut map);
+                if rc.is_some() {
+                    acc.as_mut().unwrap().push(rc.unwrap().clone());
+                }
                 return acc;
-            }
-            if item.is_err() {
-                return Err(item.err().unwrap());
-            }
-            let mut row = item.as_mut().unwrap();
-            let rc = self.inner_pick(alias, &mut row, &mut map);
-            if rc.is_some() {
-                acc.as_mut().unwrap().push(rc.unwrap().clone());
-            }
-            return acc;
-        });
-        ret.map(|mut vec| {
-            filter(&mut vec);
-            vec
+            });
+            ret.map(|mut vec| {
+                filter(&mut vec);
+                vec
+            })
         })
     }
     pub fn inner_pick(&self,

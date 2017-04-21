@@ -5,6 +5,8 @@ use mysql::Pool;
 use mysql::Error;
 use mysql::Value;
 use mysql::Row;
+use mysql::Params;
+use mysql::QueryResult;
 
 use mysql::PooledConn;
 
@@ -64,6 +66,15 @@ impl Session {
             status: Rc::new(Cell::new(SessionStatus::Normal)),
         }
     }
+    pub fn prep_exec<A, T, F, R>(&self, query: A, params: T, f:F) -> R
+        where A: AsRef<str>,
+              T: Into<Params>,
+              F:Fn(Result<QueryResult, Error>)->R
+    {
+        let mut conn = self.conn.borrow_mut();
+        let res = conn.prep_exec(query, params);
+        f(res)
+    }
     pub fn insert<E>(&self, entity: &E) -> Result<(), Error>
         where E: Entity
     {
@@ -87,6 +98,11 @@ impl Session {
                 .map(E::from_inner)
                 .collect::<Vec<E>>()
         })
+    }
+    pub fn query<E>(&self, select: &Select) -> Result<Vec<E>, Error>
+        where E: Entity
+    {
+        self.query_inner(select).map(|vec| vec.into_iter().map(E::from_inner).collect())
     }
     pub fn get<E>(&self, id: u64) -> Result<Option<E>, Error>
         where E: Entity
@@ -158,7 +174,7 @@ impl Session {
         a_rc.borrow_mut().cascade_reset();
         result
     }
-    pub fn query_inner(&self, select:&Select)->Result<Vec<EntityInnerPointer>, Error>{
+    pub fn query_inner(&self, select: &Select) -> Result<Vec<EntityInnerPointer>, Error> {
         select.inner_query(self.conn.borrow_mut().deref_mut())
     }
     pub fn select_inner(&self,
