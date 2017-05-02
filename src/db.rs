@@ -53,13 +53,21 @@ impl DB {
         }
         return Ok(ret);
     }
+    fn session_guard<F, R>(self, f: F) -> R
+        where F: Fn(Session) -> R
+    {
+        let session = self.open_session();
+        let res = f(session);
+        session.close();
+    }
     pub fn open_session(&self) -> Session {
         let conn = self.pool.get_conn();
         Session::new(conn.unwrap())
     }
     pub fn insert<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let session = self.open_session();
-        session.insert(entity)
+        // let session = self.open_session();
+        // session.insert(entity)
+        self.session_guard(|session| session.insert(entity))
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
         let session = self.open_session();
