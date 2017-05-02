@@ -1,10 +1,10 @@
-extern crate ast;
+extern crate orm;
 extern crate mysql;
 
-use ast::Entity;
-use ast::EntityMeta;
-use ast::Select;
-use ast::Cond;
+use orm::Entity;
+use orm::EntityMeta;
+use orm::Select;
+use orm::Cond;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -21,11 +21,11 @@ mod test;
 // flush privileges;
 fn main() {
     test::insert_test();
-    // let db = ast::open("root", "root", "172.16.16.225", 3306, "test").unwrap();
+    // let db = orm::open("root", "root", "172.16.16.225", 3306, "test").unwrap();
     // select_test(&db);
 }
 
-// fn select_test(db:&ast::DB){
+// fn select_test(db:&orm::DB){
 //     let session = db.open_session();
 //     let mut select = Select::from::<Person>();
 //     select.wher(&Cond::by_id(1));
@@ -45,7 +45,7 @@ fn main() {
 //     // println!("{:?}", person);
 // }
 
-// fn get_test(db: &ast::DB) {
+// fn get_test(db: &orm::DB) {
 //     db.rebuild(orm_meta()).unwrap();
 //     let mut p = Person::default();
 //     p.set_addr(&Address::default());
@@ -76,7 +76,7 @@ fn main() {
 //     p.debug();
 // }
 
-// fn refer_test(db: &ast::DB) {
+// fn refer_test(db: &orm::DB) {
 //     db.rebuild(orm_meta()).unwrap();
 //     let mut person = Person::default();
 //     person.set_name("Tom");
@@ -129,7 +129,7 @@ fn main() {
 //     // db.delete(person).unwrap();
 // }
 
-// fn curd_test(db: &ast::DB) {
+// fn curd_test(db: &orm::DB) {
 //     let mut p = Person::default();
 //     p.set_age(100);
 //     p.set_name("Tom");

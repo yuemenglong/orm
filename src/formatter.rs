@@ -3,16 +3,16 @@ use rustc_serialize;
 use meta::*;
 
 static TPL: &'static str = r#"
-use ast;
-use ast::Entity;
+use orm;
+use orm::Entity;
 use std;
 
-static mut ORM_META: Option<&'static ast::meta::OrmMeta> = None;
+static mut ORM_META: Option<&'static orm::meta::OrmMeta> = None;
 static ONCE: std::sync::Once = std::sync::ONCE_INIT;
 
-pub fn orm_meta() -> &'static ast::meta::OrmMeta {
+pub fn orm_meta() -> &'static orm::meta::OrmMeta {
     let json = r#${JSON}#;
-    ONCE.call_once(|| unsafe { ORM_META = Some(ast::init::init_meta(json)) });
+    ONCE.call_once(|| unsafe { ORM_META = Some(orm::init::init_meta(json)) });
     unsafe { ORM_META.unwrap() }
 }
 
@@ -22,7 +22,7 @@ ${ENTITIES}
 static TPL_STRUCT: &'static str = r#"
 #[derive(Debug, Clone)]
 pub struct ${ENTITY_NAME} {
-    inner: ast::EntityInnerPointer,
+    inner: orm::EntityInnerPointer,
 }
 "#;
 
@@ -140,29 +140,29 @@ static TPL_IMPL_CASCADE: &'static str = r#"
     }"#;
 
 static TPL_TRAIT: &'static str = r#"
-impl ast::Entity for ${ENTITY_NAME} {
-    fn orm_meta() -> &'static ast::meta::OrmMeta {
+impl orm::Entity for ${ENTITY_NAME} {
+    fn orm_meta() -> &'static orm::meta::OrmMeta {
         orm_meta()
     }
-    fn meta() -> &'static ast::meta::EntityMeta {
+    fn meta() -> &'static orm::meta::EntityMeta {
         orm_meta().entity_map.get("${ENTITY_NAME}").unwrap()
     }
     fn default() -> Self {
         ${ENTITY_NAME} {
-            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::default(Self::meta(), Self::orm_meta())))
+            inner: std::rc::Rc::new(std::cell::RefCell::new(orm::EntityInner::default(Self::meta(), Self::orm_meta())))
         }
     }
     fn new() -> Self {
         ${ENTITY_NAME} {
-            inner: std::rc::Rc::new(std::cell::RefCell::new(ast::EntityInner::new(Self::meta(), Self::orm_meta())))
+            inner: std::rc::Rc::new(std::cell::RefCell::new(orm::EntityInner::new(Self::meta(), Self::orm_meta())))
         }
     }
-    fn from_inner(inner: ast::EntityInnerPointer) -> ${ENTITY_NAME} {
+    fn from_inner(inner: orm::EntityInnerPointer) -> ${ENTITY_NAME} {
         ${ENTITY_NAME} {
             inner: inner,
         }
     }
-    fn inner(&self) -> ast::EntityInnerPointer {
+    fn inner(&self) -> orm::EntityInnerPointer {
         self.inner.clone()
     }
 }

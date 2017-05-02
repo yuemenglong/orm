@@ -53,12 +53,13 @@ impl DB {
         }
         return Ok(ret);
     }
-    fn session_guard<F, R>(self, f: F) -> R
-        where F: Fn(Session) -> R
+    fn session_guard<F, R>(&self, f: F) -> R
+        where F: Fn(&Session) -> R
     {
         let session = self.open_session();
-        let res = f(session);
+        let res = f(&session);
         session.close();
+        res
     }
     pub fn open_session(&self) -> Session {
         let conn = self.pool.get_conn();

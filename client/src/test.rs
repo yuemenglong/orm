@@ -1,9 +1,9 @@
-use ast::Entity;
-use ast::EntityMeta;
-use ast::Select;
-use ast::Cond;
-use ast::DB;
-use ast;
+use orm::Entity;
+use orm::EntityMeta;
+use orm::Select;
+use orm::Cond;
+use orm::DB;
+use orm;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -13,7 +13,7 @@ use mysql::Value;
 use entity::*;
 
 fn openDB() -> DB {
-    ast::open("root", "root", "172.16.16.225", 3306, "test", orm_meta()).unwrap()
+    orm::open("root", "root", "172.16.16.224", 3306, "test", orm_meta()).unwrap()
 }
 
 #[test]
