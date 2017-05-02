@@ -5,23 +5,19 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::ops::Deref;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
 
 use mysql::Value;
 use mysql::Error;
-use mysql::error::MySqlError;
 use mysql::value;
 use mysql::prelude::FromValue;
-use mysql::QueryResult;
 use mysql::Row;
 use mysql::prelude::GenericConnection;
 
 use meta::OrmMeta;
 use meta::EntityMeta;
-use meta::FieldMeta;
 use meta::Cascade;
 use session::Session;
 use session::SessionStatus;
@@ -353,7 +349,7 @@ impl EntityInner {
             })
             .collect::<Vec<_>>();
         // 剩下的老关系都要删掉
-        for (m_id, m_rc) in old_b_mid_map.iter() {
+        for (_mid, m_rc) in old_b_mid_map.iter() {
             m_rc.borrow_mut().cascade_delete();
             a.push_cache(m_rc.clone());
         }
@@ -368,7 +364,6 @@ impl EntityInner {
             }
         }
         if !a.need_lazy_load() {
-            debug!("not need_lazy_load");
             return Vec::new();
         }
         // 下面为懒加载
@@ -560,14 +555,10 @@ impl EntityInner {
         }
         for (_, vec) in &self.many_many_map {
             for &(ref m_opt, ref b_rc) in vec {
-                m_opt.iter().map(|m_rc| m_rc.borrow_mut().cascade_reset());
+                m_opt.as_ref().map(|m_rc| m_rc.borrow_mut().cascade_reset());
                 b_rc.borrow_mut().cascade_reset();
             }
         }
-        // cache cascade
-        // for &(_, ref b_rc) in &self.cache {
-        //     b_rc.borrow_mut().cascade_reset();
-        // }
         // 字段cascade
         for a_b_meta in &self.meta.get_refer_fields() {
             a_b_meta.set_refer_rt_cascade(None);
@@ -636,7 +627,7 @@ impl EntityInner {
         let id = self.get_id_value();
         params.insert(0, ("id".to_string(), id));
         println!("{}, {:?}", sql, params);
-        conn.prep_exec(sql, params).map(|res| ())
+        conn.prep_exec(sql, params).map(|_| ())
     }
     pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
         where C: GenericConnection
@@ -645,7 +636,7 @@ impl EntityInner {
         let id = self.get_id_value();
         let params = vec![("id".to_string(), id)];
         println!("{}, {:?}", sql, params);
-        conn.prep_exec(sql, params).map(|res| ())
+        conn.prep_exec(sql, params).map(|_| ())
     }
 }
 
@@ -764,6 +755,14 @@ impl Hash for EntityInner {
         self.get_addr().hash(state);
     }
 }
+
+// impl<T> fmt::Debug for T
+//     where T: Entity
+// {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{:?}", self.inner().borrow())
+//     }
+// }
 
 pub trait Entity {
     fn orm_meta() -> &'static OrmMeta;

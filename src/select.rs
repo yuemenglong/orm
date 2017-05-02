@@ -17,11 +17,6 @@ use mysql::Error;
 
 // Select::from<E>().wher(Cond::by_id()).join("b")
 
-pub struct MultiSelect {
-    first: (String, Rc<RefCell<Select>>), //(a_alias)
-    joins: Vec<(String, String, String, Rc<RefCell<Select>>)>, // (a_field, b_field, b_alias)
-}
-
 #[derive(Clone)]
 pub struct Select {
     meta: &'static EntityMeta,
@@ -61,7 +56,7 @@ fn filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) 
         }
         map.entry(id).or_insert(rc.clone());
     }
-    for &(ref mid_rc, ref rc) in vec.iter() {
+    for &(_, ref rc) in vec.iter() {
         for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
             filter(om_vec);
         }
@@ -170,14 +165,14 @@ impl Select {
                 a_rc.borrow_mut().one_one_map.insert(a_b_field.clone(), b_rc);
             } else if field_meta.is_refer_one_many() {
                 a_rc.borrow_mut().one_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                if (b_rc.is_some()) {
+                if b_rc.is_some() {
                     a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
                 }
             } else if field_meta.is_refer_many_many() {
                 let mid_alias = format!("{}__{}", alias, a_b_field);
                 let mid_rc = select_rc.borrow().pick_inner(&mid_alias, row, map);
                 a_rc.borrow_mut().many_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
-                if (b_rc.is_some()) {
+                if b_rc.is_some() {
                     a_rc.borrow_mut()
                         .many_many_map
                         .get_mut(a_b_field)
@@ -204,13 +199,11 @@ impl Select {
     }
     pub fn get_params(&self) -> Vec<(String, Value)> {
         let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let a_entity = &a_meta.entity_name;
         self.inner_get_params(a_entity)
     }
     pub fn get_conds(&self) -> Vec<String> {
         let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let a_entity = &a_meta.entity_name;
         let mut vec = self.inner_get_conds(a_entity);
         if vec.len() == 0 {
@@ -220,8 +213,8 @@ impl Select {
     }
     pub fn get_tables(&self) -> Vec<String> {
         let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let a_entity = &a_meta.entity_name;
+        let a_table = &a_meta.table_name;
         let mut vec = self.inner_get_tables(a_entity);
         let sql = format!("{} as {}", a_table, a_entity);
         vec.insert(0, sql);
@@ -229,18 +222,13 @@ impl Select {
     }
     pub fn get_columns(&self) -> Vec<Vec<String>> {
         let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let a_entity = &a_meta.entity_name;
         self.inner_get_columns(a_entity)
     }
     fn inner_get_params(&self, alias: &str) -> Vec<(String, Value)> {
-        let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
-        let mut vec = self.joins
+        let vec = self.joins
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
-                let b_meta = rc.borrow().meta;
-                let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
                 rc.borrow().inner_get_params(&b_alias)
             })
@@ -256,13 +244,9 @@ impl Select {
         }
     }
     fn inner_get_conds(&self, alias: &str) -> Vec<String> {
-        let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let mut vec = self.joins
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
-                let b_meta = rc.borrow().meta;
-                let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
                 rc.borrow().inner_get_conds(&b_alias)
             })
@@ -274,13 +258,9 @@ impl Select {
         vec
     }
     fn inner_get_columns(&self, alias: &str) -> Vec<Vec<String>> {
-        let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         let mut vec = self.joins
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
-                let b_meta = rc.borrow().meta;
-                let b_table = &b_meta.table_name;
                 let b_alias = format!("{}_{}", alias, a_b_field);
                 rc.borrow().inner_get_columns(&b_alias)
             })
@@ -327,7 +307,6 @@ impl Select {
     }
     fn inner_get_tables(&self, alias: &str) -> Vec<String> {
         let a_meta = self.meta;
-        let a_table = &a_meta.table_name;
         self.joins
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {

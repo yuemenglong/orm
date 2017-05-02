@@ -1,11 +1,5 @@
 use mysql::Value;
 
-use entity::Entity;
-
-use meta::OrmMeta;
-use meta::EntityMeta;
-use meta::FieldMeta;
-
 #[derive(Debug, Clone)]
 pub struct Cond {
     items: Vec<Item>,
