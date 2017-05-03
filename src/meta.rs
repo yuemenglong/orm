@@ -6,7 +6,7 @@ use regex::Regex;
 
 use mysql;
 
-const DEFAULT_LEN: u64 = 64;
+const DEFAULT_LEN: u64 = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {

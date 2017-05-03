@@ -25,7 +25,7 @@ pub struct Select {
     joins: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
 }
 
-fn filter(vec: &mut Vec<EntityInnerPointer>) {
+fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
     let copy = vec.clone();
     vec.clear();
     let mut map = HashMap::new();
@@ -38,14 +38,14 @@ fn filter(vec: &mut Vec<EntityInnerPointer>) {
     }
     for rc in vec.iter() {
         for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
-            filter(om_vec);
+            dup_filter(om_vec);
         }
         for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
-            filter_pair(mm_vec);
+            dup_filter_pair(mm_vec);
         }
     }
 }
-fn filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) {
+fn dup_filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) {
     let copy = vec.clone();
     vec.clear();
     let mut map = HashMap::new();
@@ -58,10 +58,10 @@ fn filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) 
     }
     for &(_, ref rc) in vec.iter() {
         for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
-            filter(om_vec);
+            dup_filter(om_vec);
         }
         for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
-            filter_pair(mm_vec);
+            dup_filter_pair(mm_vec);
         }
     }
 }
@@ -137,7 +137,7 @@ impl Select {
             return acc;
         });
         ret.map(|mut vec| {
-            filter(&mut vec);
+            dup_filter(&mut vec);
             vec
         })
     }
