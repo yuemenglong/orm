@@ -368,7 +368,7 @@ impl EntityInner {
         }
         // 下面为懒加载
         let mut select = Select::from_meta(a.meta, a.orm_meta);
-        select.join(key);
+        select.with(key);
         select.wher(&Cond::by_id(a.get_id_u64().unwrap()));
         let vec = (|| {
             let session = a.session.as_ref().unwrap();

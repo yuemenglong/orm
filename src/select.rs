@@ -22,7 +22,7 @@ pub struct Select {
     meta: &'static EntityMeta,
     orm_meta: &'static OrmMeta,
     cond: Option<Cond>,
-    joins: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
+    withs: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
 }
 
 fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
@@ -74,7 +74,7 @@ impl Select {
             meta: E::meta(),
             orm_meta: E::orm_meta(),
             cond: None,
-            joins: Vec::new(),
+            withs: Vec::new(),
         }
     }
     pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Self {
@@ -82,7 +82,7 @@ impl Select {
             meta: meta,
             orm_meta: orm_meta,
             cond: None,
-            joins: Vec::new(),
+            withs: Vec::new(),
         }
     }
     pub fn wher(&mut self, cond: &Cond) -> &Self {
@@ -90,7 +90,7 @@ impl Select {
         self
     }
 
-    pub fn join(&mut self, field: &str) -> Rc<RefCell<Select>> {
+    pub fn with(&mut self, field: &str) -> Rc<RefCell<Select>> {
         let a = self;
         let field_meta =
             a.meta.field_map.get(field).expect(&format!("Join Field Not Exists: {}", field));
@@ -99,7 +99,7 @@ impl Select {
         let rc = Rc::new(RefCell::new(Select::from_meta(b_meta, a.orm_meta)));
 
         let a_b_field = field_meta.get_field_name();
-        a.joins.push((a_b_field, rc.clone()));
+        a.withs.push((a_b_field, rc.clone()));
         return rc;
     }
 
@@ -155,7 +155,7 @@ impl Select {
         let key = format!("{}_{}", alias, a_rc.borrow().get_id_u64().unwrap());
         map.entry(key.clone()).or_insert(a_rc.clone());
         let a_rc = map.get(&key).unwrap().clone();
-        for &(ref a_b_field, ref select_rc) in self.joins.iter() {
+        for &(ref a_b_field, ref select_rc) in self.withs.iter() {
             let field_meta = a_meta.field_map.get(a_b_field).unwrap();
             let b_alias = format!("{}_{}", alias, a_b_field);
             let b_rc = select_rc.borrow().pick_inner(&b_alias, row, map);
@@ -226,7 +226,7 @@ impl Select {
         self.inner_get_columns(a_entity)
     }
     fn inner_get_params(&self, alias: &str) -> Vec<(String, Value)> {
-        let vec = self.joins
+        let vec = self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -244,7 +244,7 @@ impl Select {
         }
     }
     fn inner_get_conds(&self, alias: &str) -> Vec<String> {
-        let mut vec = self.joins
+        let mut vec = self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -258,7 +258,7 @@ impl Select {
         vec
     }
     fn inner_get_columns(&self, alias: &str) -> Vec<Vec<String>> {
-        let mut vec = self.joins
+        let mut vec = self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
                 let b_alias = format!("{}_{}", alias, a_b_field);
@@ -307,7 +307,7 @@ impl Select {
     }
     fn inner_get_tables(&self, alias: &str) -> Vec<String> {
         let a_meta = self.meta;
-        self.joins
+        self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
                 let a_b_meta = a_meta.field_map.get(a_b_field).unwrap();
