@@ -1,16 +1,15 @@
 [package]
 name = "orm"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["yml <yuemenglong@126.com>"]
 description = "A ORM framework written in Rust"
 license = "MIT/Apache-2.0"
 
 [dependencies]
-syntex = "*"
-syntex_syntax = "*"
-syntex_errors = "*"
-mysql = "*"
+syntex = "0.58.1"
+syntex_syntax = "0.58.1"
+syntex_errors = "0.58.1"
+mysql = "11.0.0"
 regex = "0.2"
 rustc-serialize = "0.3"
 itertools = "0.5.9"
-log = "*"
