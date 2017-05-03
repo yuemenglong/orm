@@ -71,15 +71,18 @@ impl DB {
         self.session_guard(|session| session.insert(entity))
     }
     pub fn update<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let session = self.open_session();
-        session.update(entity)
+        // let session = self.open_session();
+        // session.update(entity)
+        self.session_guard(|session| session.update(entity))
     }
     pub fn delete<E: Entity>(&self, entity: &E) -> Result<(), Error> {
-        let session = self.open_session();
-        session.delete(entity)
+        // let session = self.open_session();
+        // session.delete(entity)
+        self.session_guard(|session| session.delete(entity))
     }
     pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
-        let session = self.open_session();
-        session.get::<E>(id)
+        // let session = self.open_session();
+        // session.get::<E>(id)
+        self.session_guard(|session| session.get::<E>(id))
     }
 }

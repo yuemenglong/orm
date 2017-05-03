@@ -13,7 +13,7 @@ use mysql::Value;
 use entity::*;
 
 fn openDB() -> DB {
-    orm::open("root", "root", "127.0.0.1", 3306, "test", orm_meta()).unwrap()
+    orm::open("root", "root", "172.16.16.224", 3306, "test", orm_meta()).unwrap()
 }
 
 #[test]
@@ -21,6 +21,7 @@ fn test(){
     insert_test();
     update_test();
     delete_test();
+    select_test();
 }
 
 pub fn insert_test() {
@@ -67,4 +68,21 @@ pub fn delete_test() {
     db.delete(opt.as_ref().unwrap()).unwrap();
     let mut opt = db.get::<Test>(id).unwrap();
     assert!(opt.is_none());
+}
+
+pub fn select_test(){
+    let db = openDB();
+    db.rebuild();
+    let mut t = Test::default();
+    t.set_int_val(100);
+    t.set_str_val("hello world");
+    db.insert(&t).unwrap();
+    let id = t.get_id();
+    let mut select = Select::from::<Test>();
+    select.wher(&Cond::by_id(id));
+    let session = db.open_session();
+    let res = session.query::<Test>(&select).unwrap();
+    let ref t = res[0];
+    assert!(t.get_int_val() == 100);
+    assert!(t.get_str_val() == "hello world");
 }

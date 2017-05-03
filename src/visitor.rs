@@ -54,10 +54,13 @@ fn visit_item(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>
 }
 fn visit_struct(item: &syntax::ast::Item) -> (EntityMeta, Vec<(String, FieldMeta)>) {
     if let Struct(ref variant_data, ref _generics) = item.node {
+        let attr = visit_attrs(&item.attrs);
         let mut entity_meta = EntityMeta::default();
         let entity_name = item.ident.name.as_str().to_string();
         entity_meta.entity_name = entity_name.to_string();
-        entity_meta.table_name = entity_name.to_string();
+        entity_meta.table_name = attr.get("table")
+            .map_or(entity_name.to_string(), |v| v.to_string());
+        // entity_meta.table_name = entity_name.to_string();
         if let &VariantData::Struct(ref vec, _id) = variant_data {
             // 加上pkey
             let mut ret = FieldMeta::new_pkey(&entity_name);
