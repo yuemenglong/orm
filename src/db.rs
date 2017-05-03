@@ -22,10 +22,10 @@ impl DB {
         }
     }
     pub fn rebuild(&self) -> Result<u64, Error> {
-        try!(self.drop_tables());
-        Ok(try!(self.create_tables()))
+        try!(self.drop());
+        Ok(try!(self.create()))
     }
-    pub fn create_tables(&self) -> Result<u64, Error> {
+    pub fn create(&self) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in self.orm_meta.get_entities().iter() {
             let sql = entity_meta.sql_create_table();
@@ -39,7 +39,7 @@ impl DB {
         }
         return Ok(ret);
     }
-    pub fn drop_tables(&self) -> Result<u64, Error> {
+    pub fn drop(&self) -> Result<u64, Error> {
         let mut ret = 0;
         for entity_meta in self.orm_meta.get_entities().iter() {
             let sql = entity_meta.sql_drop_table();

@@ -13,7 +13,7 @@ use mysql::Value;
 use entity::*;
 
 fn openDB() -> DB {
-    orm::open("root", "root", "172.16.16.224", 3306, "test", orm_meta()).unwrap()
+    orm::open("root", "root", "127.0.0.1", 3306, "test", orm_meta()).unwrap()
 }
 
 #[test]
