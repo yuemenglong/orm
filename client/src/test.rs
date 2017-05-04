@@ -2,7 +2,8 @@ use orm::Entity;
 use orm::EntityMeta;
 use orm::Select;
 use orm::Cond;
-use orm::DB;
+use orm::JoinCond;
+use orm::Db;
 use orm;
 
 use std::cell::RefCell;
@@ -12,7 +13,7 @@ use std::mem;
 use mysql::Value;
 use entity::*;
 
-fn openDB() -> DB {
+fn open_db() -> Db {
     orm::open("root", "root", "172.16.16.224", 3306, "test", orm_meta()).unwrap()
 }
 
@@ -25,7 +26,7 @@ fn test(){
 }
 
 pub fn insert_test() {
-    let db = openDB();
+    let db = open_db();
     db.rebuild();
     let mut t = Test::default();
     t.set_int_val(100);
@@ -38,7 +39,7 @@ pub fn insert_test() {
 }
 
 pub fn update_test() {
-    let db = openDB();
+    let db = open_db();
     db.rebuild();
     let mut t = Test::default();
     t.set_int_val(100);
@@ -56,7 +57,7 @@ pub fn update_test() {
 }
 
 pub fn delete_test() {
-    let db = openDB();
+    let db = open_db();
     db.rebuild();
     let mut t = Test::default();
     t.set_int_val(100);
@@ -71,7 +72,7 @@ pub fn delete_test() {
 }
 
 pub fn select_refer_test(){
-    let db = openDB();
+    let db = open_db();
     db.rebuild();
 
     let mut t = Test::default();
@@ -91,4 +92,25 @@ pub fn select_refer_test(){
     assert!(t.get_int_val() == 100);
     assert!(t.get_str_val() == "hello world");
     assert!(t.get_ptr().get_int_val() == 200);
+}
+
+pub fn select_join_test(){
+    let db = open_db();
+    db.rebuild();
+
+    let mut t = Test::default();
+    t.set_int_val(100);
+    t.set_str_val("hello world");
+    db.insert(&t).unwrap();
+
+    let id = t.get_id();
+    let mut select = Select::from::<Test>();
+    select.join::<Test>(&JoinCond::by_eq("id", "id"));
+    println!("{}", select.get_sql());
+    // let session = db.open_session();
+    // let res = session.query::<Test>(&select).unwrap();
+    // let ref t = res[0];
+    // assert!(t.get_int_val() == 100);
+    // assert!(t.get_str_val() == "hello world");
+    // assert!(t.get_ptr().get_int_val() == 200);
 }

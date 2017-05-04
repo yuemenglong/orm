@@ -31,9 +31,10 @@ pub use meta::EntityMeta;
 pub use meta::OrmMeta;
 pub use mysql::Value;
 pub use mysql::Row;
-pub use db::DB;
+pub use db::Db;
 pub use select::Select;
 pub use cond::Cond;
+pub use cond::JoinCond;
 
 use syntax::codemap::CodeMap;
 use syntax::parse::{self, ParseSess};
@@ -66,10 +67,10 @@ pub fn open(user: &str,
             port: u16,
             db: &str,
             orm_meta: &'static OrmMeta)
-            -> Result<DB, mysql::Error> {
+            -> Result<Db, mysql::Error> {
     let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
     match mysql::Pool::new(conn_str.as_ref()) {
-        Ok(pool) => Ok(DB::new(pool, orm_meta)),
+        Ok(pool) => Ok(Db::new(pool, orm_meta)),
         Err(err) => Err(err),
     }
 }

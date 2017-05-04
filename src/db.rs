@@ -9,14 +9,14 @@ use meta::OrmMeta;
 use entity::Entity;
 use session::Session;
 
-pub struct DB {
+pub struct Db {
     pool: Pool,
     orm_meta: &'static OrmMeta,
 }
 
-impl DB {
+impl Db {
     pub fn new(pool: Pool, orm_meta: &'static OrmMeta) -> Self {
-        DB {
+        Db {
             pool: pool,
             orm_meta: orm_meta,
         }

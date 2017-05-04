@@ -29,12 +29,19 @@ pub struct Select {
 }
 
 pub struct Join {
-    kind: JoinEnum,
+    kind: JoinKind,
     cond: JoinCond,
     select: Rc<RefCell<Select>>,
 }
 
 impl Join {
+    fn new(kind: JoinKind, cond: JoinCond, select: Rc<RefCell<Select>>) -> Self {
+        Join {
+            kind: kind,
+            cond: cond,
+            select: select,
+        }
+    }
     pub fn on(&mut self, cond: &JoinCond) {
         self.cond = cond.clone();
     }
@@ -47,7 +54,7 @@ impl Join {
     }
 }
 
-enum JoinEnum {
+enum JoinKind {
     Inner,
     Outer,
     Left,
@@ -132,6 +139,15 @@ impl Select {
         a.withs.push((a_b_field, rc.clone()));
         return rc;
     }
+    pub fn join<E>(&mut self, cond: &JoinCond) -> Rc<RefCell<Join>>
+        where E: Entity
+    {
+        let select = Rc::new(RefCell::new(Select::from::<E>()));
+        let kind = JoinKind::Inner;
+        let join = Rc::new(RefCell::new(Join::new(kind, cond.clone(), select)));
+        self.joins.push(join.clone());
+        join
+    }
 }
 
 impl Select {
@@ -201,7 +217,7 @@ impl Select {
                     a_rc.borrow_mut().one_many_map.get_mut(a_b_field).unwrap().push(b_rc.unwrap());
                 }
             } else if field_meta.is_refer_many_many() {
-                let mid_alias = format!("{}__{}", alias, a_b_field);
+                let mid_alias = format!("_{}_{}", alias, a_b_field);
                 let mid_rc = select_rc.borrow().pick_inner(&mid_alias, row, map);
                 a_rc.borrow_mut().many_many_map.entry(a_b_field.clone()).or_insert(Vec::new());
                 if b_rc.is_some() {
@@ -222,7 +238,7 @@ impl Select {
             .map(|vec| vec.join(",\n\t"))
             .collect::<Vec<_>>()
             .join(",\n\n\t");
-        let tables = self.get_tables().join("\n\tLEFT JOIN\n\t");
+        let tables = self.get_tables().join("\n\t");
         let conds = self.get_conds().join("\n\tAND\n\t");
         format!("SELECT\n\t{}\nFROM\n\t{}\nWHERE\n\t{}",
                 columns,
@@ -257,6 +273,35 @@ impl Select {
         let a_entity = &a_meta.entity_name;
         self.inner_get_columns(a_entity)
     }
+    fn get_refer_field(field_meta: &FieldMeta) -> (String, String) {
+        if field_meta.is_refer_pointer() {
+            let a_field = field_meta.get_pointer_id();
+            let b_field = "id".to_string();
+            return (a_field, b_field);
+        } else if field_meta.is_refer_one_one() {
+            let a_field = "id".to_string();
+            let b_field = field_meta.get_one_one_id();
+            return (a_field, b_field);
+        } else if field_meta.is_refer_one_many() {
+            let a_field = "id".to_string();
+            let b_field = field_meta.get_one_many_id();
+            return (a_field, b_field);
+        } else {
+            unreachable!();
+        }
+    }
+    fn get_refer_field_many_many(field_meta: &FieldMeta) -> (String, String, String, String) {
+        if field_meta.is_refer_many_many() {
+            let a_field = "id".to_string();
+            let mid_a_field = field_meta.get_many_many_id();
+            let mid_b_field = field_meta.get_many_many_refer_id();
+            let b_field = "id".to_string();
+            return (a_field, mid_a_field, mid_b_field, b_field);
+        } else {
+            unreachable!();
+        }
+    }
+    
     fn inner_get_params(&self, alias: &str) -> Vec<(String, Value)> {
         let vec = self.withs
             .iter()
@@ -309,37 +354,9 @@ impl Select {
         vec.insert(0, self_columns);
         vec
     }
-    fn get_join_field(field_meta: &FieldMeta) -> (String, String) {
-        if field_meta.is_refer_pointer() {
-            let a_field = field_meta.get_pointer_id();
-            let b_field = "id".to_string();
-            return (a_field, b_field);
-        } else if field_meta.is_refer_one_one() {
-            let a_field = "id".to_string();
-            let b_field = field_meta.get_one_one_id();
-            return (a_field, b_field);
-        } else if field_meta.is_refer_one_many() {
-            let a_field = "id".to_string();
-            let b_field = field_meta.get_one_many_id();
-            return (a_field, b_field);
-        } else {
-            unreachable!();
-        }
-    }
-    fn get_join_field_many_many(field_meta: &FieldMeta) -> (String, String, String, String) {
-        if field_meta.is_refer_many_many() {
-            let a_field = "id".to_string();
-            let mid_a_field = field_meta.get_many_many_id();
-            let mid_b_field = field_meta.get_many_many_refer_id();
-            let b_field = "id".to_string();
-            return (a_field, mid_a_field, mid_b_field, b_field);
-        } else {
-            unreachable!();
-        }
-    }
     fn inner_get_tables(&self, alias: &str) -> Vec<String> {
         let a_meta = self.meta;
-        self.withs
+        let with_tables = self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref rc)| {
                 let a_b_meta = a_meta.field_map.get(a_b_field).unwrap();
@@ -348,10 +365,10 @@ impl Select {
                 let b_table = &b_meta.table_name;
                 let mut vec = rc.borrow().inner_get_tables(&b_alias);
                 if !a_b_meta.is_refer_many_many() {
-                    let (a_field, b_field) = Self::get_join_field(a_b_meta);
+                    let (a_field, b_field) = Self::get_refer_field(a_b_meta);
                     let a_column = a_meta.field_map.get(&a_field).unwrap().get_column_name();
                     let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
-                    let join_sql = format!("{} AS {} ON {}.{} = {}.{}",
+                    let join_sql = format!("LEFT JOIN {} AS {} ON {}.{} = {}.{}",
                                            b_table,
                                            b_alias,
                                            alias,
@@ -364,23 +381,23 @@ impl Select {
                     let mid_entity = a_b_meta.get_many_many_middle_entity();
                     let mid_meta = self.orm_meta.entity_map.get(&mid_entity).unwrap();
                     let mid_table = &mid_meta.table_name;
-                    let mid_alias = format!("{}__{}", alias, a_b_field);
+                    let mid_alias = format!("_{}_{}", alias, a_b_field);
                     let (a_field, a_mid_field, b_mid_field, b_field) =
-                        Self::get_join_field_many_many(a_b_meta);
+                        Self::get_refer_field_many_many(a_b_meta);
                     let a_column = a_meta.field_map.get(&a_field).unwrap().get_column_name();
                     let a_mid_column =
                         mid_meta.field_map.get(&a_mid_field).unwrap().get_column_name();
                     let b_mid_column =
                         mid_meta.field_map.get(&b_mid_field).unwrap().get_column_name();
                     let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
-                    let a_join_mid = format!("{} AS {} ON {}.{} = {}.{}",
+                    let a_join_mid = format!("LEFT JOIN {} AS {} ON {}.{} = {}.{}",
                                              mid_table,
                                              mid_alias,
                                              alias,
                                              a_column,
                                              mid_alias,
                                              a_mid_column);
-                    let mid_join_b = format!("{} AS {} ON {}.{} = {}.{}",
+                    let mid_join_b = format!("LEFT JOIN {} AS {} ON {}.{} = {}.{}",
                                              b_table,
                                              b_alias,
                                              mid_alias,
@@ -392,6 +409,21 @@ impl Select {
                     vec
                 }
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        let join_tables = self.joins
+            .iter()
+            .map(|join_rc| {
+                let join = join_rc.borrow();
+                let select_rc = join.select.clone();
+                let b_meta = select_rc.borrow().meta;
+                let b_entity = &b_meta.entity_name;
+                let b_table = &b_meta.table_name;
+                let b_alias = format!("{}_{}", alias, b_entity);
+                let join_cond = join.cond.to_sql(alias, &b_alias);
+                let join_sql = format!("LEFT JOIN {} AS {} ON {}", b_table, b_alias, join_cond);
+                join_sql
+            })
+            .collect::<Vec<_>>();
+        with_tables
     }
 }
