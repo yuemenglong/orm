@@ -44,6 +44,19 @@ impl Attr {
 
         })
     }
+    pub fn get_values(&self, name: &str) -> Vec<&str> {
+        self.values.as_ref().map_or(Vec::new(), |vec| {
+            for item in vec {
+                if item.name != name {
+                    continue;
+                }
+                return item.values
+                    .as_ref()
+                    .map_or(Vec::new(), |vec| vec.iter().map(|attr| attr.name.as_ref()).collect::<Vec<_>>());
+            }
+            Vec::new()
+        })
+    }
     pub fn get_attr(&self, name: &str) -> Option<&Attr> {
         self.values.as_ref().map_or(None, |vec| {
             for item in vec {

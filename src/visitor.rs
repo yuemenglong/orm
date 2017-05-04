@@ -6,6 +6,8 @@ use syntax::ast::ItemKind::*;
 use syntax::ast::VariantData;
 use syntax::print::pprust::*;
 
+use regex;
+
 use attr::visit_attrs;
 use attr::Attr;
 
@@ -85,11 +87,8 @@ fn visit_struct_field(field: &syntax::ast::StructField,
                       mut entity_meta: &mut EntityMeta,
                       mut orm_meta: &mut OrmMeta) {
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
-    let column_name = &field_name;
     let ty = ty_to_string(field.ty.deref());
     let attr = visit_attrs(&field.attrs);
-    let nullable = pick_nullable(&attr);
-    let len = pick_len(&attr);
 
     // 检查 id
     if &field_name == "id" {
@@ -98,11 +97,42 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     // FieldMeta::new(&entity, &field_name, &ty, &attr)
     match ty.as_ref() {
         "i32" | "i64" | "u32" | "u64" => {
+            let column_name = &field_name;
+            let nullable = pick_nullable(&attr);
             let field_meta = FieldMeta::new_integer(&field_name, column_name, &ty, nullable);
             entity_meta.field_vec.push(field_name.to_string());
             entity_meta.field_map.insert(field_name.to_string(), field_meta);
+        }
+        "String" => {
+            let column_name = &field_name;
+            let nullable = pick_nullable(&attr);
+            let len = pick_len(&attr);
+            let field_meta = FieldMeta::new_string(&field_name, column_name, len, nullable);
+            entity_meta.field_vec.push(field_name.to_string());
+            entity_meta.field_map.insert(field_name.to_string(), field_meta);
+        }
+        _ => {
+            let fetch = pick_fetch(&attr);
+            let cascades = pick_cascades(&attr);
+            let (left, right) = pick_refer(&attr);
+            let re = Regex::new(r"^Vec<(.+)>$").unwrap();
+            if !re.is_match(ty) {
+                let entity = ty.to_string();
+                let field_meta = FieldMeta::new_one_one(&field_name,
+                                                        &entity,
+                                                        &left,
+                                                        &right,
+                                                        cascades,
+                                                        fetch);
+            } else {
+                let field_meta = FieldMeta::new_one_many(&field_name,
+                                                         &column_name,
+                                                         &left,
+                                                         &right,
+                                                         cascades,
+                                                         fetch);
+            }
         } 
-        _ => unreachable!(),
     };
 }
 
@@ -137,4 +167,11 @@ fn pick_fetch(attr: &Attr) -> Fetch {
             _ => unreachable!(),
         }
     })
+}
+fn pick_refer(attr: &Attr) -> (String, String) {
+    let values = attr.get_values("refer");
+    if values.len() != 2 {
+        panic!("Refer Must Define Left And Right Field");
+    }
+    (values[0].to_string(), values[1].to_string())
 }

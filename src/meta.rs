@@ -75,37 +75,37 @@ impl FieldMeta {
             nullable: nullable,
         }
     }
-    fn pick_nullable(attr: &Attr) -> bool {
-        let default = true;
-        attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
+    pub fn new_one_one(field: &str,
+                       entity: &str,
+                       left: &str,
+                       right: &str,
+                       cascades: Vec<Cascade>,
+                       fetch: Fetch)
+                       -> Self {
+        FieldMeta::OneToOne {
+            field: field.to_string(),
+            entity: entity.to_string(),
+            left: left.to_string(),
+            right: right.to_string(),
+            cascades: cascades,
+            fetch: fetch,
+        }
     }
-    fn pick_len(attr: &Attr) -> u64 {
-        attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())
-    }
-    fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
-        attr.get_attr("cascade").map_or(Vec::new(), |attr| {
-            attr.values.as_ref().map_or(Vec::new(), |values| {
-                values.iter()
-                    .map(|attr| {
-                        match attr.name.as_ref() {
-                            "insert" => Cascade::Insert,
-                            "update" => Cascade::Update,
-                            "delete" => Cascade::Delete,
-                            _ => unreachable!(),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-        })
-    }
-    fn pick_fetch(attr: &Attr) -> Fetch {
-        attr.get("fetch").map_or(Fetch::Lazy, |str| {
-            match str {
-                "lazy" => Fetch::Lazy,
-                "eager" => Fetch::Eager,
-                _ => unreachable!(),
-            }
-        })
+    pub fn new_one_many(field: &str,
+                        entity: &str,
+                        left: &str,
+                        right: &str,
+                        cascades: Vec<Cascade>,
+                        fetch: Fetch)
+                        -> Self {
+        FieldMeta::OneToMany {
+            field: field.to_string(),
+            entity: entity.to_string(),
+            left: left.to_string(),
+            right: right.to_string(),
+            cascades: cascades,
+            fetch: fetch,
+        }
     }
 }
 
