@@ -2,6 +2,7 @@ use entity::Entity;
 use entity::EntityInner;
 use entity::EntityInnerPointer;
 use cond::Cond;
+use cond::JoinCond;
 use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::FieldMeta;
@@ -15,14 +16,42 @@ use mysql::PooledConn;
 use mysql::Row;
 use mysql::Error;
 
-// Select::from<E>().wher(Cond::by_id()).join("b")
+// Select::from<E1>().join::<E2>().on(JoinCond::by_eq("id", "id"))
+// select E1.id , E1_E2.id from E1 as E1 join E2 as E1_E2
 
 #[derive(Clone)]
 pub struct Select {
     meta: &'static EntityMeta,
     orm_meta: &'static OrmMeta,
     cond: Option<Cond>,
-    withs: Vec<(String, Rc<RefCell<Select>>)>, // (a_field, b_field, a_b_field, select)
+    withs: Vec<(String, Rc<RefCell<Select>>)>,
+    joins: Vec<Rc<RefCell<Join>>>, // ("INNER", )
+}
+
+pub struct Join {
+    kind: JoinEnum,
+    cond: JoinCond,
+    select: Rc<RefCell<Select>>,
+}
+
+impl Join {
+    pub fn on(&mut self, cond: &JoinCond) {
+        self.cond = cond.clone();
+    }
+    pub fn wher(&self, cond: &Cond) {
+        self.select.borrow_mut().wher(cond)
+    }
+
+    pub fn with(&mut self, field: &str) -> Rc<RefCell<Select>> {
+        self.select.borrow_mut().with(field)
+    }
+}
+
+enum JoinEnum {
+    Inner,
+    Outer,
+    Left,
+    Right,
 }
 
 fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
@@ -75,6 +104,7 @@ impl Select {
             orm_meta: E::orm_meta(),
             cond: None,
             withs: Vec::new(),
+            joins: Vec::new(),
         }
     }
     pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Self {
@@ -83,11 +113,11 @@ impl Select {
             orm_meta: orm_meta,
             cond: None,
             withs: Vec::new(),
+            joins: Vec::new(),
         }
     }
-    pub fn wher(&mut self, cond: &Cond) -> &Self {
+    pub fn wher(&mut self, cond: &Cond) {
         self.cond = Some(cond.clone());
-        self
     }
 
     pub fn with(&mut self, field: &str) -> Rc<RefCell<Select>> {
@@ -102,7 +132,9 @@ impl Select {
         a.withs.push((a_b_field, rc.clone()));
         return rc;
     }
+}
 
+impl Select {
     pub fn query<E>(&self, conn: &mut PooledConn) -> Result<Vec<E>, Error>
         where E: Entity
     {
@@ -141,11 +173,11 @@ impl Select {
             vec
         })
     }
-    pub fn pick_inner(&self,
-                      alias: &str,
-                      row: &mut Row,
-                      map: &mut HashMap<String, EntityInnerPointer>)
-                      -> Option<EntityInnerPointer> {
+    fn pick_inner(&self,
+                  alias: &str,
+                  row: &mut Row,
+                  map: &mut HashMap<String, EntityInnerPointer>)
+                  -> Option<EntityInnerPointer> {
         let a_meta = self.meta;
         let a_rc = EntityInner::new_pointer(self.meta, self.orm_meta);
         a_rc.borrow_mut().set_values(row, alias);

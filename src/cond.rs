@@ -86,3 +86,53 @@ impl Item {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct JoinCond {
+    items: Vec<JoinItem>,
+}
+
+impl JoinCond {
+    pub fn new() -> Self {
+        JoinCond { items: Vec::new() }
+    }
+    pub fn by_eq(f1: &str, f2: &str) -> Self
+    {
+        let mut cond = JoinCond::new();
+        cond.eq(f1, f2);
+        cond
+    }
+
+    pub fn eq(&mut self, f1:&str, f2:&str) -> &mut Self
+    {
+        self.items.push(JoinItem::Eq(f1.to_string(), f2.to_string()));
+        self
+    }
+
+    pub fn to_sql(&self, a1: &str, a2:&str) -> String {
+        self.items
+            .iter()
+            .map(|item| item.to_sql(a1, a2))
+            .collect::<Vec<_>>()
+            .join(" AND ")
+    }
+}
+
+#[derive(Debug, Clone)]
+enum JoinItem {
+    Eq(String, String),
+    Ne(String, String),
+    Gt(String, String),
+    Lt(String, String),
+}
+
+impl JoinItem {
+    fn to_sql(&self, a1: &str, a2: &str) -> String {
+        match self {
+            &JoinItem::Eq(ref f1, ref f2) => format!("{}.{} = {}.{}", a1, f1, a2, f2),
+            &JoinItem::Ne(ref f1, ref f2) => format!("{}.{} <> {}.{}", a1, f1, a2, f2),
+            &JoinItem::Gt(ref f1, ref f2) => format!("{}.{} > {}.{}", a1, f1, a2, f2),
+            &JoinItem::Lt(ref f1, ref f2) => format!("{}.{} < {}.{}", a1, f1, a2, f2),
+        }
+    }
+}

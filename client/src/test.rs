@@ -70,19 +70,25 @@ pub fn delete_test() {
     assert!(opt.is_none());
 }
 
-pub fn select_test(){
+pub fn select_refer_test(){
     let db = openDB();
     db.rebuild();
+
     let mut t = Test::default();
     t.set_int_val(100);
     t.set_str_val("hello world");
+    t.set_ptr(&Ptr::default());
+    t.get_ptr().set_int_val(200);
     db.insert(&t).unwrap();
+
     let id = t.get_id();
     let mut select = Select::from::<Test>();
+    select.with("ptr");
     select.wher(&Cond::by_id(id));
     let session = db.open_session();
     let res = session.query::<Test>(&select).unwrap();
     let ref t = res[0];
     assert!(t.get_int_val() == 100);
     assert!(t.get_str_val() == "hello world");
+    assert!(t.get_ptr().get_int_val() == 200);
 }
