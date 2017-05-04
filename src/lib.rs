@@ -12,7 +12,7 @@ extern crate rustc_serialize;
 // #[macro_use]
 // mod macros;
 // mod formatter;
-// mod visitor;
+mod visitor;
 mod attr;
 // mod db;
 // mod entity;

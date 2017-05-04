@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::str::FromStr;
 
 use syntax;
 use syntax::ast::ItemKind::*;
@@ -6,12 +7,15 @@ use syntax::ast::VariantData;
 use syntax::print::pprust::*;
 
 use attr::visit_attrs;
+use attr::Attr;
 
 use meta::*;
 
+const DEFAULT_LEN: u64 = 128;
+
 pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
     let mut orm_meta = OrmMeta::default();
-    for item in krate.module.items.iter(){
+    for item in krate.module.items.iter() {
         visit_struct(item, &mut orm_meta);
     }
     orm_meta
@@ -51,11 +55,11 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
     // orm_meta
 }
 
-fn visit_struct(item: &syntax::ast::Item, orm_meta:&mut OrmMeta) {
+fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
     if let Struct(ref variant_data, ref _generics) = item.node {
         // 1. 先注册这个entity
         let entity_name = item.ident.name.as_str().to_string();
-        orm_meta.entities.push(entity_name.to_string());
+        orm_meta.entity_vec.push(entity_name.to_string());
 
         // 2. 产生entity_meta
         let attr = visit_attrs(&item.attrs);
@@ -66,31 +70,71 @@ fn visit_struct(item: &syntax::ast::Item, orm_meta:&mut OrmMeta) {
         // entity_meta.table_name = entity_name.to_string();
 
         if let &VariantData::Struct(ref vec, _id) = variant_data {
-            // 加上pkey
-            let mut ret = FieldMeta::new_pkey(&entity_name);
-            let fields: Vec<_> = vec.iter()
-                .flat_map(|field| visit_struct_field(&entity_name, field))
-                .collect();
-            ret.extend(fields);
-            return (entity_meta, ret);
+            // 先生成pkey
+            entity_meta.field_vec.push("id".to_string());
+            entity_meta.field_map.insert("id".to_string(), FieldMeta::Id);
+
+            for field in vec.iter() {
+                visit_struct_field(field, &mut entity_meta, &mut orm_meta);
+            }
         }
     }
     unreachable!();
 }
-fn visit_struct_field(entity: &str, field: &syntax::ast::StructField) -> Vec<(String, FieldMeta)> {
+fn visit_struct_field(field: &syntax::ast::StructField,
+                      mut entity_meta: &mut EntityMeta,
+                      mut orm_meta: &mut OrmMeta) {
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
+    let column_name = &field_name;
+    let ty = ty_to_string(field.ty.deref());
+    let attr = visit_attrs(&field.attrs);
+    let nullable = pick_nullable(&attr);
+    let len = pick_len(&attr);
 
     // 检查 id
     if &field_name == "id" {
         panic!("Id Will Be Added To Entity Automatically");
     }
-
-    // 处理注解
-    let ty = ty_to_string(field.ty.deref());
-    let attr = visit_attrs(&field.attrs);
-    FieldMeta::new(&entity, &field_name, &ty, &attr)
+    // FieldMeta::new(&entity, &field_name, &ty, &attr)
+    match ty.as_ref() {
+        "i32" | "i64" | "u32" | "u64" => {
+            let field_meta = FieldMeta::new_integer(&field_name, column_name, &ty, nullable);
+            entity_meta.field_vec.push(field_name.to_string());
+            entity_meta.field_map.insert(field_name.to_string(), field_meta);
+        } 
+        _ => unreachable!(),
+    };
 }
 
-fn create_pkey()->FieldMeta{
-    
+fn pick_nullable(attr: &Attr) -> bool {
+    let default = true;
+    attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
+}
+fn pick_len(attr: &Attr) -> u64 {
+    attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())
+}
+fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
+    attr.get_attr("cascade").map_or(Vec::new(), |attr| {
+        attr.values.as_ref().map_or(Vec::new(), |values| {
+            values.iter()
+                .map(|attr| {
+                    match attr.name.as_ref() {
+                        "insert" => Cascade::Insert,
+                        "update" => Cascade::Update,
+                        "delete" => Cascade::Delete,
+                        _ => unreachable!(),
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+    })
+}
+fn pick_fetch(attr: &Attr) -> Fetch {
+    attr.get("fetch").map_or(Fetch::Lazy, |str| {
+        match str {
+            "lazy" => Fetch::Lazy,
+            "eager" => Fetch::Eager,
+            _ => unreachable!(),
+        }
+    })
 }

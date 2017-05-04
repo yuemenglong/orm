@@ -27,14 +27,14 @@ pub enum FieldMeta {
     Id,
     Integer {
         field: String,
-        number: String,
         column: String,
+        number: String,
         nullable: bool,
     },
     String {
         field: String,
-        len: u64,
         column: String,
+        len: u64,
         nullable: bool,
     },
     OneToOne {
@@ -53,6 +53,60 @@ pub enum FieldMeta {
         cascades: Vec<Cascade>,
         fetch: Fetch,
     },
+}
+
+impl FieldMeta {
+    pub fn new_pkey() -> Self {
+        FieldMeta::Id
+    }
+    pub fn new_integer(field: &str, column: &str, number: &str, nullable: bool) -> Self {
+        FieldMeta::Integer {
+            field: field.to_string(),
+            column: column.to_string(),
+            number: number.to_string(),
+            nullable: nullable,
+        }
+    }
+    pub fn new_string(field: &str, column: &str, len: u64, nullable: bool) -> Self {
+        FieldMeta::String {
+            field: field.to_string(),
+            column: column.to_string(),
+            len: len,
+            nullable: nullable,
+        }
+    }
+    fn pick_nullable(attr: &Attr) -> bool {
+        let default = true;
+        attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
+    }
+    fn pick_len(attr: &Attr) -> u64 {
+        attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())
+    }
+    fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
+        attr.get_attr("cascade").map_or(Vec::new(), |attr| {
+            attr.values.as_ref().map_or(Vec::new(), |values| {
+                values.iter()
+                    .map(|attr| {
+                        match attr.name.as_ref() {
+                            "insert" => Cascade::Insert,
+                            "update" => Cascade::Update,
+                            "delete" => Cascade::Delete,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+    }
+    fn pick_fetch(attr: &Attr) -> Fetch {
+        attr.get("fetch").map_or(Fetch::Lazy, |str| {
+            match str {
+                "lazy" => Fetch::Lazy,
+                "eager" => Fetch::Eager,
+                _ => unreachable!(),
+            }
+        })
+    }
 }
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
@@ -254,38 +308,7 @@ impl FieldMeta {
     //     };
     //     vec![(entity.to_string(), meta)]
     // }
-    // fn pick_nullable(attr: &Attr) -> bool {
-    //     let default = true;
-    //     attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
-    // }
-    // fn pick_len(attr: &Attr) -> u64 {
-    //     attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())
-    // }
-    // fn pick_cascades(attr: &Attr) -> Vec<Cascade> {
-    //     attr.get_attr("cascade").map_or(Vec::new(), |attr| {
-    //         attr.values.as_ref().map_or(Vec::new(), |values| {
-    //             values.iter()
-    //                 .map(|attr| {
-    //                     match attr.name.as_ref() {
-    //                         "insert" => Cascade::Insert,
-    //                         "update" => Cascade::Update,
-    //                         "delete" => Cascade::Delete,
-    //                         _ => unreachable!(),
-    //                     }
-    //                 })
-    //                 .collect::<Vec<_>>()
-    //         })
-    //     })
-    // }
-    // fn pick_fetch(attr: &Attr) -> Fetch {
-    //     attr.get("fetch").map_or(Fetch::Lazy, |str| {
-    //         match str {
-    //             "lazy" => Fetch::Lazy,
-    //             "eager" => Fetch::Eager,
-    //             _ => unreachable!(),
-    //         }
-    //     })
-    // }
+
     // pub fn is_normal_type(ty: &str) -> bool {
     //     match ty {
     //         "i32" | "u32" | "i64" | "u64" => true,
