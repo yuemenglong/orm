@@ -42,9 +42,11 @@ impl EntityInner {
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
-        // 用默认值?
-        // 一旦有则为正常值，不能为NULL，因为外层无法设为NULL
-        let field_map: HashMap<String, FieldValue> = HashMap::new();
+        let field_map: HashMap<String, FieldValue> = meta.field_vec.iter().map(|field|{
+            let field_meta = meta.field_map.get(field).expect(expect!().as_ref());
+            let default_value = FieldValue::default(field_meta);
+            (field.to_string(), default_value)
+        }).collect::<HashMap<_,_>>();
 
         EntityInner {
             orm_meta: orm_meta,

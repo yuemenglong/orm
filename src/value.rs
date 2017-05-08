@@ -18,6 +18,7 @@ use mysql::prelude::GenericConnection;
 
 use meta::OrmMeta;
 use meta::EntityMeta;
+use meta::FieldMeta;
 use meta::Cascade;
 // use session::Session;
 // use session::SessionStatus;
@@ -31,6 +32,20 @@ pub enum FieldValue {
     Value(Value),
     Entity(Option<EntityInnerPointer>),
     Vec(Vec<EntityInnerPointer>),
+}
+
+impl FieldValue {
+    pub fn default(meta: &FieldMeta) -> Self {
+        match meta{
+            &FieldMeta::Id |
+            &FieldMeta::Integer { .. } |
+            &FieldMeta::String { .. } => FieldValue::Value(Value::NULL),
+            &FieldMeta::Refer { .. } |
+            &FieldMeta::Pointer { .. } |
+            &FieldMeta::OneToOne { .. } => FieldValue::Entity(None),
+            &FieldMeta::OneToMany { .. } => FieldValue::Vec(Vec::new()),
+        }
+    }
 }
 
 impl FieldValue {
