@@ -19,13 +19,13 @@ use mysql::prelude::GenericConnection;
 use meta::OrmMeta;
 use meta::EntityMeta;
 use meta::Cascade;
-use session::Session;
-use session::SessionStatus;
-use select::Select;
+// use session::Session;
+// use session::SessionStatus;
+// use select::Select;
 
 use entity::EntityInnerPointer;
 
-use cond::Cond;
+// use cond::Cond;
 
 pub enum FieldValue {
     Value(Value),
@@ -36,7 +36,7 @@ pub enum FieldValue {
 impl FieldValue {
     pub fn is_value(&self) -> bool {
         match self {
-            &FiledValue::Value(_) => true,
+            &FieldValue::Value(_) => true,
             _ => false,
         }
     }
@@ -54,19 +54,19 @@ impl FieldValue {
     }
     pub fn as_value(&self) -> Value {
         match self {
-            &FieldValue::Value(value) => value.clone(),
+            &FieldValue::Value(ref value) => value.clone(),
             _ => unreachable!(),
         }
     }
     pub fn as_entity(&self) -> Option<EntityInnerPointer> {
         match self {
-            &FieldValue::Entity(opt) => opt.clone(),
+            &FieldValue::Entity(ref opt) => opt.clone(),
             _ => unreachable!(),
         }
     }
     pub fn as_vec(&self) -> Vec<EntityInnerPointer> {
         match self {
-            &FieldValue::Vec(vec) => vec.clone(),
+            &FieldValue::Vec(ref vec) => vec.clone(),
             _ => unreachable!(),
         }
     }

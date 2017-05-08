@@ -31,112 +31,62 @@ impl ${ENTITY_NAME} {${IMPL_FIELDS}
 }
 "#;
 
-static TPL_IMPL_FIELD: &'static str = r#"
+static TPL_IMPL_VALUE: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> ${TYPE} {
-        self.inner_get_value("${FIELD}")
+        self.inner_get_value::<${TYPE}>("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
         self.inner_set_value("${FIELD}", value);
     }
     #[allow(dead_code)]
-    pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_value::<${TYPE}>("${FIELD}")
+    pub fn set_${FIELD}_null(&self) {
+        self.inner_set_value_null("${FIELD}")
     }
     #[allow(dead_code)]
-    pub fn clear_${FIELD}(&self) {
-        self.inner_clear_value::<${TYPE}>("${FIELD}");
+    pub fn is_${FIELD}_null(&self) -> bool {
+        self.inner_is_value_null("${FIELD}")
+    }
+    #[allow(dead_code)]
+    pub fn is_${FIELD}_valid(&self) -> bool {
+        self.inner_is_value_valid("${FIELD}")
     }"#;
 
-static TPL_IMPL_POINTER: &'static str = r#"
+static TPL_IMPL_ENTITY: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
-        Box::new(self.inner_get_pointer("${FIELD}"))
+        Box::new(self.inner_get_entity("${FIELD}"))
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set_pointer("${FIELD}", value);
+        self.inner_set_entity("${FIELD}", value);
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_pointer("${FIELD}")
+        self.inner_has_entity("${FIELD}")
     }   
     #[allow(dead_code)]
     pub fn clear_${FIELD}(&self) {
-        self.inner_clear_pointer("${FIELD}");
+        self.inner_clear_entity("${FIELD}");
     }"#;
 
-static TPL_IMPL_ONE_ONE: &'static str = r#"
-    #[allow(dead_code)]
-    pub fn get_${FIELD}(&self) -> Box<${TYPE}> {
-        Box::new(self.inner_get_one_one("${FIELD}"))
-    }
-    #[allow(dead_code)]
-    pub fn set_${FIELD}(&mut self, value: ${SET_TYPE}) {
-        self.inner_set_one_one("${FIELD}", value);
-    }
-    #[allow(dead_code)]
-    pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_one_one("${FIELD}")
-    }
-    #[allow(dead_code)]
-    pub fn clear_${FIELD}(&self) {
-        self.inner_clear_one_one("${FIELD}")
-    }"#;
-
-static TPL_IMPL_ONE_MANY: &'static str = r#"
+static TPL_IMPL_VEC: &'static str = r#"
     #[allow(dead_code)]
     pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
-        Box::new(self.inner_get_one_many("${FIELD}"))
+        Box::new(self.inner_get_vec("${FIELD}"))
     }
     #[allow(dead_code)]
     pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
-        self.inner_set_one_many("${FIELD}", value);
+        self.inner_set_vec("${FIELD}", value);
     }
     #[allow(dead_code)]
     pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_one_many("${FIELD}")
+        self.inner_has_vec("${FIELD}")
     }
     #[allow(dead_code)]
     pub fn clear_${FIELD}(&self) {
-        self.inner_clear_one_many("${FIELD}")
-    }"#;
-
-static TPL_IMPL_MANY_MANY: &'static str = r#"
-    #[allow(dead_code)]
-    pub fn get_${FIELD}(&self) -> Box<Vec<${TYPE}>> {
-        Box::new(self.inner_get_many_many("${FIELD}"))
-    }
-    #[allow(dead_code)]
-    pub fn set_${FIELD}(&mut self, value: Vec<${TYPE}>) {
-        self.inner_set_many_many("${FIELD}", value);
-    }
-    #[allow(dead_code)]
-    pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_many_many("${FIELD}")
-    }
-    #[allow(dead_code)]
-    pub fn clear_${FIELD}(&self) {
-        self.inner_clear_many_many("${FIELD}")
-    }"#;
-
-static TPL_IMPL_CASCADE: &'static str = r#"
-    #[allow(dead_code)]
-    pub fn cascade_${FIELD}_insert(&self) {
-        self.inner_cascade_field_insert("${FIELD}");
-    }
-    #[allow(dead_code)]
-    pub fn cascade_${FIELD}_update(&self) {
-        self.inner_cascade_field_update("${FIELD}");
-    }
-    #[allow(dead_code)]
-    pub fn cascade_${FIELD}_delete(&self) {
-        self.inner_cascade_field_delete("${FIELD}");
-    }
-    #[allow(dead_code)]
-    pub fn cascade_${FIELD}_null(&self) {
-        self.inner_cascade_field_null("${FIELD}");
+        self.inner_clear_vec("${FIELD}")
     }"#;
 
 static TPL_TRAIT: &'static str = r#"
@@ -168,13 +118,6 @@ impl orm::Entity for ${ENTITY_NAME} {
 }
 "#;
 
-fn do_spec_fields(fields: Vec<&FieldMeta>, join: &str, cb: &Fn(&FieldMeta) -> String) -> String {
-    fields.into_iter()
-        .map(cb)
-        .collect::<Vec<_>>()
-        .join(join)
-}
-
 pub fn format_meta(meta: &OrmMeta) -> String {
     let json = format!("\"{}\"", rustc_serialize::json::encode(&meta).unwrap());
     let entities = meta.get_entities()
@@ -196,60 +139,34 @@ fn format_entity_define(meta: &EntityMeta) -> String {
         .replace("${ENTITY_NAME}", &meta.entity_name)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
-    let normal_fields = do_spec_fields(meta.get_normal_fields(), "", &format_entity_impl_field);
-    let pointer_fields = do_spec_fields(meta.get_pointer_fields(), "", &format_entity_impl_pointer);
-    let one_one_fields = do_spec_fields(meta.get_one_one_fields(), "", &format_entity_impl_one_one);
-    let one_many_fields =
-        do_spec_fields(meta.get_one_many_fields(), "", &format_entity_impl_one_many);
-    let many_many_fields = do_spec_fields(meta.get_many_many_fields(),
-                                          "",
-                                          &format_entity_impl_many_many);
-    let cascade_detail = do_spec_fields(meta.get_refer_fields(), "", &format_entity_impl_cascade);
-    let fields = format!("{}\n{}\n{}\n{}\n{}\n{}",
-                         normal_fields,
-                         pointer_fields,
-                         one_one_fields,
-                         one_many_fields,
-                         many_many_fields,
-                         cascade_detail);
+    let fields = meta.field_vec
+        .iter()
+        .map(|field| {
+            let field_meta = meta.field_map.get(field).expect("");
+            format_entity_field(field_meta)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     TPL_IMPL.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
         .replace("${IMPL_FIELDS}", &fields)
 }
+fn format_entity_field(meta: &FieldMeta) -> String {
+    let tpl = match meta {
+        &FieldMeta::Id |
+        &FieldMeta::String { .. } |
+        &FieldMeta::Integer { .. } => TPL_IMPL_VALUE,
+        &FieldMeta::Refer { .. } |
+        &FieldMeta::Pointer { .. } |
+        &FieldMeta::OneToOne { .. } => TPL_IMPL_ENTITY,
+        &FieldMeta::OneToMany { .. } => TPL_IMPL_VEC,
+    };
+    tpl.to_string()
+        .replace("${FIELD}", &meta.get_field_name())
+        .replace("${TYPE}", &meta.get_type_name())
+        .replace("${SET_TYPE}", &meta.get_type_name_set())
+}
 fn format_entity_trait(meta: &EntityMeta) -> String {
     TPL_TRAIT.to_string()
         .replace("${ENTITY_NAME}", &meta.entity_name)
-}
-fn format_entity_impl_field(meta: &FieldMeta) -> String {
-    TPL_IMPL_FIELD.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
-        .replace("${SET_TYPE}", &meta.get_type_name_set())
-}
-fn format_entity_impl_pointer(meta: &FieldMeta) -> String {
-    TPL_IMPL_POINTER.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
-        .replace("${SET_TYPE}", &meta.get_type_name_set())
-}
-fn format_entity_impl_one_one(meta: &FieldMeta) -> String {
-    TPL_IMPL_ONE_ONE.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
-        .replace("${SET_TYPE}", &meta.get_type_name_set())
-}
-fn format_entity_impl_one_many(meta: &FieldMeta) -> String {
-    TPL_IMPL_ONE_MANY.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
-        .replace("${SET_TYPE}", &meta.get_type_name_set())
-}
-fn format_entity_impl_many_many(meta: &FieldMeta) -> String {
-    TPL_IMPL_MANY_MANY.to_string()
-        .replace("${FIELD}", &meta.get_field_name())
-        .replace("${TYPE}", &meta.get_type_name())
-        .replace("${SET_TYPE}", &meta.get_type_name_set())
-}
-fn format_entity_impl_cascade(meta: &FieldMeta) -> String {
-    TPL_IMPL_CASCADE.to_string().replace("${FIELD}", &meta.get_field_name())
 }

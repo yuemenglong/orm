@@ -15,3 +15,21 @@ macro_rules! debug_format {
         format!("{:?}, {}", $e, debug_format!($($x),+))
     }};
 }
+
+macro_rules! join_comma{
+    ($e:expr) => {{
+        format!("{}", $e)
+    }};
+    ($e:expr, $($x:expr),+) => {{
+        format!("{}, {}", $e, join_comma!($($x),+))
+    }};
+}
+
+macro_rules! expect {
+    () => {{
+        format!("[{}:{}]", file!(), line!())
+    }};
+    ($($x:expr),+) => {{
+        format!("{:?}, {}", $e, join_comma!($($x),+))
+    }};
+}

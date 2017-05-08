@@ -21,8 +21,6 @@ use meta::EntityMeta;
 use meta::Cascade;
 use value::FieldValue;
 
-use cond::Cond;
-
 pub type EntityInnerPointer = Rc<RefCell<EntityInner>>;
 
 pub struct EntityInner {
@@ -30,8 +28,7 @@ pub struct EntityInner {
     pub meta: &'static EntityMeta,
     pub field_map: HashMap<String, FieldValue>,
 
-    pub cascade: Option<Cascade>,
-    pub session: Option<Session>, // pub cache: Vec<(String, EntityInnerPointer)>,
+    pub cascade: Option<Cascade>, /* pub session: Option<Session>, // pub cache: Vec<(String, EntityInnerPointer)>, */
 }
 
 // 和字段编辑相关
@@ -41,8 +38,7 @@ impl EntityInner {
             orm_meta: orm_meta,
             meta: meta,
             field_map: HashMap::new(),
-            cascade: None,
-            session: None, // cache: Vec::new(),
+            cascade: None, // session: None, // cache: Vec::new(),
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
@@ -54,8 +50,7 @@ impl EntityInner {
             orm_meta: orm_meta,
             meta: meta,
             field_map: field_map,
-            cascade: None,
-            session: None, // cache: Vec::new(),
+            cascade: None, // session: None, // cache: Vec::new(),
         }
     }
     pub fn new_pointer(meta: &'static EntityMeta,
@@ -75,91 +70,129 @@ impl EntityInner {
     pub fn get_id_value(&self) -> Value {
         self.field_map.get("id").map_or(Value::NULL, |value| value.as_value())
     }
+}
 
-    pub fn get(&self, field: &str) -> FieldValue {
-        let expect = format!("[{}] Has No Field [{}]", self.meta.entity_name, field);
-        self.field_map.get(field).expect(expect)
+// Value
+impl EntityInner {
+    pub fn get_value<V>(&self, field: &str) -> V
+        where V:FromValue
+    {
+        let v= self.field_map.get(field).expect(expect!().as_ref()).as_value();
+        value::from_value(v)
     }
-    pub fn set(&self, field: &str, value: FieldValue) {
-        let field_meta = self.meta.field_map.get(field).unwrap();
-        assert!(field_meta.check(&value));
-        self.field_map.insert(field, value);
+    pub fn set_value<V>(&mut self, field: &str, value: V)
+        where Value:From<V>
+    {
+        let v = Value::from(value);
+        let field_value = FieldValue::from(v);
+        self.field_map.insert(field.to_string(), field_value);
+    }
+    pub fn set_value_null(&mut self, field: &str) {
+        let field_value = FieldValue::from(Value::NULL);
+        self.field_map.insert(field.to_string(), field_value);
+    }
+    pub fn is_value_null(&self, field: &str) -> bool {
+        self.field_map.get(field).map_or(false, |v| v.as_value() == Value::NULL)
+    }
+    pub fn is_value_valid(&self, field: &str) -> bool {
+        self.field_map.get(field).map_or(false, |v| v.as_value() != Value::NULL)
     }
 }
+
+// // Entity
+// impl EntityInner {
+//     pub fn get_entity(&self, field: &str) -> EntityInnerPointer {
+//         self.field_map.get(field).expect(expect!()).as_entity()
+//     }
+//     pub fn set_entity(&mut self, field: &str, value: EntityInnerPointer) {
+//         let field_value = FieldValue::from(value);
+//         self.field_map.insert(field, Some(field_value));
+//     }
+//     pub fn set_entity_null(&mut self, field: &str) {
+//         let field_value = FieldValue::from(Value::NULL);
+//         self.field_map.insert(field, field_value);
+//     }
+//     pub fn is_entity_null(&self, field: &str) -> bool {
+//         self.field_map.get(field).map_or(false, |v| v == &Value::NULL)
+//     }
+//     pub fn is_entity_valid(&self, field: &str) -> bool {
+//         self.field_map.get(field).map_or(false, |v| v != &Value::NULL)
+//     }
+// }
 
 // 和session相关
-impl EntityInner {
-    fn need_lazy_load(&self) -> bool {
-        // 以下都是没有查到的情况
-        if self.session.is_none() {
-            // 没有session，属于临时对象，不进行懒加载
-            return false;
-        }
-        // 以下为有session，即非临时对象的情况
-        let session = self.session.as_ref().unwrap();
-        if session.status() == SessionStatus::Closed {
-            // 游离态,抛异常
-            panic!("Can't Call Set/Get In Detached Status");
-        }
-        if session.status() == SessionStatus::Normal {
-            // 最常见的情况，正常的lazy load的情况
-            return true;
-        }
-        // 未考虑到的情况
-        unreachable!();
-    }
-    // fn push_cache(&self, rc: EntityInnerPointer) {
-    //     // a和b有一个是临时态都不需要做这项操作
-    //     if self.session.is_none() || rc.borrow().session.is_none() {
-    //         return;
-    //     }
-    //     let session = self.session.as_ref().unwrap();
-    //     match session.status() {
-    //         SessionStatus::Closed => unreachable!(), // 异常情况
-    //         SessionStatus::Select => unreachable!(), // 目前的情况不应该出现
-    //         SessionStatus::Normal => session.push_cache(rc), // 在session内进行操作
-    //         SessionStatus::Insert => session.push_cache(rc), // 操作完成后的级联更新
-    //         SessionStatus::Update => session.push_cache(rc), // 操作完成后的级联更新
-    //         SessionStatus::Delete => session.push_cache(rc), // 操作完成后的级联更新
-    //     }
-    // }
-    fn ensure_session_not_closed(&self) {
-        // 游离态
-        if self.session.is_some() &&
-           self.session.as_ref().unwrap().status() == SessionStatus::Closed {
-            panic!("Session Is Closed");
-        }
-    }
-    pub fn set_session(&mut self, session: Session) {
-        self.session = Some(session);
-    }
-    // pub fn set_session_recur(&mut self, session: Session) {
-    //     self.set_session(session.clone());
-    //     for (_, rc) in self.pointer_map.iter() {
-    //         if rc.is_some() {
-    //             rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
-    //         }
-    //     }
-    //     for (_, rc) in self.one_one_map.iter() {
-    //         if rc.is_some() {
-    //             rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
-    //         }
-    //     }
-    //     for (_, vec) in self.one_many_map.iter() {
-    //         for rc in vec.iter() {
-    //             rc.borrow_mut().set_session_recur(session.clone());
-    //         }
-    //     }
-    //     for (_, vec) in self.many_many_map.iter() {
-    //         for &(_, ref rc) in vec.iter() {
-    //             rc.borrow_mut().set_session_recur(session.clone());
-    //         }
-    //     }
-    // }
-    pub fn clear_session(&mut self) {
-        self.session = None;
-    }
-}
+// impl EntityInner {
+// fn need_lazy_load(&self) -> bool {
+//     // 以下都是没有查到的情况
+//     if self.session.is_none() {
+//         // 没有session，属于临时对象，不进行懒加载
+//         return false;
+//     }
+//     // 以下为有session，即非临时对象的情况
+//     let session = self.session.as_ref().unwrap();
+//     if session.status() == SessionStatus::Closed {
+//         // 游离态,抛异常
+//         panic!("Can't Call Set/Get In Detached Status");
+//     }
+//     if session.status() == SessionStatus::Normal {
+//         // 最常见的情况，正常的lazy load的情况
+//         return true;
+//     }
+//     // 未考虑到的情况
+//     unreachable!();
+// }
+// fn push_cache(&self, rc: EntityInnerPointer) {
+//     // a和b有一个是临时态都不需要做这项操作
+//     if self.session.is_none() || rc.borrow().session.is_none() {
+//         return;
+//     }
+//     let session = self.session.as_ref().unwrap();
+//     match session.status() {
+//         SessionStatus::Closed => unreachable!(), // 异常情况
+//         SessionStatus::Select => unreachable!(), // 目前的情况不应该出现
+//         SessionStatus::Normal => session.push_cache(rc), // 在session内进行操作
+//         SessionStatus::Insert => session.push_cache(rc), // 操作完成后的级联更新
+//         SessionStatus::Update => session.push_cache(rc), // 操作完成后的级联更新
+//         SessionStatus::Delete => session.push_cache(rc), // 操作完成后的级联更新
+//     }
+// }
+// fn ensure_session_not_closed(&self) {
+//     // 游离态
+//     if self.session.is_some() &&
+//        self.session.as_ref().unwrap().status() == SessionStatus::Closed {
+//         panic!("Session Is Closed");
+//     }
+// }
+// pub fn set_session(&mut self, session: Session) {
+// self.session = Some(session);
+// }
+// pub fn set_session_recur(&mut self, session: Session) {
+//     self.set_session(session.clone());
+//     for (_, rc) in self.pointer_map.iter() {
+//         if rc.is_some() {
+//             rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
+//         }
+//     }
+//     for (_, rc) in self.one_one_map.iter() {
+//         if rc.is_some() {
+//             rc.as_ref().unwrap().borrow_mut().set_session_recur(session.clone());
+//         }
+//     }
+//     for (_, vec) in self.one_many_map.iter() {
+//         for rc in vec.iter() {
+//             rc.borrow_mut().set_session_recur(session.clone());
+//         }
+//     }
+//     for (_, vec) in self.many_many_map.iter() {
+//         for &(_, ref rc) in vec.iter() {
+//             rc.borrow_mut().set_session_recur(session.clone());
+//         }
+//     }
+// }
+// pub fn clear_session(&mut self) {
+//     self.session = None;
+// }
+// }
 
 // 和数据库操作相关
 impl EntityInner {
@@ -171,7 +204,8 @@ impl EntityInner {
             .map(|field| {
                 self.field_map
                     .get(&field.get_field_name())
-                    .map_or(Value::NULL, |field_value| field_value.as_value())
+                    .map_or(Value::NULL,
+                            |field_value: &FieldValue| field_value.as_value())
             })
             .collect::<Vec<_>>()
     }
@@ -183,7 +217,8 @@ impl EntityInner {
             .map(|field| {
                 let value = self.field_map
                     .get(&field.get_field_name())
-                    .map_or(Value::NULL, |field_value| field_value.as_value());
+                    .map_or(Value::NULL,
+                            |field_value: &FieldValue| field_value.as_value());
                 (field.get_column_name(), value)
             })
             .collect::<Vec<_>>()
@@ -288,25 +323,35 @@ pub trait Entity {
         cb(&mut inner)
     }
 
-    fn inner_has(&self, field: &str) -> bool {}
-    fn inner_clear(&self, field: &str) -> bool {}
-    fn inner_set_value(&self, field: &str, value: Value) {
-        self.do_inner_mut(|mut inner| inner.set(field, FieldValue::from(value)))
+    fn inner_set_value<V>(&self, field: &str, value: V)
+        where Value:From<V>
+    {
+        self.do_inner_mut(|mut inner| inner.set_value(field, value))
     }
-    fn inner_get_value(&self, field: &str) -> Value {
-        self.do_inner(|inner| inner.get(field).as_value())
+    fn inner_get_value<V>(&self, field: &str) -> V
+        where V: FromValue
+    {
+        self.do_inner(|inner| inner.get_value::<V>(field))
     }
-    fn inner_set_entity(&self, field: &str, rc: EntityInnerPointer) {
-        self.do_inner_mut(|mut inner| inner.set(field, FieldValue::from(value)))
+    fn inner_set_value_null(&self, field: &str) {
+        self.do_inner_mut(|mut inner| inner.set_value_null(field))
     }
-    fn inner_get_entity(&self, field: &str) -> EntityInnerPointer{
-        self.do_inner(|inner| inner.get(field).as_entity())
+    fn inner_is_value_null(&self, field: &str) -> bool {
+        self.do_inner(|inner| inner.is_value_null(field))
     }
-    fn inner_set_vec(&self, field: &str, vec: Vec<EntityInnerPointer>) {
-        self.do_inner_mut(|mut inner| inner.set(field, FieldValue::from(value)))
+    fn inner_is_value_valid(&self, field: &str) -> bool {
+        self.do_inner(|inner| inner.is_value_valid(field))
     }
-    fn inner_get_vec(&self, field: &str) -> Vec<EntityInnerPointer> {
-        self.do_inner(|inner| inner.get(field).as_vec())
-    }
-
+    // fn inner_set_entity(&self, field: &str, rc: EntityInnerPointer) {
+    //     self.do_inner_mut(|mut inner| inner.set(field, FieldValue::from(value)))
+    // }
+    // fn inner_get_entity(&self, field: &str) -> EntityInnerPointer {
+    //     self.do_inner(|inner| inner.get(field).as_entity())
+    // }
+    // fn inner_set_vec(&self, field: &str, vec: Vec<EntityInnerPointer>) {
+    //     self.do_inner_mut(|mut inner| inner.set(field, FieldValue::from(value)))
+    // }
+    // fn inner_get_vec(&self, field: &str) -> Vec<EntityInnerPointer> {
+    //     self.do_inner(|inner| inner.get(field).as_vec())
+    // }
 }

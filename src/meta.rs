@@ -4,6 +4,9 @@ use attr::Attr;
 use std::str::FromStr;
 use regex::Regex;
 
+#[macro_use]
+use macros;
+
 use mysql;
 
 const DEFAULT_LEN: u64 = 128;
@@ -36,6 +39,22 @@ pub enum FieldMeta {
         column: String,
         len: u64,
         nullable: bool,
+    },
+    Refer {
+        field: String,
+        entity: String,
+        left: String,
+        right: String,
+        cascades: Vec<Cascade>,
+        fetch: Fetch,
+    },
+    Pointer {
+        field: String,
+        entity: String,
+        left: String,
+        right: String,
+        cascades: Vec<Cascade>,
+        fetch: Fetch,
     },
     OneToOne {
         field: String,
@@ -73,6 +92,38 @@ impl FieldMeta {
             column: column.to_string(),
             len: len,
             nullable: nullable,
+        }
+    }
+    pub fn new_refer(field: &str,
+                     entity: &str,
+                     left: &str,
+                     right: &str,
+                     cascades: Vec<Cascade>,
+                     fetch: Fetch)
+                     -> Self {
+        FieldMeta::Refer {
+            field: field.to_string(),
+            entity: entity.to_string(),
+            left: left.to_string(),
+            right: right.to_string(),
+            cascades: cascades,
+            fetch: fetch,
+        }
+    }
+    pub fn new_pointer(field: &str,
+                       entity: &str,
+                       left: &str,
+                       right: &str,
+                       cascades: Vec<Cascade>,
+                       fetch: Fetch)
+                       -> Self {
+        FieldMeta::Pointer {
+            field: field.to_string(),
+            entity: entity.to_string(),
+            left: left.to_string(),
+            right: right.to_string(),
+            cascades: cascades,
+            fetch: fetch,
         }
     }
     pub fn new_one_one(field: &str,
@@ -137,6 +188,8 @@ impl FieldMeta {
             &FieldMeta::Id => "id".to_string(),
             &FieldMeta::Integer { ref field, .. } => field.to_string(),
             &FieldMeta::String { ref field, .. } => field.to_string(),
+            &FieldMeta::Refer { ref field, .. } => field.to_string(),
+            &FieldMeta::Pointer { ref field, .. } => field.to_string(),
             &FieldMeta::OneToOne { ref field, .. } => field.to_string(),
             &FieldMeta::OneToMany { ref field, .. } => field.to_string(),
         }
@@ -146,6 +199,8 @@ impl FieldMeta {
             &FieldMeta::Id => "u64".to_string(),
             &FieldMeta::Integer { ref number, .. } => number.to_string(),
             &FieldMeta::String { .. } => "String".to_string(),
+            &FieldMeta::Refer { ref entity, .. } => entity.to_string(),
+            &FieldMeta::Pointer { ref entity, .. } => entity.to_string(),
             &FieldMeta::OneToOne { ref entity, .. } => entity.to_string(),
             &FieldMeta::OneToMany { ref entity, .. } => entity.to_string(),
         }
@@ -186,6 +241,8 @@ impl FieldMeta {
             &FieldMeta::Id => self.get_type_name(),
             &FieldMeta::Integer { .. } => self.get_type_name(),
             &FieldMeta::String { .. } => "&str".to_string(),
+            &FieldMeta::Refer { ref entity, .. } => format!("&{}", entity),
+            &FieldMeta::Pointer { ref entity, .. } => format!("&{}", entity),
             &FieldMeta::OneToOne { ref entity, .. } => format!("&{}", entity),
             &FieldMeta::OneToMany { ref entity, .. } => format!("&{}", entity),
         }
@@ -206,6 +263,8 @@ impl FieldMeta {
     }
     pub fn is_type_refer(&self) -> bool {
         match self {
+            &FieldMeta::Refer { .. } => true,
+            &FieldMeta::Pointer { .. } => true,
             &FieldMeta::OneToOne { .. } => true,
             &FieldMeta::OneToMany { .. } => true,
             _ => false,
@@ -214,6 +273,8 @@ impl FieldMeta {
 
     pub fn get_refer_entity(&self) -> String {
         match self {
+            &FieldMeta::Refer { ref entity, .. } => entity.to_string(),
+            &FieldMeta::Pointer { ref entity, .. } => entity.to_string(),
             &FieldMeta::OneToOne { ref entity, .. } => entity.to_string(),
             &FieldMeta::OneToMany { ref entity, .. } => entity.to_string(),
             _ => unreachable!(),
@@ -221,6 +282,8 @@ impl FieldMeta {
     }
     pub fn get_refer_cascades(&self) -> &Vec<Cascade> {
         match self {
+            &FieldMeta::Refer{ ref cascades, .. } => cascades,
+            &FieldMeta::Pointer{ ref cascades, .. } => cascades,
             &FieldMeta::OneToOne { ref cascades, .. } => cascades,
             &FieldMeta::OneToMany { ref cascades, .. } => cascades,
             _ => unreachable!(),
@@ -228,12 +291,26 @@ impl FieldMeta {
     }
     pub fn get_refer_fetch(&self) -> Fetch {
         match self {
+            &FieldMeta::Refer{ ref fetch, .. } => fetch.clone(),
+            &FieldMeta::Pointer { ref fetch, .. } => fetch.clone(),
             &FieldMeta::OneToOne { ref fetch, .. } => fetch.clone(),
             &FieldMeta::OneToMany { ref fetch, .. } => fetch.clone(),
             _ => unreachable!(),
         }
     }
 
+    pub fn is_refer_refer(&self) -> bool {
+        match self {
+            &FieldMeta::Refer { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_pointer(&self) -> bool {
+        match self {
+            &FieldMeta::Pointer { .. } => true,
+            _ => false,
+        }
+    }
     pub fn is_refer_one_one(&self) -> bool {
         match self {
             &FieldMeta::OneToOne { .. } => true,
@@ -559,7 +636,7 @@ impl OrmMeta {
     pub fn get_entities(&self) -> Vec<&EntityMeta> {
         self.entity_vec
             .iter()
-            .map(|entity_name| self.entity_map.get(entity_name).unwrap())
+            .map(|entity_name| self.entity_map.get(entity_name).expect(expect!().as_ref()))
             .collect()
     }
 }

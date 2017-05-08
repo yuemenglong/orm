@@ -6,7 +6,7 @@ use syntax::ast::ItemKind::*;
 use syntax::ast::VariantData;
 use syntax::print::pprust::*;
 
-use regex;
+use regex::Regex;
 
 use attr::visit_attrs;
 use attr::Attr;
@@ -72,7 +72,7 @@ fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
         // entity_meta.table_name = entity_name.to_string();
 
         if let &VariantData::Struct(ref vec, _id) = variant_data {
-            // 先生成pkey
+            // 首先生成pkey
             entity_meta.field_vec.push("id".to_string());
             entity_meta.field_map.insert("id".to_string(), FieldMeta::Id);
 
@@ -80,6 +80,8 @@ fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
                 visit_struct_field(field, &mut entity_meta, &mut orm_meta);
             }
         }
+        orm_meta.entity_map.insert(entity_name.to_string(), entity_meta);
+        return;
     }
     unreachable!();
 }
@@ -89,6 +91,7 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     let field_name = field.ident.as_ref().unwrap().name.as_str().to_string();
     let ty = ty_to_string(field.ty.deref());
     let attr = visit_attrs(&field.attrs);
+    entity_meta.field_vec.push(field_name.to_string());
 
     // 检查 id
     if &field_name == "id" {
@@ -100,40 +103,51 @@ fn visit_struct_field(field: &syntax::ast::StructField,
             let column_name = &field_name;
             let nullable = pick_nullable(&attr);
             let field_meta = FieldMeta::new_integer(&field_name, column_name, &ty, nullable);
-            entity_meta.field_vec.push(field_name.to_string());
             entity_meta.field_map.insert(field_name.to_string(), field_meta);
+            return;
         }
         "String" => {
             let column_name = &field_name;
             let nullable = pick_nullable(&attr);
             let len = pick_len(&attr);
             let field_meta = FieldMeta::new_string(&field_name, column_name, len, nullable);
-            entity_meta.field_vec.push(field_name.to_string());
             entity_meta.field_map.insert(field_name.to_string(), field_meta);
+            return;
         }
-        _ => {
-            let fetch = pick_fetch(&attr);
-            let cascades = pick_cascades(&attr);
-            let (left, right) = pick_refer(&attr);
-            let re = Regex::new(r"^Vec<(.+)>$").unwrap();
-            if !re.is_match(ty) {
-                let entity = ty.to_string();
-                let field_meta = FieldMeta::new_one_one(&field_name,
-                                                        &entity,
-                                                        &left,
-                                                        &right,
-                                                        cascades,
-                                                        fetch);
-            } else {
-                let field_meta = FieldMeta::new_one_many(&field_name,
-                                                         &column_name,
-                                                         &left,
-                                                         &right,
-                                                         cascades,
-                                                         fetch);
-            }
-        } 
+        _ => {}
     };
+    let cascades = pick_cascades(&attr);
+    let fetch = pick_fetch(&attr);
+    if attr.has("refer"){
+        let values = attr.get_values("refer");
+        if values.len() != 2{
+            panic!("Refer Must Has Left And Right Field");
+        }
+        let left = values[0];
+        let right = values[1];
+        let field_meta = FieldMeta::new_refer(&field_name, ty.as_ref(), left, right, cascades, fetch);
+        entity_meta.field_map.insert(field_name.to_string(), field_meta);
+    }
+    //     let fetch = pick_fetch(&attr);
+    // let cascades = pick_cascades(&attr);
+    // let (left, right) = pick_refer(&attr);
+    // let re = Regex::new(r"^Vec<(.+)>$").unwrap();
+    // if !re.is_match(ty) {
+    //     let entity = ty.to_string();
+    //     let field_meta = FieldMeta::new_one_one(&field_name,
+    //                                             &entity,
+    //                                             &left,
+    //                                             &right,
+    //                                             cascades,
+    //                                             fetch);
+    // } else {
+    //     let field_meta = FieldMeta::new_one_many(&field_name,
+    //                                              &column_name,
+    //                                              &left,
+    //                                              &right,
+    //                                              cascades,
+    //                                              fetch);
+    // }
 }
 
 fn pick_nullable(attr: &Attr) -> bool {
