@@ -72,13 +72,15 @@ fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
         // entity_meta.table_name = entity_name.to_string();
 
         if let &VariantData::Struct(ref vec, _id) = variant_data {
-            // 首先生成pkey
-            entity_meta.field_vec.push("id".to_string());
-            entity_meta.field_map.insert("id".to_string(), FieldMeta::Id);
-
             for field in vec.iter() {
                 visit_struct_field(field, &mut entity_meta, &mut orm_meta);
             }
+            if entity_meta.field_map.get("id").is_none() {
+                // 没有配置的话，默认自动生成auto id
+                entity_meta.field_vec.insert(0, "id".to_string());
+                entity_meta.field_map.insert("id".to_string(), FieldMeta::new_pkey(true));
+            }
+
         }
         orm_meta.entity_map.insert(entity_name.to_string(), entity_meta);
         return;
@@ -95,7 +97,10 @@ fn visit_struct_field(field: &syntax::ast::StructField,
 
     // 检查 id
     if &field_name == "id" {
-        panic!("Id Will Be Added To Entity Automatically");
+        let auto = pick_auto(&attr);
+        let field_meta = FieldMeta::new_pkey(auto);
+        entity_meta.field_map.insert(field_name.to_string(), field_meta);
+        return;
     }
     // FieldMeta::new(&entity, &field_name, &ty, &attr)
     match ty.as_ref() {
@@ -118,14 +123,15 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     };
     let cascades = pick_cascades(&attr);
     let fetch = pick_fetch(&attr);
-    if attr.has("refer"){
+    if attr.has("refer") {
         let values = attr.get_values("refer");
-        if values.len() != 2{
+        if values.len() != 2 {
             panic!("Refer Must Has Left And Right Field");
         }
         let left = values[0];
         let right = values[1];
-        let field_meta = FieldMeta::new_refer(&field_name, ty.as_ref(), left, right, cascades, fetch);
+        let field_meta =
+            FieldMeta::new_refer(&field_name, ty.as_ref(), left, right, cascades, fetch);
         entity_meta.field_map.insert(field_name.to_string(), field_meta);
     }
     //     let fetch = pick_fetch(&attr);
@@ -153,6 +159,10 @@ fn visit_struct_field(field: &syntax::ast::StructField,
 fn pick_nullable(attr: &Attr) -> bool {
     let default = true;
     attr.get("nullable").map_or(default, |str| bool::from_str(str).unwrap())
+}
+fn pick_auto(attr: &Attr) -> bool {
+    let default = false;
+    attr.get("auto").map_or(default, |str| bool::from_str(str).unwrap())
 }
 fn pick_len(attr: &Attr) -> u64 {
     attr.get("len").map_or(DEFAULT_LEN, |str| u64::from_str(str).unwrap())

@@ -27,7 +27,7 @@ pub enum Fetch {
 
 #[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
 pub enum FieldMeta {
-    Id,
+    Id { auto: bool },
     Integer {
         field: String,
         column: String,
@@ -89,8 +89,8 @@ pub struct OrmMeta {
 }
 
 impl FieldMeta {
-    pub fn new_pkey() -> Self {
-        FieldMeta::Id
+    pub fn new_pkey(auto: bool) -> Self {
+        FieldMeta::Id { auto: auto }
     }
     pub fn new_integer(field: &str, column: &str, number: &str, nullable: bool) -> Self {
         FieldMeta::Integer {
@@ -175,9 +175,15 @@ impl FieldMeta {
 }
 
 impl FieldMeta {
+    pub fn is_auto(&self) -> bool {
+        match self {
+            &FieldMeta::Id { ref auto } => auto.clone(),
+            _ => unreachable!(),
+        }
+    }
     pub fn get_column_name(&self) -> String {
         match self {
-            &FieldMeta::Id => "id".to_string(),
+            &FieldMeta::Id { .. } => "id".to_string(),
             &FieldMeta::Integer { ref column, .. } => column.to_string(),
             &FieldMeta::String { ref column, .. } => column.to_string(),
             _ => unreachable!(),
@@ -185,7 +191,7 @@ impl FieldMeta {
     }
     pub fn get_field_name(&self) -> String {
         match self {
-            &FieldMeta::Id => "id".to_string(),
+            &FieldMeta::Id { .. } => "id".to_string(),
             &FieldMeta::Integer { ref field, .. } => field.to_string(),
             &FieldMeta::String { ref field, .. } => field.to_string(),
             &FieldMeta::Refer { ref field, .. } => field.to_string(),
@@ -196,7 +202,7 @@ impl FieldMeta {
     }
     pub fn get_type_name(&self) -> String {
         match self {
-            &FieldMeta::Id => "u64".to_string(),
+            &FieldMeta::Id { .. } => "u64".to_string(),
             &FieldMeta::Integer { ref number, .. } => number.to_string(),
             &FieldMeta::String { .. } => "String".to_string(),
             &FieldMeta::Refer { ref entity, .. } => entity.to_string(),
@@ -219,8 +225,14 @@ impl FieldMeta {
             true => "",
             false => " NOT NULL",
         };
+        let auto_fn = |auto| match auto {
+            true => " AUTO_INCREMENT",
+            false => "",
+        };
         match self {
-            &FieldMeta::Id => "`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT".to_string(),
+            &FieldMeta::Id { ref auto } => {
+                format!("`id` BIGINT PRIMARY KEY NOT NULL{}", auto_fn(auto.clone()))
+            }
             &FieldMeta::Integer { ref number, ref column, ref nullable, .. } => {
                 format!("`{}` {}{}",
                         column,
@@ -238,7 +250,7 @@ impl FieldMeta {
     }
     pub fn get_type_name_set(&self) -> String {
         match self {
-            &FieldMeta::Id => self.get_type_name(),
+            &FieldMeta::Id { .. } => self.get_type_name(),
             &FieldMeta::Integer { .. } => self.get_type_name(),
             &FieldMeta::String { .. } => "&str".to_string(),
             &FieldMeta::Refer { ref entity, .. } => format!("&{}", entity),
@@ -250,7 +262,7 @@ impl FieldMeta {
 
     pub fn is_type_id(&self) -> bool {
         match self {
-            &FieldMeta::Id => true,
+            &FieldMeta::Id { .. } => true,
             _ => false,
         }
     }
@@ -301,6 +313,8 @@ impl FieldMeta {
 
     pub fn get_refer_left(&self) -> String {
         match self {
+            &FieldMeta::Refer { ref left, .. } => left.to_string(),
+            &FieldMeta::Pointer { ref left, .. } => left.to_string(),
             &FieldMeta::OneToOne { ref left, .. } => left.to_string(),
             &FieldMeta::OneToMany { ref left, .. } => left.to_string(),
             _ => unreachable!(),
@@ -308,6 +322,8 @@ impl FieldMeta {
     }
     pub fn get_refer_right(&self) -> String {
         match self {
+            &FieldMeta::Refer { ref right, .. } => right.to_string(),
+            &FieldMeta::Pointer { ref right, .. } => right.to_string(),
             &FieldMeta::OneToOne { ref right, .. } => right.to_string(),
             &FieldMeta::OneToMany { ref right, .. } => right.to_string(),
             _ => unreachable!(),
@@ -353,7 +369,6 @@ impl FieldMeta {
 }
 
 impl FieldMeta {
-
     // pub fn format(&self, value: mysql::Value) -> String {
     //     if value == mysql::Value::NULL {
     //         return "null".to_string();
@@ -368,6 +383,9 @@ impl FieldMeta {
 }
 
 impl EntityMeta {
+    pub fn is_id_auto(&self) -> bool {
+        self.field_map.get("id").unwrap().is_auto()
+    }
     pub fn get_fields(&self) -> Vec<&FieldMeta> {
         self.field_vec.iter().map(|field_name| self.field_map.get(field_name).unwrap()).collect()
     }
@@ -377,16 +395,47 @@ impl EntityMeta {
             .filter(|field| field.is_type_normal())
             .collect::<Vec<_>>()
     }
-    pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
-        self.get_fields()
-            .into_iter()
-            .filter(|field| field.is_type_refer())
-            .collect::<Vec<_>>()
-    }
     pub fn get_non_refer_fields(&self) -> Vec<&FieldMeta> {
         self.get_fields()
             .into_iter()
             .filter(|field| !field.is_type_refer())
+            .collect::<Vec<_>>()
+    }
+
+    pub fn get_refer_fields(&self) -> Vec<&FieldMeta> {
+        self.get_fields()
+            .into_iter()
+            .filter(|field| match field {
+                &&FieldMeta::Refer { .. } => true,
+                _ => false,
+            })
+            .collect::<Vec<_>>()
+    }
+    pub fn get_pointer_fields(&self) -> Vec<&FieldMeta> {
+        self.get_fields()
+            .into_iter()
+            .filter(|field| match field {
+                &&FieldMeta::Pointer { .. } => true,
+                _ => false,
+            })
+            .collect::<Vec<_>>()
+    }
+    pub fn get_one_one_fields(&self) -> Vec<&FieldMeta> {
+        self.get_fields()
+            .into_iter()
+            .filter(|field| match field {
+                &&FieldMeta::OneToOne { .. } => true,
+                _ => false,
+            })
+            .collect::<Vec<_>>()
+    }
+    pub fn get_one_many_fields(&self) -> Vec<&FieldMeta> {
+        self.get_fields()
+            .into_iter()
+            .filter(|field| match field {
+                &&FieldMeta::OneToMany { .. } => true,
+                _ => false,
+            })
             .collect::<Vec<_>>()
     }
 

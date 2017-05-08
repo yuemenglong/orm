@@ -14,12 +14,13 @@ mod macros;
 mod formatter;
 mod visitor;
 mod attr;
-// mod db;
 mod entity;
+mod db;
 // mod session;
-// mod select;
 // mod cond;
 mod value;
+mod insert;
+// mod select;
 
 pub mod init;
 pub mod meta;
@@ -27,12 +28,13 @@ pub mod meta;
 pub use entity::Entity;
 pub use entity::EntityInner;
 pub use entity::EntityInnerPointer;
-// pub use meta::FieldMeta;
-// pub use meta::EntityMeta;
-// pub use meta::OrmMeta;
-// pub use mysql::Value;
-// pub use mysql::Row;
-// pub use db::Db;
+pub use meta::FieldMeta;
+pub use meta::EntityMeta;
+pub use meta::OrmMeta;
+pub use mysql::Value;
+pub use mysql::Row;
+pub use db::Db;
+pub use insert::Insert;
 // pub use cond::Cond;
 // pub use cond::JoinCond;
 // pub use value::FieldValue;
@@ -62,16 +64,16 @@ pub fn build(src: &str) -> String {
     ret
 }
 
-// pub fn open(user: &str,
-//             pwd: &str,
-//             host: &str,
-//             port: u16,
-//             db: &str,
-//             orm_meta: &'static OrmMeta)
-//             -> Result<Db, mysql::Error> {
-//     let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
-//     match mysql::Pool::new(conn_str.as_ref()) {
-//         Ok(pool) => Ok(Db::new(pool, orm_meta)),
-//         Err(err) => Err(err),
-//     }
-// }
+pub fn open(user: &str,
+            pwd: &str,
+            host: &str,
+            port: u16,
+            db: &str,
+            orm_meta: &'static OrmMeta)
+            -> Result<Db, mysql::Error> {
+    let conn_str = format!("mysql://{}:{}@{}:{}/{}", user, pwd, host, port, db);
+    match mysql::Pool::new(conn_str.as_ref()) {
+        Ok(pool) => Ok(Db::new(pool, orm_meta)),
+        Err(err) => Err(err),
+    }
+}

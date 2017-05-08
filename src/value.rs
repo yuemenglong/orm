@@ -36,8 +36,8 @@ pub enum FieldValue {
 
 impl FieldValue {
     pub fn default(meta: &FieldMeta) -> Self {
-        match meta{
-            &FieldMeta::Id |
+        match meta {
+            &FieldMeta::Id { .. } |
             &FieldMeta::Integer { .. } |
             &FieldMeta::String { .. } => FieldValue::Value(Value::NULL),
             &FieldMeta::Refer { .. } |

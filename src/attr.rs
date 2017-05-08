@@ -52,7 +52,8 @@ impl Attr {
                 }
                 return item.values
                     .as_ref()
-                    .map_or(Vec::new(), |vec| vec.iter().map(|attr| attr.name.as_ref()).collect::<Vec<_>>());
+                    .map_or(Vec::new(),
+                            |vec| vec.iter().map(|attr| attr.name.as_ref()).collect::<Vec<_>>());
             }
             Vec::new()
         })

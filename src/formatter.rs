@@ -153,7 +153,7 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
     let tpl = match meta {
-        &FieldMeta::Id |
+        &FieldMeta::Id { .. } |
         &FieldMeta::String { .. } |
         &FieldMeta::Integer { .. } => TPL_IMPL_VALUE,
         &FieldMeta::Refer { .. } |

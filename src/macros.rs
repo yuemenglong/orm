@@ -16,6 +16,12 @@ macro_rules! debug_format {
     }};
 }
 
+macro_rules! log{
+    ($($x:expr),+) => {{
+        println!($($x),+)
+    }};
+}
+
 macro_rules! join_comma{
     ($e:expr) => {{
         format!("{}", $e)

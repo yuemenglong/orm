@@ -42,11 +42,14 @@ impl EntityInner {
         }
     }
     pub fn default(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> EntityInner {
-        let field_map: HashMap<String, FieldValue> = meta.field_vec.iter().map(|field|{
-            let field_meta = meta.field_map.get(field).expect(expect!().as_ref());
-            let default_value = FieldValue::default(field_meta);
-            (field.to_string(), default_value)
-        }).collect::<HashMap<_,_>>();
+        let field_map: HashMap<String, FieldValue> = meta.field_vec
+            .iter()
+            .map(|field| {
+                let field_meta = meta.field_map.get(field).expect(expect!().as_ref());
+                let default_value = FieldValue::default(field_meta);
+                (field.to_string(), default_value)
+            })
+            .collect::<HashMap<_, _>>();
 
         EntityInner {
             orm_meta: orm_meta,
@@ -77,13 +80,13 @@ impl EntityInner {
 // Value
 impl EntityInner {
     pub fn get_value<V>(&self, field: &str) -> V
-        where V:FromValue
+        where V: FromValue
     {
-        let v= self.field_map.get(field).expect(expect!().as_ref()).as_value();
+        let v = self.field_map.get(field).expect(expect!().as_ref()).as_value();
         value::from_value(v)
     }
     pub fn set_value<V>(&mut self, field: &str, value: V)
-        where Value:From<V>
+        where Value: From<V>
     {
         let v = Value::from(value);
         let field_value = FieldValue::from(v);
@@ -326,7 +329,7 @@ pub trait Entity {
     }
 
     fn inner_set_value<V>(&self, field: &str, value: V)
-        where Value:From<V>
+        where Value: From<V>
     {
         self.do_inner_mut(|mut inner| inner.set_value(field, value))
     }

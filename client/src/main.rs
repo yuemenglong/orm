@@ -15,11 +15,10 @@ extern crate mysql;
 mod entity;
 use entity::*;
 
-// mod test;
+mod test;
 
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-
-    // test::select_join_test();
+    test::insert_test();
 }
