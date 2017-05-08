@@ -117,7 +117,6 @@ pub fn insert_test() {
 //     let id = t.get_id();
 //     let mut select = Select::from::<Test>();
 //     select.join::<Test>(&JoinCond::by_eq("id", "id"));
-//     println!("{}", select.get_sql());
 //     // let session = db.open_session();
 //     // let res = session.query::<Test>(&select).unwrap();
 //     // let ref t = res[0];

@@ -20,41 +20,35 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
     for item in krate.module.items.iter() {
         visit_struct(item, &mut orm_meta);
     }
+    // 补全refer相关的字段
+    let clone = orm_meta.clone();
+    for (entity_name, entity_meta) in clone.entity_map.into_iter() {
+        for (field_name, field_meta) in entity_meta.field_map.into_iter() {
+            if !field_meta.is_type_refer() {
+                continue;
+            }
+            let refer_entity = field_meta.get_refer_entity();
+            let left = field_meta.get_refer_left();
+            let right = field_meta.get_refer_right();
+            {
+                let mut left_entity_meta = orm_meta.entity_map.get_mut(&entity_name).unwrap();
+                if left_entity_meta.field_map.get(&left).is_none() {
+                    let left_meta = FieldMeta::new_refer_id(&left, &left);
+                    left_entity_meta.field_vec.push(left.clone());
+                    left_entity_meta.field_map.insert(left, left_meta);
+                }
+            }
+            {
+                let mut right_entity_meta = orm_meta.entity_map.get_mut(&refer_entity).unwrap();
+                if right_entity_meta.field_map.get(&right).is_none() {
+                    let right_meta = FieldMeta::new_refer_id(&right, &right);
+                    right_entity_meta.field_vec.push(right.clone());
+                    right_entity_meta.field_map.insert(right, right_meta);
+                }
+            }
+        }
+    }
     orm_meta
-    // let (entities, fields): (Vec<_>, Vec<_>) = krate.module
-    //     .items
-    //     .iter()
-    //     .map(|item| visit_module(item.deref()))
-    //     .unzip();
-    // let fields = fields.into_iter().flat_map(|item| item).collect::<Vec<_>>();
-    // // 根据entity聚合field_vec
-    // orm_meta.entity_vec = entities.iter().map(|entity| entity.entity_name.to_string()).collect();
-    // for entity in entities {
-    //     orm_meta.entity_map.insert(entity.entity_name.to_string(), entity);
-    // }
-    // // 自动生成ManyToMany的中间表
-    // for &(ref entity, _) in fields.iter() {
-    //     if orm_meta.entity_map.contains_key(entity) {
-    //         continue;
-    //     }
-    //     let mut entity_meta = EntityMeta::default();
-    //     let id_pairs = FieldMeta::new_pkey(&entity);
-    //     entity_meta.field_vec.push("id".to_string());
-    //     for (_, id_field_meta) in id_pairs {
-    //         entity_meta.field_map.insert("id".to_string(), id_field_meta);
-    //     }
-
-    //     entity_meta.entity_name = entity.to_string();
-    //     entity_meta.table_name = entity.to_string();
-    //     orm_meta.entity_vec.push(entity.to_string());
-    //     orm_meta.entity_map.insert(entity.to_string(), entity_meta);
-    // }
-    // for (entity_name, field_meta) in fields.into_iter() {
-    //     let mut entity_meta = orm_meta.entity_map.get_mut(&entity_name).unwrap();
-    //     entity_meta.field_vec.push(field_meta.get_field_name());
-    //     entity_meta.field_map.insert(field_meta.get_field_name(), field_meta);
-    // }
-    // orm_meta
 }
 
 fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {

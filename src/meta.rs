@@ -100,6 +100,14 @@ impl FieldMeta {
             nullable: nullable,
         }
     }
+    pub fn new_refer_id(field: &str, column: &str) -> Self {
+        FieldMeta::Integer {
+            field: field.to_string(),
+            column: column.to_string(),
+            number: "u64".to_string(),
+            nullable: true,
+        }
+    }
     pub fn new_string(field: &str, column: &str, len: u64, nullable: bool) -> Self {
         FieldMeta::String {
             field: field.to_string(),
