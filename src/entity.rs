@@ -100,9 +100,6 @@ impl EntityInner {
     pub fn is_value_null(&self, field: &str) -> bool {
         self.field_map.get(field).map_or(false, |v| v.as_value() == Value::NULL)
     }
-    pub fn is_value_valid(&self, field: &str) -> bool {
-        self.field_map.get(field).map_or(false, |v| v.as_value() != Value::NULL)
-    }
 }
 
 // Entity
@@ -131,32 +128,32 @@ impl EntityInner {
     }
     fn set_entity_pointer(&mut self, field: &str, opt: Option<EntityInnerPointer>) {
         let a = self;
-        let field_meta =  a.meta.field_map.get(field).expect(expect!().as_ref());
+        let field_meta = a.meta.field_map.get(field).expect(expect!().as_ref());
         let left = field_meta.get_refer_left();
         let right = field_meta.get_refer_right();
 
         if opt.is_none() {
-            //a.b_id = null;
+            // a.b_id = null;
             a.field_map.insert(left, FieldValue::from(None));
-        }else{
+        } else {
             // a.b_id = b.id;
 
         }
     }
     fn set_entity_one_one(&mut self, field: &str, opt: Option<EntityInnerPointer>) {
         let a = self;
-        let field_meta =  a.meta.field_map.get(field).expect(expect!().as_ref());
+        let field_meta = a.meta.field_map.get(field).expect(expect!().as_ref());
         let left = field_meta.get_refer_left();
         let right = field_meta.get_refer_right();
 
         let old_b = a.get_entity(field);
-        if opt.is_some(){
+        if opt.is_some() {
             // b.a_id = a_id
             let b_rc = opt.unwrap();
             let b_id = b_rc.borrow().field_map.get(&right).map_or(Value::NULL, |v| v.as_value());
             a.field_map.insert(left, FieldValue::from(b_id));
         }
-        if old_b.is_some(){
+        if old_b.is_some() {
             // old_b.a_id = NULL;
             let old_b = old_b.unwrap();
             old_b.borrow_mut().field_map.insert(right.clone(), FieldValue::from(Value::NULL));
@@ -383,15 +380,17 @@ pub trait Entity {
     fn inner_is_value_null(&self, field: &str) -> bool {
         self.do_inner(|inner| inner.is_value_null(field))
     }
-    fn inner_is_value_valid(&self, field: &str) -> bool {
-        self.do_inner(|inner| inner.is_value_valid(field))
-    }
 
-    fn inner_set_entity(&self, field: &str, entity: EntityInnerPointer) {
-        self.do_inner_mut(|mut inner| inner.set_entity(field, Some(entity)))
+
+    fn inner_set_entity<E>(&self, field: &str, entity: &E)
+        where E: Entity
+    {
+        self.do_inner_mut(|mut inner| inner.set_entity(field, Some(entity.inner())))
     }
-    fn inner_get_entity<V>(&self, field: &str) -> EntityInnerPointer {
-        self.do_inner(|inner| inner.get_entity(field).unwrap())
+    fn inner_get_entity<E>(&self, field: &str) -> E
+        where E: Entity
+    {
+        self.do_inner(|inner| E::from_inner(inner.get_entity(field).unwrap()))
     }
     fn inner_set_entity_null(&self, field: &str) {
         self.do_inner_mut(|mut inner| inner.set_entity(field, None))
