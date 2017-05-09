@@ -3,9 +3,9 @@ struct Test {
     int_val: i32,
     str_val: String,
 
-    // #[refer(test_id, test_id)]
-    // #[cascade(insert)]
-    // test: Test,
+    #[refer(test_id, test_id)]
+    #[cascade(insert)]
+    test: Test,
 
     // #[pointer]
     // #[cascade(insert)]

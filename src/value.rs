@@ -92,3 +92,9 @@ impl From<Value> for FieldValue {
         FieldValue::Value(value)
     }
 }
+
+impl From<Option<EntityInnerPointer>> for FieldValue {
+    fn from(value: Option<EntityInnerPointer>) -> Self {
+        FieldValue::Entity(value)
+    }
+}
