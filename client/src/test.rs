@@ -19,7 +19,7 @@ fn open_db() -> Db {
 }
 
 #[test]
-fn test(){
+fn test() {
     insert_test();
 }
 pub fn insert_test() {
@@ -30,11 +30,31 @@ pub fn insert_test() {
     t.set_int_val(100);
     t.set_str_val("hello world");
 
-    let mut insert = Insert::into::<Test>();
+    let mut insert = Insert::new();
     let res = insert.execute(&mut db.get_conn(), &t).unwrap();
     assert!(res == 1);
     assert!(t.get_id() == 1);
 }
+
+pub fn insert_refer_test() {
+    let db = open_db();
+    db.rebuild();
+
+    let mut t = Test::default();
+    t.set_int_val(100);
+    t.set_str_val("hello world");
+    t.set_ptr(&Ptr::default());
+    t.get_ptr().set_int_val(200);
+
+    let mut insert = Insert::new();
+    insert.with("ptr");
+    let res = insert.execute(&mut db.get_conn(), &t).unwrap();
+    assert!(res == 2);
+    assert!(t.get_id() == 1);
+    assert!(t.get_ptr_id() == 1);
+    assert!(t.get_ptr().get_id() == 1);
+}
+
 
 // pub fn insert_test_2() {
 //     let db = open_db();

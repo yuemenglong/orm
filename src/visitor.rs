@@ -28,8 +28,7 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
                 continue;
             }
             let refer_entity = field_meta.get_refer_entity();
-            let left = field_meta.get_refer_left();
-            let right = field_meta.get_refer_right();
+            let (left, right) = field_meta.get_refer_lr();
             {
                 let mut left_entity_meta = orm_meta.entity_map.get_mut(&entity_name).unwrap();
                 if left_entity_meta.field_map.get(&left).is_none() {
@@ -126,6 +125,39 @@ fn visit_struct_field(field: &syntax::ast::StructField,
         let right = values[1];
         let field_meta =
             FieldMeta::new_refer(&field_name, ty.as_ref(), left, right, cascades, fetch);
+        entity_meta.field_map.insert(field_name.to_string(), field_meta);
+    } else if attr.has("pointer") {
+        let values = attr.get_values("pointer");
+        let (left, right) = match values.len() {
+            0 => (format!("{}_id", &field_name), "id".to_string()),
+            1 => (values[0].to_string(), "id".to_string()),
+            2 => (values[0].to_string(), values[1].to_string()),
+            _ => panic!("Pointer Must Has Less Than 2 Anno"),
+        };
+        let field_meta =
+            FieldMeta::new_pointer(&field_name, ty.as_ref(), &left, &right, cascades, fetch);
+        entity_meta.field_map.insert(field_name.to_string(), field_meta);
+    } else if attr.has("one_one") {
+        let values = attr.get_values("one_one");
+        let (left, right) = match values.len() {
+            0 => ("id".to_string(), format!("{}_id", &field_name)),
+            1 => ("id".to_string(), values[0].to_string()),
+            2 => (values[0].to_string(), values[1].to_string()),
+            _ => panic!("OneToOne Must Has Less Than 2 Anno"),
+        };
+        let field_meta =
+            FieldMeta::new_one_one(&field_name, ty.as_ref(), &left, &right, cascades, fetch);
+        entity_meta.field_map.insert(field_name.to_string(), field_meta);
+    } else if attr.has("one_many") {
+        let values = attr.get_values("one_many");
+        let (left, right) = match values.len() {
+            0 => ("id".to_string(), format!("{}_id", &field_name)),
+            1 => ("id".to_string(), values[0].to_string()),
+            2 => (values[0].to_string(), values[1].to_string()),
+            _ => panic!("OneToMany Must Has Less Than 2 Anno"),
+        };
+        let field_meta =
+            FieldMeta::new_one_many(&field_name, ty.as_ref(), &left, &right, cascades, fetch);
         entity_meta.field_map.insert(field_name.to_string(), field_meta);
     }
     //     let fetch = pick_fetch(&attr);

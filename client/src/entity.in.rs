@@ -7,9 +7,9 @@ struct Test {
     #[cascade(insert)]
     test: Test,
 
-    // #[pointer]
-    // #[cascade(insert)]
-    // ptr: Ptr,
+    #[pointer]
+    #[cascade(insert)]
+    ptr: Ptr,
 
     // #[one_one]
     // #[cascade(insert)]

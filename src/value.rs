@@ -28,7 +28,7 @@ use entity::EntityInnerPointer;
 
 // use cond::Cond;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FieldValue {
     Value(Value),
     Entity(Option<EntityInnerPointer>),

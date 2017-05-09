@@ -138,7 +138,8 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
     let fields = meta.field_vec
         .iter()
         .map(|field| {
-            let field_meta = meta.field_map.get(field).expect("");
+            println!("{:?}", field);
+            let field_meta = meta.field_map.get(field).expect(&expect!());
             format_entity_field(field_meta)
         })
         .collect::<Vec<_>>()

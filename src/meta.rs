@@ -291,6 +291,31 @@ impl FieldMeta {
         }
     }
 
+    pub fn is_refer_refer(&self) -> bool {
+        match self {
+            &FieldMeta::Refer { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_pointer(&self) -> bool {
+        match self {
+            &FieldMeta::Pointer { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_one_one(&self) -> bool {
+        match self {
+            &FieldMeta::OneToOne { .. } => true,
+            _ => false,
+        }
+    }
+    pub fn is_refer_one_many(&self) -> bool {
+        match self {
+            &FieldMeta::OneToMany { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn get_refer_entity(&self) -> String {
         match self {
             &FieldMeta::Refer { ref entity, .. } => entity.to_string(),
@@ -319,21 +344,18 @@ impl FieldMeta {
         }
     }
 
-    pub fn get_refer_left(&self) -> String {
+    pub fn get_refer_lr(&self) -> (String, String) {
         match self {
-            &FieldMeta::Refer { ref left, .. } => left.to_string(),
-            &FieldMeta::Pointer { ref left, .. } => left.to_string(),
-            &FieldMeta::OneToOne { ref left, .. } => left.to_string(),
-            &FieldMeta::OneToMany { ref left, .. } => left.to_string(),
-            _ => unreachable!(),
-        }
-    }
-    pub fn get_refer_right(&self) -> String {
-        match self {
-            &FieldMeta::Refer { ref right, .. } => right.to_string(),
-            &FieldMeta::Pointer { ref right, .. } => right.to_string(),
-            &FieldMeta::OneToOne { ref right, .. } => right.to_string(),
-            &FieldMeta::OneToMany { ref right, .. } => right.to_string(),
+            &FieldMeta::Refer { ref left, ref right, .. } => (left.to_string(), right.to_string()),
+            &FieldMeta::Pointer { ref left, ref right, .. } => {
+                (left.to_string(), right.to_string())
+            }
+            &FieldMeta::OneToOne { ref left, ref right, .. } => {
+                (left.to_string(), right.to_string())
+            }
+            &FieldMeta::OneToMany { ref left, ref right, .. } => {
+                (left.to_string(), right.to_string())
+            }
             _ => unreachable!(),
         }
     }

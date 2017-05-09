@@ -129,9 +129,7 @@ impl EntityInner {
     fn set_entity_pointer(&mut self, field: &str, opt: Option<EntityInnerPointer>) {
         let a = self;
         let field_meta = a.meta.field_map.get(field).expect(expect!().as_ref());
-        let left = field_meta.get_refer_left();
-        let right = field_meta.get_refer_right();
-
+        let (left, right) = field_meta.get_refer_lr();
         if opt.is_none() {
             // a.b_id = null;
             a.field_map.insert(left, FieldValue::from(None));
@@ -143,8 +141,7 @@ impl EntityInner {
     fn set_entity_one_one(&mut self, field: &str, opt: Option<EntityInnerPointer>) {
         let a = self;
         let field_meta = a.meta.field_map.get(field).expect(expect!().as_ref());
-        let left = field_meta.get_refer_left();
-        let right = field_meta.get_refer_right();
+        let (left, right) = field_meta.get_refer_lr();
 
         let old_b = a.get_entity(field);
         if opt.is_some() {
