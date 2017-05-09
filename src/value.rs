@@ -86,6 +86,10 @@ impl FieldValue {
             _ => unreachable!(),
         }
     }
+
+    pub fn null() -> Self {
+        FieldValue::from(Value::NULL)
+    }
 }
 
 impl From<Value> for FieldValue {
@@ -97,5 +101,11 @@ impl From<Value> for FieldValue {
 impl From<Option<EntityInnerPointer>> for FieldValue {
     fn from(value: Option<EntityInnerPointer>) -> Self {
         FieldValue::Entity(value)
+    }
+}
+
+impl From<Vec<EntityInnerPointer>> for FieldValue {
+    fn from(value: Vec<EntityInnerPointer>) -> Self {
+        FieldValue::Vec(value)
     }
 }

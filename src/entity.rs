@@ -94,8 +94,7 @@ impl EntityInner {
         self.field_map.insert(field.to_string(), field_value);
     }
     pub fn set_value_null(&mut self, field: &str) {
-        let field_value = FieldValue::from(Value::NULL);
-        self.field_map.insert(field.to_string(), field_value);
+        self.field_map.insert(field.to_string(), FieldValue::null());
     }
     pub fn is_value_null(&self, field: &str) -> bool {
         self.field_map.get(field).map_or(false, |v| v.as_value() == Value::NULL)
@@ -132,10 +131,15 @@ impl EntityInner {
         let (left, right) = field_meta.get_refer_lr();
         if opt.is_none() {
             // a.b_id = null;
-            a.field_map.insert(left, FieldValue::from(None));
+            a.field_map.insert(left, FieldValue::null());
         } else {
             // a.b_id = b.id;
-
+            let b_rc = opt.unwrap();
+            let b_id = b_rc.borrow()
+                .field_map
+                .get(&right)
+                .map_or(FieldValue::null(), |v| v.clone());
+            a.field_map.insert(left, b_id);
         }
     }
     fn set_entity_one_one(&mut self, field: &str, opt: Option<EntityInnerPointer>) {
@@ -153,8 +157,42 @@ impl EntityInner {
         if old_b.is_some() {
             // old_b.a_id = NULL;
             let old_b = old_b.unwrap();
-            old_b.borrow_mut().field_map.insert(right.clone(), FieldValue::from(Value::NULL));
+            old_b.borrow_mut().field_map.insert(right.clone(), FieldValue::null());
         }
+    }
+}
+
+// Vec
+impl EntityInner {
+    pub fn get_vec(&self, field: &str) -> Vec<EntityInnerPointer> {
+        let opt = self.field_map.get(field);
+        if opt.is_some() {
+            return opt.unwrap().as_vec();
+        }
+        unreachable!();
+    }
+    pub fn set_vec(&mut self, field: &str, vec: Vec<EntityInnerPointer>) {
+        let a = self;
+        let field_meta = a.meta.field_map.get(field).expect(expect!().as_ref());
+        let (left, right) = field_meta.get_refer_lr();
+
+        // 解绑old_vec, old_b.a_id = NULL;
+        let old_vec = a.get_vec(field);
+        for old_b_rc in old_vec.iter() {
+            old_b_rc.borrow_mut().field_map.insert(right.to_string(), FieldValue::null());
+        }
+
+        // 绑定vec, b.a_id = a_id
+        let a_id = a.field_map.get(&left).map_or(FieldValue::null(), |v| v.clone());
+        for b_rc in vec.iter() {
+            b_rc.borrow_mut().field_map.insert(right.to_string(), a_id.clone());
+        }
+
+        // a.b = b
+        a.field_map.insert(field.to_string(), FieldValue::from(vec));
+    }
+    pub fn is_vec_null(&self, field: &str) -> bool {
+        !self.field_map.contains_key(field)
     }
 }
 
@@ -232,80 +270,80 @@ impl EntityInner {
 // }
 // }
 
-// 和数据库操作相关
-impl EntityInner {
-    pub fn get_values(&self) -> Vec<Value> {
-        // 不包括id
-        self.meta
-            .get_normal_fields()
-            .into_iter()
-            .map(|field| {
-                self.field_map
-                    .get(&field.get_field_name())
-                    .map_or(Value::NULL,
-                            |field_value: &FieldValue| field_value.as_value())
-            })
-            .collect::<Vec<_>>()
-    }
-    pub fn get_params(&self) -> Vec<(String, Value)> {
-        // 不包括id
-        self.meta
-            .get_normal_fields()
-            .into_iter()
-            .map(|field| {
-                let value = self.field_map
-                    .get(&field.get_field_name())
-                    .map_or(Value::NULL,
-                            |field_value: &FieldValue| field_value.as_value());
-                (field.get_column_name(), value)
-            })
-            .collect::<Vec<_>>()
-    }
-    pub fn set_values(&mut self, row: &mut Row, alias: &str) {
-        // 包括id
-        for field_meta in self.meta.get_non_refer_fields() {
-            let field = field_meta.get_field_name();
-            let key = format!("{}${}", alias, field);
-            row.get::<Value, &str>(&key).map(|value| {
-                let field_value = FieldValue::from(value);
-                self.field_map.insert(field, field_value);
-                // self.set_value(&field, Some(value));
-            });
-        }
-    }
+// // 和数据库操作相关
+// impl EntityInner {
+//     pub fn get_values(&self) -> Vec<Value> {
+//         // 不包括id
+//         self.meta
+//             .get_normal_fields()
+//             .into_iter()
+//             .map(|field| {
+//                 self.field_map
+//                     .get(&field.get_field_name())
+//                     .map_or(Value::NULL,
+//                             |field_value: &FieldValue| field_value.as_value())
+//             })
+//             .collect::<Vec<_>>()
+//     }
+//     pub fn get_params(&self) -> Vec<(String, Value)> {
+//         // 不包括id
+//         self.meta
+//             .get_normal_fields()
+//             .into_iter()
+//             .map(|field| {
+//                 let value = self.field_map
+//                     .get(&field.get_field_name())
+//                     .map_or(Value::NULL,
+//                             |field_value: &FieldValue| field_value.as_value());
+//                 (field.get_column_name(), value)
+//             })
+//             .collect::<Vec<_>>()
+//     }
+//     pub fn set_values(&mut self, row: &mut Row, alias: &str) {
+//         // 包括id
+//         for field_meta in self.meta.get_non_refer_fields() {
+//             let field = field_meta.get_field_name();
+//             let key = format!("{}${}", alias, field);
+//             row.get::<Value, &str>(&key).map(|value| {
+//                 let field_value = FieldValue::from(value);
+//                 self.field_map.insert(field, field_value);
+//                 // self.set_value(&field, Some(value));
+//             });
+//         }
+//     }
 
-    pub fn do_insert<C>(&mut self, conn: &mut C) -> Result<(), Error>
-        where C: GenericConnection
-    {
-        let sql = self.meta.sql_insert();
-        let params = self.get_params();
-        // TODO if !auto push(id)
-        println!("{}, {:?}", sql, params);
-        conn.prep_exec(sql, params).map(|res| {
-            let field_value = FieldValue::from(Value::from(res.last_insert_id()));
-            self.field_map.insert("id".to_string(), field_value);
-        })
-    }
-    pub fn do_update<C>(&mut self, conn: &mut C) -> Result<(), Error>
-        where C: GenericConnection
-    {
-        let sql = self.meta.sql_update();
-        let mut params = self.get_params();
-        let id = self.get_id_value();
-        params.insert(0, ("id".to_string(), id));
-        println!("{}, {:?}", sql, params);
-        conn.prep_exec(sql, params).map(|_| ())
-    }
-    pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
-        where C: GenericConnection
-    {
-        let sql = self.meta.sql_delete();
-        let id = self.get_id_value();
-        let params = vec![("id".to_string(), id)];
-        println!("{}, {:?}", sql, params);
-        conn.prep_exec(sql, params).map(|_| ())
-    }
-}
+//     pub fn do_insert<C>(&mut self, conn: &mut C) -> Result<(), Error>
+//         where C: GenericConnection
+//     {
+//         let sql = self.meta.sql_insert();
+//         let params = self.get_params();
+//         // TODO if !auto push(id)
+//         println!("{}, {:?}", sql, params);
+//         conn.prep_exec(sql, params).map(|res| {
+//             let field_value = FieldValue::from(Value::from(res.last_insert_id()));
+//             self.field_map.insert("id".to_string(), field_value);
+//         })
+//     }
+//     pub fn do_update<C>(&mut self, conn: &mut C) -> Result<(), Error>
+//         where C: GenericConnection
+//     {
+//         let sql = self.meta.sql_update();
+//         let mut params = self.get_params();
+//         let id = self.get_id_value();
+//         params.insert(0, ("id".to_string(), id));
+//         println!("{}, {:?}", sql, params);
+//         conn.prep_exec(sql, params).map(|_| ())
+//     }
+//     pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
+//         where C: GenericConnection
+//     {
+//         let sql = self.meta.sql_delete();
+//         let id = self.get_id_value();
+//         let params = vec![("id".to_string(), id)];
+//         println!("{}, {:?}", sql, params);
+//         conn.prep_exec(sql, params).map(|_| ())
+//     }
+// }
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -378,7 +416,6 @@ pub trait Entity {
         self.do_inner(|inner| inner.is_value_null(field))
     }
 
-
     fn inner_set_entity<E>(&self, field: &str, entity: &E)
         where E: Entity
     {
@@ -394,5 +431,20 @@ pub trait Entity {
     }
     fn inner_is_entity_null(&self, field: &str) -> bool {
         self.do_inner(|inner| inner.get_entity(field).is_none())
+    }
+
+    fn inner_set_vec<E>(&self, field: &str, vec: Vec<E>)
+        where E: Entity
+    {
+        let vec = vec.iter().map(E::inner).collect::<Vec<_>>();
+        self.do_inner_mut(|mut inner| inner.set_vec(field, vec))
+    }
+    fn inner_get_vec<E>(&self, field: &str) -> Vec<E>
+        where E: Entity
+    {
+        self.do_inner(|inner| inner.get_vec(field).into_iter().map(E::from_inner).collect())
+    }
+    fn inner_is_vec_null(&self, field: &str) -> bool {
+        self.do_inner(|inner| inner.is_vec_null(field))
     }
 }

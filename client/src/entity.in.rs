@@ -15,9 +15,9 @@ struct Test {
     #[cascade(insert)]
     oo: Oo,
 
-    // #[one_many]
-    // #[cascade(insert)]
-    // om: Om,
+    #[one_many]
+    #[cascade(insert)]
+    om: Om,
 }
 
 struct Ptr {

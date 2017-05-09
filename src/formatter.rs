@@ -77,12 +77,8 @@ static TPL_IMPL_VEC: &'static str = r#"
         self.inner_set_vec("${FIELD}", value);
     }
     #[allow(dead_code)]
-    pub fn has_${FIELD}(&self) -> bool {
-        self.inner_has_vec("${FIELD}")
-    }
-    #[allow(dead_code)]
-    pub fn clear_${FIELD}(&self) {
-        self.inner_clear_vec("${FIELD}")
+    pub fn is_${FIELD}_null(&self) -> bool {
+        self.inner_is_vec_null("${FIELD}")
     }"#;
 
 static TPL_TRAIT: &'static str = r#"

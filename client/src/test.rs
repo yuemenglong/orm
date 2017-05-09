@@ -47,6 +47,34 @@ pub fn insert_refer_test() {
     t.get_ptr().set_int_val(200);
     t.set_oo(&Oo::default());
     t.get_oo().set_int_val(300);
+    t.set_om(vec![Om::default(), Om::default()]);
+    t.get_om().get_mut(0).unwrap().set_int_val(400);
+    t.get_om().get_mut(1).unwrap().set_int_val(500);
+
+    let mut insert = Insert::new();
+    insert.with("ptr");
+    insert.with("oo");
+    insert.with("om");
+    let res = insert.execute(&mut db.get_conn(), &t).unwrap();
+    assert!(t.get_id() == 1);
+    assert!(t.get_ptr_id() == 1);
+    assert!(t.get_ptr().get_id() == 1);
+    assert!(t.get_oo().get_test_id() == 1);
+    assert!(t.get_oo().get_id() == 1);
+    assert!(res == 5);
+}
+
+pub fn insert_refer_exists_test() {
+    let db = open_db();
+    db.rebuild();
+
+    let mut t = Test::default();
+    t.set_int_val(100);
+    t.set_str_val("hello world");
+    t.set_ptr(&Ptr::default());
+    t.get_ptr().set_int_val(200);
+    t.set_oo(&Oo::default());
+    t.get_oo().set_int_val(300);
 
     let mut insert = Insert::new();
     insert.with("ptr");
