@@ -45,14 +45,19 @@ pub fn insert_refer_test() {
     t.set_str_val("hello world");
     t.set_ptr(&Ptr::default());
     t.get_ptr().set_int_val(200);
+    t.set_oo(&Oo::default());
+    t.get_oo().set_int_val(300);
 
     let mut insert = Insert::new();
     insert.with("ptr");
+    insert.with("oo");
     let res = insert.execute(&mut db.get_conn(), &t).unwrap();
-    assert!(res == 2);
     assert!(t.get_id() == 1);
     assert!(t.get_ptr_id() == 1);
     assert!(t.get_ptr().get_id() == 1);
+    assert!(t.get_oo().get_test_id() == 1);
+    assert!(t.get_oo().get_id() == 1);
+    assert!(res == 3);
 }
 
 

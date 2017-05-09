@@ -73,7 +73,6 @@ fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
                 entity_meta.field_vec.insert(0, "id".to_string());
                 entity_meta.field_map.insert("id".to_string(), FieldMeta::new_pkey(true));
             }
-
         }
         orm_meta.entity_map.insert(entity_name.to_string(), entity_meta);
         return;
@@ -140,7 +139,7 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     } else if attr.has("one_one") {
         let values = attr.get_values("one_one");
         let (left, right) = match values.len() {
-            0 => ("id".to_string(), format!("{}_id", &field_name)),
+            0 => ("id".to_string(), format!("{}_id", entity_meta.entity_name.to_lowercase())),
             1 => ("id".to_string(), values[0].to_string()),
             2 => (values[0].to_string(), values[1].to_string()),
             _ => panic!("OneToOne Must Has Less Than 2 Anno"),
@@ -151,7 +150,7 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     } else if attr.has("one_many") {
         let values = attr.get_values("one_many");
         let (left, right) = match values.len() {
-            0 => ("id".to_string(), format!("{}_id", &field_name)),
+            0 => ("id".to_string(), format!("{}_id", entity_meta.entity_name.to_lowercase())),
             1 => ("id".to_string(), values[0].to_string()),
             2 => (values[0].to_string(), values[1].to_string()),
             _ => panic!("OneToMany Must Has Less Than 2 Anno"),
