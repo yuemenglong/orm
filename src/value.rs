@@ -98,6 +98,29 @@ impl FieldValue {
     }
 }
 
+impl FieldValue {
+    pub fn to_json(&self, meta: &FieldMeta) -> String {
+        if !meta.is_type_refer() && self.as_value() == Value::NULL {
+            return "NULL".to_string();
+        }
+        match meta {
+            &FieldMeta::Id { .. } |
+            &FieldMeta::Integer { .. } => format!("{}", value::from_value::<u64>(self.as_value())),
+            &FieldMeta::String { .. } => format!("\"{}\"", value::from_value::<String>(self.as_value())),
+            &FieldMeta::Refer { .. } |
+            &FieldMeta::Pointer { .. } |
+            &FieldMeta::OneToOne { .. } => {
+                self.as_entity().map_or("NULL".to_string(), |v| v.borrow().to_json())
+            }
+            &FieldMeta::OneToMany { .. } => {
+                let content =
+                    self.as_vec().into_iter().map(|v| v.borrow().to_json()).collect::<Vec<_>>().join(", ");
+                format!("[{}]", content)
+            }
+        }
+    }
+}
+
 impl From<Value> for FieldValue {
     fn from(value: Value) -> Self {
         FieldValue::Value(value)

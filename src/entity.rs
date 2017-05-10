@@ -273,85 +273,27 @@ impl EntityInner {
 // }
 // }
 
-// // 和数据库操作相关
-// impl EntityInner {
-//     pub fn get_values(&self) -> Vec<Value> {
-//         // 不包括id
-//         self.meta
-//             .get_normal_fields()
-//             .into_iter()
-//             .map(|field| {
-//                 self.field_map
-//                     .get(&field.get_field_name())
-//                     .map_or(Value::NULL,
-//                             |field_value: &FieldValue| field_value.as_value())
-//             })
-//             .collect::<Vec<_>>()
-//     }
-//     pub fn get_params(&self) -> Vec<(String, Value)> {
-//         // 不包括id
-//         self.meta
-//             .get_normal_fields()
-//             .into_iter()
-//             .map(|field| {
-//                 let value = self.field_map
-//                     .get(&field.get_field_name())
-//                     .map_or(Value::NULL,
-//                             |field_value: &FieldValue| field_value.as_value());
-//                 (field.get_column_name(), value)
-//             })
-//             .collect::<Vec<_>>()
-//     }
-//     pub fn set_values(&mut self, row: &mut Row, alias: &str) {
-//         // 包括id
-//         for field_meta in self.meta.get_non_refer_fields() {
-//             let field = field_meta.get_field_name();
-//             let key = format!("{}${}", alias, field);
-//             row.get::<Value, &str>(&key).map(|value| {
-//                 let field_value = FieldValue::from(value);
-//                 self.field_map.insert(field, field_value);
-//                 // self.set_value(&field, Some(value));
-//             });
-//         }
-//     }
-
-//     pub fn do_insert<C>(&mut self, conn: &mut C) -> Result<(), Error>
-//         where C: GenericConnection
-//     {
-//         let sql = self.meta.sql_insert();
-//         let params = self.get_params();
-//         // TODO if !auto push(id)
-//         println!("{}, {:?}", sql, params);
-//         conn.prep_exec(sql, params).map(|res| {
-//             let field_value = FieldValue::from(Value::from(res.last_insert_id()));
-//             self.field_map.insert("id".to_string(), field_value);
-//         })
-//     }
-//     pub fn do_update<C>(&mut self, conn: &mut C) -> Result<(), Error>
-//         where C: GenericConnection
-//     {
-//         let sql = self.meta.sql_update();
-//         let mut params = self.get_params();
-//         let id = self.get_id_value();
-//         params.insert(0, ("id".to_string(), id));
-//         println!("{}, {:?}", sql, params);
-//         conn.prep_exec(sql, params).map(|_| ())
-//     }
-//     pub fn do_delete<C>(&mut self, conn: &mut C) -> Result<(), Error>
-//         where C: GenericConnection
-//     {
-//         let sql = self.meta.sql_delete();
-//         let id = self.get_id_value();
-//         let params = vec![("id".to_string(), id)];
-//         println!("{}, {:?}", sql, params);
-//         conn.prep_exec(sql, params).map(|_| ())
-//     }
-// }
+impl EntityInner {
+    pub fn to_json(&self) -> String {
+        let content = self.meta
+            .field_vec
+            .iter()
+            .filter_map(|field| {
+                let field_meta = self.meta.field_map.get(field).unwrap();
+                self.field_map
+                    .get(field)
+                    .map(|value| format!("{}: {}", field, value.to_json(field_meta)))
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{{}}}", content)
+    }
+}
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let entity = &self.meta.entity_name;
-        write!(f, "")
+        write!(f, "{}", self.to_json())
     }
 }
 
@@ -384,7 +326,8 @@ pub trait Entity {
     fn inner(&self) -> EntityInnerPointer;
     fn debug(&self) {
         let inner = self.inner();
-        // println!("{:?}", inner.borrow());
+        let inner = inner.borrow();
+        log!("[{}] {}", Self::meta().entity_name, inner.to_json())
     }
 
     fn do_inner<F, R>(&self, cb: F) -> R

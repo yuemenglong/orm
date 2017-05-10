@@ -26,11 +26,13 @@ use std::marker::PhantomData;
 // SelectImpl::from<E1>().join::<E2>().on(JoinCond::by_eq("id", "id"))
 // select E1.id , E1_E2.id from E1 as E1 join E2 as E1_E2
 
+#[derive(Debug)]
 pub struct Select<E> {
     phantom: PhantomData<E>,
     imp: SelectImpl,
 }
 
+#[derive(Debug)]
 pub struct SelectImpl {
     meta: &'static EntityMeta,
     orm_meta: &'static OrmMeta,
@@ -40,11 +42,13 @@ pub struct SelectImpl {
     joins: Vec<Join>,
 }
 
+#[derive(Debug)]
 pub struct Join {
     kind: JoinKind,
     cond: JoinCond,
     select: SelectImpl,
 }
+
 
 impl<E> Select<E>
     where E: Entity
@@ -67,10 +71,34 @@ impl<E> Select<E>
     {
         self.imp.join::<Et>(cond)
     }
+    pub fn left_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.imp.left_join::<Et>(cond)
+    }
+    pub fn right_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.imp.right_join::<Et>(cond)
+    }
+    pub fn outer_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.imp.outer_join::<Et>(cond)
+    }
     pub fn query<C>(&self, conn: &mut C) -> Result<Vec<E>, Error>
         where C: GenericConnection
     {
         self.imp.query_inner(conn).map(|vec| vec.into_iter().map(E::from_inner).collect())
+    }
+    pub fn query_ex<C>(&self, conn: &mut C) -> Result<Vec<Vec<E>>, Error>
+        where C: GenericConnection
+    {
+        self.imp
+            .query_inner_ex(conn)
+            .map(|tuple| {
+                tuple.into_iter().map(|vec| vec.into_iter().map(E::from_inner).collect()).collect()
+            })
     }
 }
 
@@ -82,9 +110,6 @@ impl Join {
             select: select,
         }
     }
-    pub fn on(&mut self, cond: &JoinCond) {
-        self.cond = cond.clone();
-    }
     pub fn wher(&mut self, cond: &Cond) {
         self.select.wher(cond)
     }
@@ -92,13 +117,45 @@ impl Join {
     pub fn with(&mut self, field: &str) -> &mut SelectImpl {
         self.select.with(field)
     }
+    pub fn join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.select.join::<Et>(cond)
+    }
+    pub fn left_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.select.left_join::<Et>(cond)
+    }
+    pub fn right_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.select.right_join::<Et>(cond)
+    }
+    pub fn outer_join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.select.outer_join::<Et>(cond)
+    }
 }
 
+#[derive(Debug)]
 enum JoinKind {
     Inner,
     Outer,
     Left,
     Right,
+}
+
+impl JoinKind {
+    pub fn to_sql(&self) -> String {
+        match self {
+            &JoinKind::Inner => "INNER JOIN".to_string(),
+            &JoinKind::Outer => "OUTER JOIN".to_string(),
+            &JoinKind::Left => "LEFT JOIN".to_string(),
+            &JoinKind::Right => "RIGHT JOIN".to_string(),
+        }
+    }
 }
 
 impl SelectImpl {
@@ -141,12 +198,38 @@ impl SelectImpl {
     pub fn join<E>(&mut self, cond: &JoinCond) -> &mut Join
         where E: Entity
     {
-        let alias = format!("{}_{}", self.alias, E::meta().entity_name);
+        self.join_impl::<E>(cond, JoinKind::Inner)
+    }
+    pub fn outer_join<E>(&mut self, cond: &JoinCond) -> &mut Join
+        where E: Entity
+    {
+        self.join_impl::<E>(cond, JoinKind::Outer)
+    }
+    pub fn left_join<E>(&mut self, cond: &JoinCond) -> &mut Join
+        where E: Entity
+    {
+        self.join_impl::<E>(cond, JoinKind::Left)
+    }
+    pub fn right_join<E>(&mut self, cond: &JoinCond) -> &mut Join
+        where E: Entity
+    {
+        self.join_impl::<E>(cond, JoinKind::Right)
+    }
+    fn join_impl<E>(&mut self, cond: &JoinCond, kind: JoinKind) -> &mut Join
+        where E: Entity
+    {
+        let alias = format!("{}_{}", self.alias, E::meta().entity_name.to_lowercase());
         let select = SelectImpl::from_alias(E::meta(), E::orm_meta(), alias);
-        let kind = JoinKind::Inner;
         let join = Join::new(kind, cond.clone(), select);
         self.joins.push(join);
         self.joins.last_mut().unwrap()
+    }
+    fn flat_select(&self) -> Vec<&SelectImpl> {
+        let mut subs =
+            self.joins.iter().flat_map(|join| join.select.flat_select()).collect::<Vec<_>>();
+        let mut ret = vec![self];
+        ret.append(&mut subs);
+        ret
     }
 }
 
@@ -154,36 +237,57 @@ impl SelectImpl {
     pub fn query_inner<C>(&self, conn: &mut C) -> Result<Vec<EntityInnerPointer>, Error>
         where C: GenericConnection
     {
+        self.query_inner_ex(conn).map(|mut vec| vec.remove(0))
+    }
+    pub fn query_inner_ex<C>(&self, conn: &mut C) -> Result<Vec<Vec<EntityInnerPointer>>, Error>
+        where C: GenericConnection
+    {
         let sql = self.get_sql();
         let params = self.get_params();
-        println!("{}", sql);
-        println!("\t{:?}", params);
+        log!("{}", sql);
+        log!("\t{:?}", params);
         let res = conn.prep_exec(sql, params);
         let a_meta = self.meta;
         let alias = &a_meta.entity_name;
         if res.is_err() {
             return Err(res.err().unwrap());
         }
-        let query_result = res.unwrap();
         let mut map = HashMap::new();
-        let ret = query_result.into_iter().fold(Ok(Vec::new()), |mut acc, mut item| {
-            if acc.is_err() {
-                return acc;
-            }
-            if item.is_err() {
-                return Err(item.err().unwrap());
-            }
-            let mut row = item.as_mut().unwrap();
-            let rc = self.pick_inner(&mut row, &mut map);
-            if rc.is_some() {
-                acc.as_mut().unwrap().push(rc.unwrap().clone());
-            }
-            return acc;
-        });
-        ret.map(|mut vec| {
-            dup_filter(&mut vec);
-            vec
-        })
+        let query_result = res.unwrap();
+        let mut selects = self.flat_select();
+        let ret = selects.iter().map(|_| Vec::new()).collect::<Vec<_>>();
+        query_result.into_iter()
+            .fold(Ok(ret), |mut acc, mut item| {
+                if acc.is_err() {
+                    return acc;
+                }
+                if item.is_err() {
+                    return Err(item.err().unwrap());
+                }
+                let mut acc = acc.unwrap();
+                let mut row = item.as_mut().unwrap();
+                // 循环每个select读取
+                for (i, select) in selects.iter().enumerate() {
+                    let rc = select.pick_inner(&mut row, &mut map);
+                    rc.map(|rc| acc.get_mut(i).unwrap().push(rc));
+                }
+                return Ok(acc);
+            })
+            // 过滤重复数据
+            .map(|tuple| {
+                tuple.into_iter()
+                    .map(|mut vec| {
+                        dup_filter(&mut vec);
+                        vec
+                    })
+                    .collect::<Vec<_>>()
+            })
+
+        // ret.map(|mut vec| {
+        //     dup_filter(&mut vec);
+        //     vec
+        // })
+        // Ok(Vec::new())
     }
     fn pick_self(&self,
                  row: &mut Row,
@@ -261,7 +365,7 @@ impl SelectImpl {
             .collect::<Vec<_>>()
             .join(",\n\n\t");
         let tables = self.get_tables().join("\n\t");
-        let conds = self.get_conds().join("\n\tAND\n\t");
+        let conds = self.get_conds().join("\n\tAND ");
         format!("SELECT\n\t{}\nFROM\n\t{}\nWHERE\n\t{}",
                 columns,
                 tables,
@@ -281,10 +385,10 @@ impl SelectImpl {
         let a_meta = self.meta;
         let a_entity = &a_meta.entity_name;
         let a_table = &a_meta.table_name;
-        let mut vec = self.inner_get_tables();
-        let sql = format!("{} as {}", a_table, &self.alias);
-        vec.insert(0, sql);
-        vec
+        let self_table = format!("{} as {}", a_table, &self.alias);
+        let mut tables = self.inner_get_tables();
+        tables.insert(0, self_table);
+        tables
     }
     pub fn get_columns(&self) -> Vec<Vec<String>> {
         self.inner_get_columns()
@@ -292,38 +396,36 @@ impl SelectImpl {
 
     fn inner_get_params(&self) -> Vec<(String, Value)> {
         let alias = &self.alias;
-        let vec = self.withs
+        let mut with_params = self.withs
             .iter()
             .flat_map(|&(_, ref select)| select.inner_get_params())
             .collect::<Vec<_>>();
-        if self.cond.is_some() {
-            let cond = self.cond.as_ref().unwrap();
-            let mut ret = cond.to_params(alias);
-            ret.extend(vec);
-            return ret;
-            // vec.insert(0, cond.to_params(alias));
-        } else {
-            return vec;
-        }
+        let mut join_params = self.joins
+            .iter()
+            .flat_map(|join| join.select.inner_get_params())
+            .collect::<Vec<_>>();
+        let mut ret = self.cond.as_ref().map_or(Vec::new(), |cond| cond.to_params(alias));
+        ret.append(&mut with_params);
+        ret.append(&mut join_params);
+        ret
     }
     fn inner_get_conds(&self) -> Vec<String> {
         let alias = &self.alias;
-        let mut vec = self.withs
+        let mut with_conds = self.withs
             .iter()
             .flat_map(|&(_, ref select)| select.inner_get_conds())
             .collect::<Vec<_>>();
-        if self.cond.is_some() {
-            let cond = self.cond.as_ref().unwrap();
-            vec.insert(0, cond.to_sql(alias));
-        }
-        vec
+        let mut join_conds = self.joins
+            .iter()
+            .flat_map(|join| join.select.inner_get_conds())
+            .collect::<Vec<_>>();
+        let mut ret = self.cond.as_ref().map_or(Vec::new(), |cond| vec![cond.to_sql(alias)]);
+        ret.append(&mut with_conds);
+        ret.append(&mut join_conds);
+        ret
     }
     fn inner_get_columns(&self) -> Vec<Vec<String>> {
         let alias = &self.alias;
-        let mut vec = self.withs
-            .iter()
-            .flat_map(|&(_, ref select)| select.inner_get_columns())
-            .collect::<Vec<_>>();
         let self_columns = self.meta
             .get_non_refer_fields()
             .into_iter()
@@ -333,13 +435,21 @@ impl SelectImpl {
                 format!("{}.{} AS {}${}", alias, column, alias, field)
             })
             .collect::<Vec<_>>();
-        vec.insert(0, self_columns);
-        vec
+        let mut with_columns = self.withs
+            .iter()
+            .flat_map(|&(_, ref select)| select.inner_get_columns())
+            .collect::<Vec<_>>();
+        let mut join_columns =
+            self.joins.iter().flat_map(|join| join.select.inner_get_columns()).collect::<Vec<_>>();
+        let mut ret = vec![self_columns];
+        ret.append(&mut with_columns);
+        ret.append(&mut join_columns);
+        ret
     }
     fn inner_get_tables(&self) -> Vec<String> {
         let alias = &self.alias;
         let a_meta = self.meta;
-        let with_tables = self.withs
+        let mut with_tables = self.withs
             .iter()
             .flat_map(|&(ref a_b_field, ref select)| {
                 let a_b_meta = a_meta.field_map.get(a_b_field).unwrap();
@@ -350,30 +460,38 @@ impl SelectImpl {
                 let (a_field, b_field) = a_b_meta.get_refer_lr();
                 let a_column = a_meta.field_map.get(&a_field).unwrap().get_column_name();
                 let b_column = b_meta.field_map.get(&b_field).unwrap().get_column_name();
-                let join_sql = format!("LEFT JOIN {} AS {} ON {}.{} = {}.{}",
-                                       b_table,
-                                       b_alias,
-                                       alias,
-                                       a_column,
-                                       b_alias,
-                                       b_column);
-                vec.insert(0, join_sql);
+                let join_table = format!("LEFT JOIN {} AS {} ON {}.{} = {}.{}",
+                                         b_table,
+                                         b_alias,
+                                         alias,
+                                         a_column,
+                                         b_alias,
+                                         b_column);
+                vec.insert(0, join_table);
                 vec
             })
             .collect::<Vec<_>>();
-        let join_tables = self.joins
+        let mut join_tables = self.joins
             .iter()
-            .map(|join| {
+            .flat_map(|join| {
                 let b_meta = join.select.meta;
                 let b_entity = &b_meta.entity_name;
                 let b_table = &b_meta.table_name;
-                let b_alias = format!("{}_{}", alias, b_entity);
+                let b_alias = &join.select.alias;
                 let join_cond = join.cond.to_sql(alias, &b_alias);
-                let join_sql = format!("LEFT JOIN {} AS {} ON {}", b_table, b_alias, join_cond);
-                join_sql
+                let join_kind = join.kind.to_sql();
+                let join_table =
+                    format!("{} {} AS {} ON {}", join_kind, b_table, b_alias, join_cond);
+                let mut ret = vec![join_table];
+                let mut subs = join.select.inner_get_tables();
+                ret.append(&mut subs);
+                ret
             })
             .collect::<Vec<_>>();
-        with_tables
+        let mut ret: Vec<String> = Vec::new();
+        ret.append(&mut with_tables);
+        ret.append(&mut join_tables);
+        ret
     }
 }
 
@@ -392,7 +510,7 @@ fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
         let fields = {
             rc.borrow()
                 .meta
-                .get_one_one_fields()
+                .get_one_many_fields()
                 .into_iter()
                 .map(FieldMeta::get_field_name)
                 .collect::<Vec<_>>()

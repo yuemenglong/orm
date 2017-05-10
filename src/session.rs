@@ -428,8 +428,8 @@
 //                           fields,
 //                           tables,
 //                           cond.to_sql(table_alias));
-//         println!("{}", sql);
-//         println!("\t{:?}", cond.to_params(table_alias));
+//         log!("{}", sql);
+//         log!("\t{:?}", cond.to_params(table_alias));
 
 //         let mut conn = self.conn.borrow_mut();
 //         let query_result = try!(conn.prep_exec(sql, cond.to_params(table_alias)));

@@ -24,7 +24,30 @@ impl Cond {
         cond.eq(field, value);
         cond
     }
+    pub fn by_ne<V>(field: &str, value: V) -> Self
+        where Value: From<V>
+    {
+        let mut cond = Cond::new();
+        cond.ne(field, value);
+        cond
+    }
+    pub fn by_gt<V>(field: &str, value: V) -> Self
+        where Value: From<V>
+    {
+        let mut cond = Cond::new();
+        cond.gt(field, value);
+        cond
+    }
+    pub fn by_lt<V>(field: &str, value: V) -> Self
+        where Value: From<V>
+    {
+        let mut cond = Cond::new();
+        cond.lt(field, value);
+        cond
+    }
+}
 
+impl Cond {
     pub fn id<V>(&mut self, id: V) -> &mut Self
         where Value: From<V>
     {
@@ -37,10 +60,22 @@ impl Cond {
         self.items.push(Item::Eq(field.to_string(), Value::from(value)));
         self
     }
+    pub fn ne<V>(&mut self, field: &str, value: V) -> &mut Self
+        where Value: From<V>
+    {
+        self.items.push(Item::Ne(field.to_string(), Value::from(value)));
+        self
+    }
     pub fn gt<V>(&mut self, field: &str, value: V) -> &mut Self
         where Value: From<V>
     {
         self.items.push(Item::Gt(field.to_string(), Value::from(value)));
+        self
+    }
+    pub fn lt<V>(&mut self, field: &str, value: V) -> &mut Self
+        where Value: From<V>
+    {
+        self.items.push(Item::Lt(field.to_string(), Value::from(value)));
         self
     }
 
@@ -63,7 +98,9 @@ impl Cond {
 enum Item {
     Id(Value),
     Eq(String, Value),
+    Ne(String, Value),
     Gt(String, Value),
+    Lt(String, Value),
 }
 
 fn concat(alias: &str, field: &str) -> String {
@@ -75,14 +112,18 @@ impl Item {
         match self {
             &Item::Id(..) => format!("{}.id = :{}", alias, concat(alias, "id")),
             &Item::Eq(ref field, ..) => format!("{}.{} = :{}", alias, field, concat(alias, field)),
+            &Item::Ne(ref field, ..) => format!("{}.{} <> :{}", alias, field, concat(alias, field)),
             &Item::Gt(ref field, ..) => format!("{}.{} > :{}", alias, field, concat(alias, field)),
+            &Item::Lt(ref field, ..) => format!("{}.{} < :{}", alias, field, concat(alias, field)),
         }
     }
     fn to_params(&self, alias: &str) -> (String, Value) {
         match self {
             &Item::Id(ref value) => (concat(alias, "id"), value.clone()),
             &Item::Eq(ref field, ref value) => (concat(alias, field), value.clone()),
+            &Item::Ne(ref field, ref value) => (concat(alias, field), value.clone()),
             &Item::Gt(ref field, ref value) => (concat(alias, field), value.clone()),
+            &Item::Lt(ref field, ref value) => (concat(alias, field), value.clone()),
         }
     }
 }
@@ -96,20 +137,47 @@ impl JoinCond {
     pub fn new() -> Self {
         JoinCond { items: Vec::new() }
     }
-    pub fn by_eq(f1: &str, f2: &str) -> Self
-    {
+    pub fn by_eq(f1: &str, f2: &str) -> Self {
         let mut cond = JoinCond::new();
         cond.eq(f1, f2);
         cond
     }
+    pub fn by_ne(f1: &str, f2: &str) -> Self {
+        let mut cond = JoinCond::new();
+        cond.ne(f1, f2);
+        cond
+    }
+    pub fn by_gt(f1: &str, f2: &str) -> Self {
+        let mut cond = JoinCond::new();
+        cond.gt(f1, f2);
+        cond
+    }
+    pub fn by_lt(f1: &str, f2: &str) -> Self {
+        let mut cond = JoinCond::new();
+        cond.lt(f1, f2);
+        cond
+    }
+}
 
-    pub fn eq(&mut self, f1:&str, f2:&str) -> &mut Self
-    {
+impl JoinCond {
+    pub fn eq(&mut self, f1: &str, f2: &str) -> &mut Self {
         self.items.push(JoinItem::Eq(f1.to_string(), f2.to_string()));
         self
     }
+    pub fn ne(&mut self, f1: &str, f2: &str) -> &mut Self {
+        self.items.push(JoinItem::Ne(f1.to_string(), f2.to_string()));
+        self
+    }
+    pub fn gt(&mut self, f1: &str, f2: &str) -> &mut Self {
+        self.items.push(JoinItem::Gt(f1.to_string(), f2.to_string()));
+        self
+    }
+    pub fn lt(&mut self, f1: &str, f2: &str) -> &mut Self {
+        self.items.push(JoinItem::Lt(f1.to_string(), f2.to_string()));
+        self
+    }
 
-    pub fn to_sql(&self, a1: &str, a2:&str) -> String {
+    pub fn to_sql(&self, a1: &str, a2: &str) -> String {
         self.items
             .iter()
             .map(|item| item.to_sql(a1, a2))
