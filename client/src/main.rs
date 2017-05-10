@@ -20,5 +20,5 @@ mod test;
 // grant all privileges on *.* to root@'%' identified by 'root';
 // flush privileges;
 fn main() {
-    test::insert_refer_test();
+    test::insert_select_test();
 }

@@ -20,27 +20,62 @@ use mysql::prelude::GenericConnection;
 use mysql::Row;
 use mysql::Error;
 
+use std::marker::PhantomData;
 
-// Select::from<E1>().join::<E2>().on(JoinCond::by_eq("id", "id"))
+
+// SelectImpl::from<E1>().join::<E2>().on(JoinCond::by_eq("id", "id"))
 // select E1.id , E1_E2.id from E1 as E1 join E2 as E1_E2
 
-pub struct Select {
+pub struct Select<E> {
+    phantom: PhantomData<E>,
+    imp: SelectImpl,
+}
+
+pub struct SelectImpl {
     meta: &'static EntityMeta,
     orm_meta: &'static OrmMeta,
     alias: String,
     cond: Option<Cond>,
-    withs: Vec<(String, Select)>,
-    joins: Vec<Join>, // ("INNER", )
+    withs: Vec<(String, SelectImpl)>,
+    joins: Vec<Join>,
 }
 
 pub struct Join {
     kind: JoinKind,
     cond: JoinCond,
-    select: Select,
+    select: SelectImpl,
+}
+
+impl<E> Select<E>
+    where E: Entity
+{
+    pub fn new() -> Self {
+        Select::<E> {
+            phantom: PhantomData,
+            imp: SelectImpl::from_meta(E::meta(), E::orm_meta()),
+        }
+    }
+    pub fn wher(&mut self, cond: &Cond) {
+        self.imp.wher(cond)
+    }
+
+    pub fn with(&mut self, field: &str) -> &mut SelectImpl {
+        self.imp.with(field)
+    }
+    pub fn join<Et>(&mut self, cond: &JoinCond) -> &mut Join
+        where Et: Entity
+    {
+        self.imp.join::<Et>(cond)
+    }
+    pub fn query<C>(&self, conn: &mut C) -> Result<Vec<E>, Error>
+        where C: GenericConnection
+    {
+        self.imp.query_inner(conn).map(|vec| vec.into_iter().map(E::from_inner).collect())
+    }
 }
 
 impl Join {
-    fn new(kind: JoinKind, cond: JoinCond, select: Select) -> Self {
+    fn new(kind: JoinKind, cond: JoinCond, select: SelectImpl) -> Self {
         Join {
             kind: kind,
             cond: cond,
@@ -54,7 +89,7 @@ impl Join {
         self.select.wher(cond)
     }
 
-    pub fn with(&mut self, field: &str) -> &mut Select {
+    pub fn with(&mut self, field: &str) -> &mut SelectImpl {
         self.select.with(field)
     }
 }
@@ -66,61 +101,9 @@ enum JoinKind {
     Right,
 }
 
-fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
-    let copy = vec.clone();
-    vec.clear();
-    let mut map = HashMap::new();
-    for rc in copy {
-        let id = rc.borrow().get_id_u64().unwrap();
-        if !map.contains_key(&id) {
-            vec.push(rc.clone());
-        }
-        map.entry(id).or_insert(rc.clone());
-    }
-    for rc in vec.iter() {
-        for field_meta in rc.borrow().meta.get_one_one_fields() {
-            rc.borrow_mut()
-                .field_map
-                .get_mut(&field_meta.get_field_name())
-                .map(|v| dup_filter(v.as_vec_mut()));
-        }
-        // for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
-        //     dup_filter(om_vec);
-        // }
-        // for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
-        //     dup_filter_pair(mm_vec);
-        // }
-    }
-}
-// fn dup_filter_pair(vec: &mut Vec<(Option<EntityInnerPointer>, EntityInnerPointer)>) {
-//     let copy = vec.clone();
-//     vec.clear();
-//     let mut map = HashMap::new();
-//     for (mid, rc) in copy {
-//         let id = rc.borrow().get_id_u64().unwrap();
-//         if !map.contains_key(&id) {
-//             vec.push((mid.clone(), rc.clone()));
-//         }
-//         map.entry(id).or_insert(rc.clone());
-//     }
-//     for &(_, ref rc) in vec.iter() {
-//         for (_, ref mut om_vec) in rc.borrow_mut().one_many_map.iter_mut() {
-//             dup_filter(om_vec);
-//         }
-//         for (_, ref mut mm_vec) in rc.borrow_mut().many_many_map.iter_mut() {
-//             dup_filter_pair(mm_vec);
-//         }
-//     }
-// }
-
-impl Select {
-    pub fn from<E>() -> Self
-        where E: Entity
-    {
-        Self::from_meta(E::meta(), E::orm_meta())
-    }
+impl SelectImpl {
     pub fn from_meta(meta: &'static EntityMeta, orm_meta: &'static OrmMeta) -> Self {
-        Select {
+        SelectImpl {
             meta: meta,
             orm_meta: orm_meta,
             alias: meta.entity_name.to_lowercase(),
@@ -130,7 +113,7 @@ impl Select {
         }
     }
     fn from_alias(meta: &'static EntityMeta, orm_meta: &'static OrmMeta, alias: String) -> Self {
-        Select {
+        SelectImpl {
             meta: meta,
             orm_meta: orm_meta,
             alias: alias,
@@ -144,14 +127,14 @@ impl Select {
         self.cond = Some(cond.clone());
     }
 
-    pub fn with(&mut self, field: &str) -> &mut Select {
+    pub fn with(&mut self, field: &str) -> &mut SelectImpl {
         let a = self;
         let field_meta = a.meta.field_map.get(field).expect(&expect!());
         let b_entity = field_meta.get_refer_entity();
         let b_meta = a.orm_meta.entity_map.get(&b_entity).unwrap();
 
         let alias = format!("{}_{}", &a.alias, field);
-        let select = Select::from_alias(b_meta, a.orm_meta, alias);
+        let select = SelectImpl::from_alias(b_meta, a.orm_meta, alias);
         a.withs.push((field.to_string(), select));
         &mut a.withs.last_mut().unwrap().1
     }
@@ -159,7 +142,7 @@ impl Select {
         where E: Entity
     {
         let alias = format!("{}_{}", self.alias, E::meta().entity_name);
-        let select = Select::from_alias(E::meta(), E::orm_meta(), alias);
+        let select = SelectImpl::from_alias(E::meta(), E::orm_meta(), alias);
         let kind = JoinKind::Inner;
         let join = Join::new(kind, cond.clone(), select);
         self.joins.push(join);
@@ -167,14 +150,7 @@ impl Select {
     }
 }
 
-impl Select {
-    pub fn query<E, C>(&self, conn: &mut C) -> Result<Vec<E>, Error>
-        where E: Entity,
-              C: GenericConnection
-    {
-        self.query_inner(conn).map(|vec| vec.into_iter().map(E::from_inner).collect::<_>())
-    }
-
+impl SelectImpl {
     pub fn query_inner<C>(&self, conn: &mut C) -> Result<Vec<EntityInnerPointer>, Error>
         where C: GenericConnection
     {
@@ -306,7 +282,7 @@ impl Select {
         let a_entity = &a_meta.entity_name;
         let a_table = &a_meta.table_name;
         let mut vec = self.inner_get_tables();
-        let sql = format!("{} as {}", a_table, a_entity);
+        let sql = format!("{} as {}", a_table, &self.alias);
         vec.insert(0, sql);
         vec
     }
@@ -398,5 +374,34 @@ impl Select {
             })
             .collect::<Vec<_>>();
         with_tables
+    }
+}
+
+fn dup_filter(vec: &mut Vec<EntityInnerPointer>) {
+    let copy = vec.clone();
+    vec.clear();
+    let mut map = HashMap::new();
+    for rc in copy {
+        let id = rc.borrow().get_id_u64().unwrap();
+        if !map.contains_key(&id) {
+            vec.push(rc.clone());
+        }
+        map.entry(id).or_insert(rc.clone());
+    }
+    for rc in vec.iter() {
+        let fields = {
+            rc.borrow()
+                .meta
+                .get_one_one_fields()
+                .into_iter()
+                .map(FieldMeta::get_field_name)
+                .collect::<Vec<_>>()
+        };
+        for field_name in fields.into_iter() {
+            rc.borrow_mut()
+                .field_map
+                .get_mut(&field_name)
+                .map(|v| dup_filter(v.as_vec_mut()));
+        }
     }
 }

@@ -1,9 +1,9 @@
 use orm::Entity;
 use orm::EntityMeta;
 use orm::Insert;
-// use orm::Select;
-// use orm::Cond;
-// use orm::JoinCond;
+use orm::Select;
+use orm::Cond;
+use orm::JoinCond;
 use orm::Db;
 use orm;
 
@@ -89,18 +89,24 @@ pub fn insert_refer_exists_test() {
 }
 
 
-// pub fn insert_test_2() {
-//     let db = open_db();
-//     db.rebuild();
-//     let mut t = Test::default();
-//     t.set_int_val(100);
-//     t.set_str_val("hello world");
-//     db.insert(&t).unwrap();
-//     let id = t.get_id();
-//     let t = db.get::<Test>(id).unwrap().unwrap();
-//     assert!(t.get_int_val() == 100);
-//     assert!(t.get_str_val() == "hello world");
-// }
+pub fn insert_select_test() {
+    let db = open_db();
+    db.rebuild();
+    let mut t = Test::default();
+
+    t.set_int_val(100);
+    t.set_str_val("hello world");
+    let insert = Insert::new();
+    insert.execute(&mut db.get_conn(), &t).unwrap();
+
+    let id = t.get_id();
+    let mut select = Select::<Test>::new();
+    select.wher(&Cond::by_id(id));
+    let t = select.query(&mut db.get_conn()).unwrap().remove(0);
+
+    assert!(t.get_int_val() == 100);
+    assert!(t.get_str_val() == "hello world");
+}
 
 // pub fn update_test() {
 //     let db = open_db();
