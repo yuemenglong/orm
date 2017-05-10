@@ -76,6 +76,9 @@ impl EntityInner {
     pub fn get_id_value(&self) -> Value {
         self.field_map.get("id").map_or(Value::NULL, |value| value.as_value())
     }
+    pub fn get_id_u64(&self) -> Option<u64> {
+        self.field_map.get("id").map(|value| value::from_value::<u64>(value.as_value()))
+    }
 }
 
 // Value

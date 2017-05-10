@@ -17,10 +17,10 @@ mod attr;
 mod entity;
 mod db;
 // mod session;
-// mod cond;
+mod cond;
 mod value;
 mod insert;
-// mod select;
+mod select;
 
 pub mod init;
 pub mod meta;
@@ -35,8 +35,9 @@ pub use mysql::Value;
 pub use mysql::Row;
 pub use db::Db;
 pub use insert::Insert;
-// pub use cond::Cond;
-// pub use cond::JoinCond;
+pub use select::Select;
+pub use cond::Cond;
+pub use cond::JoinCond;
 // pub use value::FieldValue;
 
 use syntax::codemap::CodeMap;

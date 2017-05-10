@@ -86,6 +86,12 @@ impl FieldValue {
             _ => unreachable!(),
         }
     }
+    pub fn as_vec_mut(&mut self) -> &mut Vec<EntityInnerPointer> {
+        match self {
+            &mut FieldValue::Vec(ref mut vec) => vec,
+            _ => unreachable!(),
+        }
+    }
 
     pub fn null() -> Self {
         FieldValue::from(Value::NULL)
