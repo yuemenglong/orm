@@ -1,6 +1,6 @@
 [package]
 name = "orm"
-version = "0.1.4"
+version = "0.2.0"
 authors = ["yml <yuemenglong@126.com>"]
 description = "A ORM framework written in Rust, unfinished yet"
 license = "MIT/Apache-2.0"
