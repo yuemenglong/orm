@@ -7,6 +7,7 @@ use mysql::PooledConn;
 
 use meta::OrmMeta;
 use entity::Entity;
+use insert::Insert;
 // use session::Session;
 
 pub struct Db {
@@ -55,6 +56,12 @@ impl Db {
     }
     pub fn get_conn(&self) -> PooledConn {
         self.pool.get_conn().unwrap()
+    }
+    pub fn insert<E>(&self, entity: &E) -> Result<u64, Error>
+        where E: Entity
+    {
+        let insert = Insert::default::<E>();
+        insert.execute(&mut self.get_conn(), entity)
     }
     // fn session_guard<F, R>(&self, f: F) -> R
     //     where F: Fn(&Session) -> R

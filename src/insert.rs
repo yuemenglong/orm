@@ -22,6 +22,24 @@ impl Insert {
     pub fn new() -> Self {
         Insert { withs: Vec::new() }
     }
+    pub fn default<E>() -> Self
+        where E: Entity
+    {
+        Self::default_meta(E::meta(), E::orm_meta())
+    }
+    fn default_meta(meta: &EntityMeta, orm_meta: &OrmMeta) -> Self {
+        let withs = meta.field_vec.iter().filter_map(|field| {
+            let field_meta = meta.field_map.get(field).unwrap();
+            if !field_meta.is_type_refer() || !field_meta.has_cascade_insert() {
+                return None;
+            }
+            let entity_name = field_meta.get_refer_entity();
+            let entity_meta = orm_meta.entity_map.get(&entity_name).unwrap();
+            let insert = Self::default_meta(entity_meta, orm_meta);
+            return Some((field.to_string(), insert));
+        }).collect();
+        Insert { withs: withs }
+    }
     pub fn with(&mut self, field: &str) -> &mut Insert {
         let insert = Insert::new();
         self.withs.push((field.to_string(), insert));
