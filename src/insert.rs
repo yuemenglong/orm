@@ -185,7 +185,7 @@ impl Insert {
     pub fn execute_self<C>(&self, conn: &mut C, rc: EntityInnerPointer) -> Result<u64, Error>
         where C: GenericConnection
     {
-        let table = rc.borrow().meta.table_name.clone();
+        let table = rc.borrow().meta.table.clone();
         let valid_fields = rc.borrow()
             .meta
             .field_vec

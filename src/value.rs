@@ -68,6 +68,15 @@ impl FieldValue {
             _ => false,
         }
     }
+    pub fn is_null(&self) -> bool {
+        match self {
+            &FieldValue::Value(ref v) => v == &Value::NULL,
+            &FieldValue::Entity(ref opt) => opt.is_none(),
+            &FieldValue::Vec(_) => false,
+        }
+    }
+
+
     pub fn as_value(&self) -> Value {
         match self {
             &FieldValue::Value(ref value) => value.clone(),
@@ -106,15 +115,20 @@ impl FieldValue {
         match meta {
             &FieldMeta::Id { .. } |
             &FieldMeta::Integer { .. } => format!("{}", value::from_value::<u64>(self.as_value())),
-            &FieldMeta::String { .. } => format!("\"{}\"", value::from_value::<String>(self.as_value())),
+            &FieldMeta::String { .. } => {
+                format!("\"{}\"", value::from_value::<String>(self.as_value()))
+            }
             &FieldMeta::Refer { .. } |
             &FieldMeta::Pointer { .. } |
             &FieldMeta::OneToOne { .. } => {
                 self.as_entity().map_or("NULL".to_string(), |v| v.borrow().to_json())
             }
             &FieldMeta::OneToMany { .. } => {
-                let content =
-                    self.as_vec().into_iter().map(|v| v.borrow().to_json()).collect::<Vec<_>>().join(", ");
+                let content = self.as_vec()
+                    .into_iter()
+                    .map(|v| v.borrow().to_json())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 format!("[{}]", content)
             }
         }

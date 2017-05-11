@@ -9,8 +9,6 @@ use macros;
 
 use mysql;
 
-const DEFAULT_LEN: u64 = 128;
-
 #[derive(Debug, Clone, Copy, PartialEq, RustcDecodable, RustcEncodable)]
 pub enum Cascade {
     NULL,
@@ -76,8 +74,9 @@ pub enum FieldMeta {
 
 #[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
 pub struct EntityMeta {
-    pub entity_name: String,
-    pub table_name: String,
+    pub entity: String,
+    pub table: String,
+    pub alias: String,
     pub field_vec: Vec<String>,
     pub field_map: HashMap<String, FieldMeta>, // pub column_map: HashMap<String, FieldMeta>,
 }
@@ -228,7 +227,7 @@ impl FieldMeta {
             _ => unreachable!(),
         }
     }
-    fn get_db_type(&self) -> String {
+    pub fn get_db_type(&self) -> String {
         let nullable_fn = |nullable| match nullable {
             true => "",
             false => " NOT NULL",
@@ -467,54 +466,6 @@ impl EntityMeta {
                 _ => false,
             })
             .collect::<Vec<_>>()
-    }
-
-    pub fn get_columns(&self) -> Vec<String> {
-        self.get_normal_fields()
-            .iter()
-            .map(|field| field.get_column_name())
-            .collect::<Vec<_>>()
-    }
-    pub fn sql_create_table(&self) -> String {
-        let fields = self.get_non_refer_fields()
-            .iter()
-            .map(|field| field.get_db_type())
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("CREATE TABLE IF NOT EXISTS `{}`({})",
-                self.table_name,
-                fields)
-    }
-    pub fn sql_drop_table(&self) -> String {
-        format!("DROP TABLE IF EXISTS `{}`", self.table_name)
-    }
-    pub fn sql_insert(&self) -> String {
-        let columns = self.get_columns().join(", ");
-        let values = self.get_columns()
-            .iter()
-            .map(|column| format!(":{}", column))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("INSERT INTO `{}`({}) VALUES ({})",
-                &self.table_name,
-                &columns,
-                &values)
-    }
-    pub fn sql_update(&self) -> String {
-        let pairs = self.get_columns()
-            .iter()
-            .map(|column| format!("{} = :{}", column, column))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("UPDATE `{}` SET {} where id = :id",
-                &self.table_name,
-                &pairs)
-    }
-    pub fn sql_get(&self) -> String {
-        format!("SELECT * FROM `{}` WHERE id = :id", &self.table_name)
-    }
-    pub fn sql_delete(&self) -> String {
-        format!("DELETE FROM `{}` WHERE id = :id", &self.table_name)
     }
 }
 

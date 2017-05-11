@@ -21,6 +21,7 @@ mod cond;
 mod value;
 mod insert;
 mod select;
+mod table;
 
 pub mod init;
 pub mod meta;

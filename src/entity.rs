@@ -77,7 +77,10 @@ impl EntityInner {
         self.field_map.get("id").map_or(Value::NULL, |value| value.as_value())
     }
     pub fn get_id_u64(&self) -> Option<u64> {
-        self.field_map.get("id").map(|value| value::from_value::<u64>(value.as_value()))
+        self.field_map.get("id").map_or(None, |value| match value.is_null() {
+            true => None,
+            _ => Some(value::from_value::<u64>(value.as_value())),
+        })
     }
 }
 
@@ -292,7 +295,6 @@ impl EntityInner {
 
 impl fmt::Debug for EntityInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let entity = &self.meta.entity_name;
         write!(f, "{}", self.to_json())
     }
 }
@@ -327,7 +329,7 @@ pub trait Entity {
     fn debug(&self) {
         let inner = self.inner();
         let inner = inner.borrow();
-        log!("[{}] {}", Self::meta().entity_name, inner.to_json())
+        log!("[{}] {}", Self::meta().entity, inner.to_json())
     }
 
     fn do_inner<F, R>(&self, cb: F) -> R

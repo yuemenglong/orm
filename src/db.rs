@@ -8,6 +8,8 @@ use mysql::PooledConn;
 use meta::OrmMeta;
 use entity::Entity;
 use insert::Insert;
+use select::Select;
+use table;
 // use session::Session;
 
 pub struct Db {
@@ -27,32 +29,16 @@ impl Db {
         Ok(try!(self.create()))
     }
     pub fn create(&self) -> Result<u64, Error> {
-        let mut ret = 0;
-        for entity_meta in self.orm_meta.get_entities().iter() {
-            let sql = entity_meta.sql_create_table();
-            log!("{}", sql);
-            match self.pool.prep_exec(sql, ()) {
-                Ok(res) => ret += res.affected_rows(),
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        }
-        return Ok(ret);
+        let mut conn = self.get_conn();
+        self.orm_meta.get_entities().iter().fold(Ok(0), |acc, item| {
+            acc.and_then(|acc| table::create(&mut conn, item).map(|res| acc + res))
+        })
     }
     pub fn drop(&self) -> Result<u64, Error> {
-        let mut ret = 0;
-        for entity_meta in self.orm_meta.get_entities().iter() {
-            let sql = entity_meta.sql_drop_table();
-            log!("{}", sql);
-            match self.pool.prep_exec(sql, ()) {
-                Ok(res) => ret += res.affected_rows(),
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        }
-        return Ok(ret);
+        let mut conn = self.get_conn();
+        self.orm_meta.get_entities().iter().fold(Ok(0), |acc, item| {
+            acc.and_then(|acc| table::create(&mut conn, item).map(|res| acc + res))
+        })
     }
     pub fn get_conn(&self) -> PooledConn {
         self.pool.get_conn().unwrap()
@@ -62,6 +48,16 @@ impl Db {
     {
         let insert = Insert::default::<E>();
         insert.execute(&mut self.get_conn(), entity)
+    }
+    pub fn query_ex<E>(&self, select: &Select<E>) -> Result<Vec<Vec<E>>, Error>
+        where E: Entity
+    {
+        select.query_ex(&mut self.get_conn())
+    }
+    pub fn query<E>(&self, select: &Select<E>) -> Result<Vec<E>, Error>
+        where E: Entity
+    {
+        select.query(&mut self.get_conn())
     }
     // fn session_guard<F, R>(&self, f: F) -> R
     //     where F: Fn(&Session) -> R

@@ -53,16 +53,15 @@ pub fn visit_krate(krate: &syntax::ast::Crate) -> OrmMeta {
 fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
     if let Struct(ref variant_data, ref _generics) = item.node {
         // 1. 先注册这个entity
-        let entity_name = item.ident.name.as_str().to_string();
-        orm_meta.entity_vec.push(entity_name.to_string());
+        let entity = item.ident.name.as_str().to_string();
+        orm_meta.entity_vec.push(entity.to_string());
 
         // 2. 产生entity_meta
         let attr = visit_attrs(&item.attrs);
         let mut entity_meta = EntityMeta::default();
-        entity_meta.entity_name = entity_name.to_string();
-        entity_meta.table_name = attr.get("table")
-            .map_or(entity_name.to_string(), |v| v.to_string());
-        // entity_meta.table_name = entity_name.to_string();
+        entity_meta.entity = entity.to_string();
+        entity_meta.table = attr.get("table").map_or(entity.to_string(), |v| v.to_string());
+        entity_meta.alias = attr.get("alias").map_or(entity.to_lowercase(), |v| v.to_string());
 
         if let &VariantData::Struct(ref vec, _id) = variant_data {
             for field in vec.iter() {
@@ -74,7 +73,7 @@ fn visit_struct(item: &syntax::ast::Item, mut orm_meta: &mut OrmMeta) {
                 entity_meta.field_map.insert("id".to_string(), FieldMeta::new_pkey(true));
             }
         }
-        orm_meta.entity_map.insert(entity_name.to_string(), entity_meta);
+        orm_meta.entity_map.insert(entity.to_string(), entity_meta);
         return;
     }
     unreachable!();
@@ -139,7 +138,7 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     } else if attr.has("one_one") {
         let values = attr.get_values("one_one");
         let (left, right) = match values.len() {
-            0 => ("id".to_string(), format!("{}_id", entity_meta.entity_name.to_lowercase())),
+            0 => ("id".to_string(), format!("{}_id", &entity_meta.alias)),
             1 => ("id".to_string(), values[0].to_string()),
             2 => (values[0].to_string(), values[1].to_string()),
             _ => panic!("OneToOne Must Has Less Than 2 Anno"),
@@ -150,7 +149,7 @@ fn visit_struct_field(field: &syntax::ast::StructField,
     } else if attr.has("one_many") {
         let values = attr.get_values("one_many");
         let (left, right) = match values.len() {
-            0 => ("id".to_string(), format!("{}_id", entity_meta.entity_name.to_lowercase())),
+            0 => ("id".to_string(), format!("{}_id", &entity_meta.alias)),
             1 => ("id".to_string(), values[0].to_string()),
             2 => (values[0].to_string(), values[1].to_string()),
             _ => panic!("OneToMany Must Has Less Than 2 Anno"),
@@ -159,26 +158,6 @@ fn visit_struct_field(field: &syntax::ast::StructField,
             FieldMeta::new_one_many(&field_name, ty.as_ref(), &left, &right, cascades, fetch);
         entity_meta.field_map.insert(field_name.to_string(), field_meta);
     }
-    //     let fetch = pick_fetch(&attr);
-    // let cascades = pick_cascades(&attr);
-    // let (left, right) = pick_refer(&attr);
-    // let re = Regex::new(r"^Vec<(.+)>$").unwrap();
-    // if !re.is_match(ty) {
-    //     let entity = ty.to_string();
-    //     let field_meta = FieldMeta::new_one_one(&field_name,
-    //                                             &entity,
-    //                                             &left,
-    //                                             &right,
-    //                                             cascades,
-    //                                             fetch);
-    // } else {
-    //     let field_meta = FieldMeta::new_one_many(&field_name,
-    //                                              &column_name,
-    //                                              &left,
-    //                                              &right,
-    //                                              cascades,
-    //                                              fetch);
-    // }
 }
 
 fn pick_nullable(attr: &Attr) -> bool {

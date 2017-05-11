@@ -128,7 +128,7 @@ fn format_entity(meta: &EntityMeta) -> String {
 }
 fn format_entity_define(meta: &EntityMeta) -> String {
     TPL_STRUCT.to_string()
-        .replace("${ENTITY_NAME}", &meta.entity_name)
+        .replace("${ENTITY_NAME}", &meta.entity)
 }
 fn format_entity_impl(meta: &EntityMeta) -> String {
     let fields = meta.field_vec
@@ -140,7 +140,7 @@ fn format_entity_impl(meta: &EntityMeta) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     TPL_IMPL.to_string()
-        .replace("${ENTITY_NAME}", &meta.entity_name)
+        .replace("${ENTITY_NAME}", &meta.entity)
         .replace("${IMPL_FIELDS}", &fields)
 }
 fn format_entity_field(meta: &FieldMeta) -> String {
@@ -160,5 +160,5 @@ fn format_entity_field(meta: &FieldMeta) -> String {
 }
 fn format_entity_trait(meta: &EntityMeta) -> String {
     TPL_TRAIT.to_string()
-        .replace("${ENTITY_NAME}", &meta.entity_name)
+        .replace("${ENTITY_NAME}", &meta.entity)
 }
