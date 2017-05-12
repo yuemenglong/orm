@@ -2,6 +2,7 @@ use orm::Entity;
 use orm::EntityMeta;
 use orm::Insert;
 use orm::Select;
+use orm::Execute;
 use orm::Cond;
 use orm::JoinCond;
 use orm::Db;
@@ -30,7 +31,7 @@ pub fn insert_test() {
     t.set_int_val(100);
     t.set_str_val("hello world");
 
-    let mut insert = Insert::new();
+    let mut insert = Execute::insert();
     let res = insert.execute(&mut db.get_conn(), &t).unwrap();
     assert!(res == 1);
     assert!(t.get_id() == 1);

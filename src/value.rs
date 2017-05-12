@@ -14,7 +14,7 @@ use mysql::Error;
 use mysql::value;
 use mysql::prelude::FromValue;
 use mysql::Row;
-use mysql::prelude::GenericConnection;
+use mysql::conn::GenericConnection;
 
 use meta::OrmMeta;
 use meta::EntityMeta;

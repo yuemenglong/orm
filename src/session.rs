@@ -3,7 +3,7 @@
 
 // use mysql::Error;
 // use mysql::Row;
-// use mysql::PooledConn;
+// use mysql::conn::GenericConnection;
 
 // use itertools::Itertools;
 
@@ -27,22 +27,18 @@
 // pub enum SessionStatus {
 //     Normal,
 //     Closed,
-//     Insert,
-//     Update,
-//     Select,
-//     Delete,
 // }
 
-// impl From<Cascade> for SessionStatus {
-//     fn from(c: Cascade) -> SessionStatus {
-//         match c {
-//             Cascade::NULL => SessionStatus::Normal,
-//             Cascade::Insert => SessionStatus::Insert,
-//             Cascade::Update => SessionStatus::Update,
-//             Cascade::Delete => SessionStatus::Delete,
-//         }
-//     }
-// }
+// // impl From<Cascade> for SessionStatus {
+// //     fn from(c: Cascade) -> SessionStatus {
+// //         match c {
+// //             Cascade::NULL => SessionStatus::Normal,
+// //             Cascade::Insert => SessionStatus::Insert,
+// //             Cascade::Update => SessionStatus::Update,
+// //             Cascade::Delete => SessionStatus::Delete,
+// //         }
+// //     }
+// // }
 
 // pub struct Session {
 //     conn: Rc<RefCell<PooledConn>>,
@@ -92,6 +88,7 @@
 //         self.get_inner(E::meta(), E::orm_meta(), &Cond::by_id(id))
 //             .map(|opt| opt.map(E::from_inner))
 //     }
+
 //     pub fn close(&self) -> Result<(), Error> {
 //         let res = self.flush_cache();
 //         self.status.set(SessionStatus::Closed);
@@ -100,12 +97,12 @@
 //     pub fn status(&self) -> SessionStatus {
 //         self.status.get()
 //     }
-//     pub fn push_cache(&self, rc: EntityInnerPointer) {
-//         self.cache.borrow_mut().push(rc);
-//     }
 // }
 
 // impl Session {
+//     pub fn push_cache(&self, rc: EntityInnerPointer) {
+//         self.cache.borrow_mut().push(rc);
+//     }
 //     fn flush_cache(&self) -> Result<(), Error> {
 //         // 一定要调用非guard函数！！，因为guard会调用flush_cache导致死循环
 //         let result = self.cache.borrow().iter().fold(Ok(()), |result, rc| {
@@ -114,7 +111,7 @@
 //             }
 //             // 如果对象上没有级联标记，默认进行UPDATE
 //             let op = rc.borrow().cascade.map_or(Cascade::Update, |op| op);
-//             self.execute_impl(rc.clone(), op)
+//             self.execute_inner(rc.clone(), op)
 //         });
 //         // 重置动态级联标记
 //         for rc in self.cache.borrow().iter() {
@@ -123,19 +120,9 @@
 //         self.cache.borrow_mut().clear();
 //         result
 //     }
-//     fn guard<F, S, R>(&self, status: S, cb: F) -> R
-//         where F: FnOnce() -> R,
-//               SessionStatus: From<S>
-//     {
-//         // 备份当前状态
-//         let status = SessionStatus::from(status);
-//         let old = self.status.get();
-//         self.status.set(status);
-//         let result = cb();
-//         // 恢复当前状态
-//         self.status.set(old);
-//         return result;
-//     }
+// }
+
+// impl Session {
 //     fn batch_inner(&self, vec: &Vec<EntityInnerPointer>, op: Cascade) -> Result<(), Error> {
 //         self.guard(op.clone(), || {
 //             let result = self.batch_impl(vec, op);

@@ -22,6 +22,7 @@ mod value;
 mod insert;
 mod select;
 mod table;
+mod execute;
 
 pub mod init;
 pub mod meta;
@@ -37,6 +38,7 @@ pub use mysql::Row;
 pub use db::Db;
 pub use insert::Insert;
 pub use select::Select;
+pub use execute::Execute;
 pub use cond::Cond;
 pub use cond::JoinCond;
 // pub use value::FieldValue;

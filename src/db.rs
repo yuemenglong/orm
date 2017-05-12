@@ -37,7 +37,7 @@ impl Db {
     pub fn drop(&self) -> Result<u64, Error> {
         let mut conn = self.get_conn();
         self.orm_meta.get_entities().iter().fold(Ok(0), |acc, item| {
-            acc.and_then(|acc| table::create(&mut conn, item).map(|res| acc + res))
+            acc.and_then(|acc| table::drop(&mut conn, item).map(|res| acc + res))
         })
     }
     pub fn get_conn(&self) -> PooledConn {

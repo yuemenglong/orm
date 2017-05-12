@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use mysql::Value;
-use mysql::prelude::GenericConnection;
+use mysql::conn::GenericConnection;
 use mysql::Row;
 use mysql::Error;
 

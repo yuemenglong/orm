@@ -2,7 +2,7 @@
 use macros;
 use meta::EntityMeta;
 
-use mysql::prelude::GenericConnection;
+use mysql::conn::GenericConnection;
 use mysql::Error;
 
 pub fn create<C>(conn: &mut C, meta: &EntityMeta) -> Result<u64, Error>

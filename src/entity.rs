@@ -14,7 +14,7 @@ use mysql::Error;
 use mysql::value;
 use mysql::prelude::FromValue;
 use mysql::Row;
-use mysql::prelude::GenericConnection;
+use mysql::conn::GenericConnection;
 
 use meta::OrmMeta;
 use meta::EntityMeta;
@@ -304,6 +304,8 @@ impl PartialEq for EntityInner {
         self.get_addr() == other.get_addr()
     }
 }
+
+impl Eq for EntityInner {}
 
 impl Hash for EntityInner {
     fn hash<H: Hasher>(&self, state: &mut H) {

@@ -6,7 +6,7 @@ use value::FieldValue;
 use meta::EntityMeta;
 use meta::OrmMeta;
 
-use mysql::prelude::GenericConnection;
+use mysql::conn::GenericConnection;
 use mysql::Error;
 use mysql::Value;
 
